@@ -144,10 +144,8 @@ struct ElementEntry {
 
 enum ThemeEntryID {
     ThemeEntryID_BACKGROUND,
-    ThemeEntryID_LOGO,
 
     ThemeEntryID_GRID,
-    ThemeEntryID_GRID_HOVER,
     ThemeEntryID_SELECTED,
     ThemeEntryID_SELECTED_OVERLAY,
     ThemeEntryID_TEXT,

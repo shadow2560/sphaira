@@ -653,7 +653,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             #if 1
                             App::Push(std::make_shared<OptionBox>(
                                 "WARNING: Installing forwarders will lead to a ban!"_i18n,
-                                "Back"_i18n, "Install"_i18n, 1, [this](auto op_index){
+                                "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
                                     if (op_index && *op_index) {
                                         InstallForwarder();
                                     }

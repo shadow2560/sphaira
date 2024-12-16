@@ -738,12 +738,8 @@ void App::LoadTheme(const fs::FsPath& path) {
                         app->PlaySoundEffect(SoundEffect_Music);
                     }
                 }
-            } else if (key == "logo") {
-                theme.elements[ThemeEntryID_LOGO] = app->LoadElement(value);
             } else if (key == "grid") {
                 theme.elements[ThemeEntryID_GRID] = app->LoadElement(value);
-            } else if (key == "grid_hover") {
-                theme.elements[ThemeEntryID_GRID_HOVER] = app->LoadElement(value);
             } else if (key == "selected") {
                 theme.elements[ThemeEntryID_SELECTED] = app->LoadElement(value);
             } else if (key == "selected_overlay") {

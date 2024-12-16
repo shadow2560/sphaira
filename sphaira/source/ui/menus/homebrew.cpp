@@ -153,7 +153,7 @@ Menu::Menu() : MenuBase{"Homebrew"_i18n} {
                 options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){
                     App::Push(std::make_shared<OptionBox>(
                         "WARNING: Installing forwarders will lead to a ban!"_i18n,
-                        "Back"_i18n, "Install"_i18n, 1, [this](auto op_index){
+                        "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
                             if (op_index && *op_index) {
                                 InstallHomebrew();
                             }
