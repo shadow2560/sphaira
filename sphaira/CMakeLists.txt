@@ -31,9 +31,9 @@ execute_process(
 )
 
 if (GIT_DIRTY)
-    set(sphaira_VERSION_HASH "${sphaira_VERSION} ${GIT_COMMIT}-dirty")
-else()
     set(sphaira_VERSION_HASH "${sphaira_VERSION} ${GIT_COMMIT}")
+else()
+    set(sphaira_VERSION_HASH "${sphaira_VERSION}")
 endif()
 
 add_executable(sphaira
