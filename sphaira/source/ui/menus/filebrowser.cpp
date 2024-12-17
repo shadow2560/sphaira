@@ -773,7 +773,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         nvgSave(vg);
-        nvgScissor(vg, x + text_xoffset+65, y, w-(x+text_xoffset+65+50), h);
+        const auto txt_clip = std::min(GetY() + GetH(), y + h) - y;
+        nvgScissor(vg, x + text_xoffset+65, y, w-(x+text_xoffset+65+50), txt_clip);
             gfx::drawText(vg, x + text_xoffset+65, y + (h / 2.f), 20.f, e.name, NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour);
         nvgRestore(vg);
 
