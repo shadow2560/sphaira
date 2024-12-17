@@ -825,8 +825,8 @@ App::App(const char* argv0) {
         m_app_path = argv0;
     }
 
-    // set pop-back if applet and we are hbmenu
-    if (!IsApplication() && IsHbmenu()) {
+    // set if we are hbmenu
+    if (IsHbmenu()) {
         __nx_applet_exit_mode = 1;
     }
 
