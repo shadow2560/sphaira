@@ -1046,6 +1046,29 @@ App::~App() {
         } else {
             log_write("success with copying over root file!\n");
         }
+    } else if (IsHbmenu()) {
+        // check we have a version that's newer than current.
+        fs::FsNativeSd fs;
+        NacpStruct sphaira_nacp;
+        fs::FsPath sphaira_path = "/switch/sphaira/sphaira.nro";
+        Result rc;
+
+        rc = nro_get_nacp(sphaira_path, sphaira_nacp);
+        if (R_FAILED(rc) || std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
+            sphaira_path = "/switch/sphaira.nro";
+            rc = nro_get_nacp(sphaira_path, sphaira_nacp);
+        }
+
+        // found sphaira, now lets get compare version
+        if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
+            if (std::strcmp(APP_VERSION, sphaira_nacp.display_version) < 0) {
+                if (R_FAILED(rc = fs.copy_entire_file(GetExePath(), sphaira_path, true))) {
+                    log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path, rc, R_MODULE(rc), R_DESCRIPTION(rc));
+                } else {
+                    log_write("success with updating hbmenu!\n");
+                }
+            }
+        }
     }
 
     if (App::GetNxlinkEnable()) {

@@ -1438,7 +1438,7 @@ void Menu::Sort() {
 
 
     char subheader[128]{};
-    std::snprintf(subheader, sizeof(subheader), "Sort: %s | Filter: %s | Order: %s", SORT_STR[m_sort], FILTER_STR[m_filter], ORDER_STR[m_order]);
+    std::snprintf(subheader, sizeof(subheader), "Sort: %s | Filter: %s | Order: %s", i18n::get(SORT_STR[m_sort]), i18n::get(FILTER_STR[m_filter]), i18n::get(ORDER_STR[m_order]));
     SetTitleSubHeading(subheader);
 
     std::sort(m_entries_current.begin(), m_entries_current.end(), sorter);

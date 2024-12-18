@@ -17,38 +17,6 @@
 namespace sphaira::ui::menu::homebrew {
 namespace {
 
-constexpr const char* SORT_STR[] = {
-    "Updated",
-    "Size",
-    "Alphabetical",
-};
-
-constexpr const char* ORDER_STR[] = {
-    "Desc",
-    "Asc",
-};
-
-// returns seconds as: hh:mm:ss
-auto TimeFormat(u64 sec) -> std::string {
-    char buf[9];
-
-    const auto s = sec % 60;
-    const auto h = sec / 60 % 60;
-    const auto d = sec / 60 / 60 % 24;
-
-    if (sec < 60) {
-        if (!sec) {
-            return "00:00:00";
-        }
-        std::snprintf(buf, sizeof(buf), "00:00:%02lu", s);
-    } else if (sec < 3600) {
-        std::snprintf(buf, sizeof(buf), "00:%02lu:%02lu", h, s);
-    } else {
-        std::snprintf(buf, sizeof(buf), "%02lu:%02lu:%02lu", d, h, s);
-    }
-
-    return std::string{buf};
-}
 
 } // namespace
 

@@ -7,6 +7,8 @@ namespace sphaira::i18n {
 bool init(long index);
 void exit();
 
+std::string get(const char* str);
+
 } // namespace sphaira::i18n
 
 inline namespace literals {

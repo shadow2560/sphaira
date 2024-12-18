@@ -7,6 +7,15 @@
 
 namespace sphaira::ui::menu::main {
 
+enum class UpdateState {
+    // still downloading json from github
+    Pending,
+    // no update available.
+    None,
+    // update available!
+    Update,
+};
+
 // this holds 2 menus and allows for switching between them
 struct MainMenu final : Widget {
     MainMenu();
@@ -31,7 +40,7 @@ private:
     std::string m_update_url{};
     std::string m_update_version{};
     std::string m_update_description{};
-    bool m_update_avaliable{};
+    UpdateState m_update_state{UpdateState::Pending};
 };
 
 } // namespace sphaira::ui::menu::main

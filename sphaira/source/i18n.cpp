@@ -11,7 +11,7 @@ std::vector<u8> g_i18n_data;
 yyjson_doc* json;
 yyjson_val* root;
 
-std::string get(const char* str, size_t len) {
+std::string get_internal(const char* str, size_t len) {
     if (!json || !root) {
         log_write("no json or root\n");
         return str;
@@ -117,12 +117,16 @@ void exit() {
     g_i18n_data.clear();
 }
 
+std::string get(const char* str) {
+    return get_internal(str, std::strlen(str));
+}
+
 } // namespace sphaira::i18n
 
 namespace literals {
 
 std::string operator"" _i18n(const char* str, size_t len) {
-    return sphaira::i18n::get(str, len);
+    return sphaira::i18n::get_internal(str, len);
 }
 
 } // namespace literals
