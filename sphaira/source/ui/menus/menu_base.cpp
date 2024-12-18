@@ -32,12 +32,9 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
     u32 strength{};
     u32 ip{};
 
-    const auto _time = time(NULL);
+    const auto t = time(NULL);
     struct tm tm{};
-    const auto gmt = gmtime(&_time);
-    if (gmt) {
-        tm = *gmt;
-    }
+    localtime_r(&t, &tm);
 
     // todo: app thread poll every 1s and this query the result
     psmGetBatteryChargePercentage(&battery_percetange);

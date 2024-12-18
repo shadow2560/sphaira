@@ -791,8 +791,9 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 }
             }
             const auto t = (time_t)(e.time_stamp.modified);
-            const auto tm = gmtime(&t);
-            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->elements[text_id].colour, "%02u/%02u/%u", tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900);
+            struct tm tm{};
+            localtime_r(&t, &tm);
+            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->elements[text_id].colour, "%02u/%02u/%u", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
             if ((double)e.file_size / 1024.0 / 1024.0 <= 0.009) {
                 gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->elements[text_id].colour, "%.2f KiB", (double)e.file_size / 1024.0);
             } else {

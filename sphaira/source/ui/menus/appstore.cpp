@@ -1087,21 +1087,14 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"}, m_n
         // check the date, if older than 1day, then fetch new file
         // this relaxes the spam to their server, don't want to fetch repo
         // every time the user opens the app!
-        const auto time_file = (time_t)time_stamp.created;
-        const auto time_cur = (time_t)current_time;
-        const auto tm_file = *gmtime(&time_file);
-        const auto tm_cur = *gmtime(&time_cur);
-        if (tm_cur.tm_yday > tm_file.tm_yday || tm_cur.tm_year > tm_file.tm_year) {
-            log_write("repo.json expired, downloading new! cur_yday: %d file_yday: %d | cur_year: %d file_year: %d\n", tm_cur.tm_yday, tm_file.tm_yday, tm_cur.tm_year, tm_file.tm_year);
+        const auto time_file = time_stamp.created;
+        const auto time_cur = current_time;
+        const auto day = 60 * 60 * 24;
+        if (time_file > time_cur || time_cur - time_file >= day) {
+            log_write("repo.json expired, downloading new! time_file: %zu time_cur: %zu\n", time_file, time_cur);
             download_file = true;
         } else {
-            log_write("repo.json not expired! cur_yday: %d file_yday: %d | cur_year: %d file_year: %d\n", tm_cur.tm_yday, tm_file.tm_yday, tm_cur.tm_year, tm_file.tm_year);
-            // time_file = (time_t)time_stamp.modified;
-            // tm_file = *gmtime(&time_file);
-            // log_write("repo.json not expired! cur_yday: %d file_yday: %d | cur_year: %d file_year: %d\n", tm_cur.tm_yday, tm_file.tm_yday, tm_cur.tm_year, tm_file.tm_year);
-            // time_file = (time_t)time_stamp.accessed;
-            // tm_file = *gmtime(&time_file);
-            // log_write("repo.json not expired! cur_yday: %d file_yday: %d | cur_year: %d file_year: %d\n", tm_cur.tm_yday, tm_file.tm_yday, tm_cur.tm_year, tm_file.tm_year);
+            log_write("repo.json not expired! time_file: %zu time_cur: %zu\n", time_file, time_cur);
         }
     }
 
