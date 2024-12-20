@@ -59,6 +59,8 @@ void userAppInit(void) {
         diagAbortWithResult(rc);
     if (R_FAILED(rc = accountInitialize(is_application ? AccountServiceType_Application : AccountServiceType_System)))
         diagAbortWithResult(rc);
+    if (R_FAILED(rc = setInitialize()))
+        diagAbortWithResult(rc);
 
     log_nxlink_init();
 }
@@ -66,6 +68,7 @@ void userAppInit(void) {
 void userAppExit(void) {
     log_nxlink_exit();
 
+    setExit();
     accountExit();
     nifmExit();
     psmExit();
