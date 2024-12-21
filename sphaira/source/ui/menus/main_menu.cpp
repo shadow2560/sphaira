@@ -215,6 +215,7 @@ MainMenu::MainMenu() {
             language_items.push_back("Dutch");
             language_items.push_back("Portuguese");
             language_items.push_back("Russian");
+            language_items.push_back("Swedish");
 
             options->AddHeader("Header"_i18n);
             options->AddSpacer();
