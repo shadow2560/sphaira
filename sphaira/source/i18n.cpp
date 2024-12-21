@@ -3,6 +3,7 @@
 #include "log.hpp"
 #include <yyjson.h>
 #include <vector>
+#include <unordered_map>
 
 namespace sphaira::i18n {
 namespace {
@@ -10,32 +11,46 @@ namespace {
 std::vector<u8> g_i18n_data;
 yyjson_doc* json;
 yyjson_val* root;
+std::unordered_map<std::string, std::string> g_tr_cache;
 
 std::string get_internal(const char* str, size_t len) {
+    const std::string kkey = {str, len};
+
+    if (auto it = g_tr_cache.find(kkey); it != g_tr_cache.end()) {
+        return it->second;
+    }
+
+    // add default entry
+    g_tr_cache.emplace(kkey, kkey);
+
     if (!json || !root) {
         log_write("no json or root\n");
-        return str;
+        return kkey;
     }
 
     auto key = yyjson_obj_getn(root, str, len);
     if (!key) {
-        log_write("\tfailed to find key: [%.*s]\n", len, str);
-        return str;
+        log_write("\tfailed to find key: [%s]\n", kkey.c_str());
+        return kkey;
     }
 
     auto val = yyjson_get_str(key);
     auto val_len = yyjson_get_len(key);
     if (!val || !val_len) {
-        log_write("\tfailed to get value: [%.*s]\n", len, str);
-        return str;
+        log_write("\tfailed to get value: [%s]\n", kkey.c_str());
+        return kkey;
     }
 
-    return {val, val_len};
+    // update entry in cache
+    const std::string ret = {val, val_len};
+    g_tr_cache.insert_or_assign(kkey, ret);
+    return ret;
 }
 
 } // namespace
 
 bool init(long index) {
+    g_tr_cache.clear();
     R_TRY_RESULT(romfsInit(), false);
     ON_SCOPE_EXIT( romfsExit() );
 
