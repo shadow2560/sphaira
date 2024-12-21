@@ -367,6 +367,10 @@ auto App::GetInstallSdEnable() -> bool {
     return g_app->m_install_sd.Get();
 }
 
+auto App::GetInstallPrompt() -> bool {
+    return g_app->m_install_prompt.Get();
+}
+
 auto App::GetThemeShuffleEnable() -> bool {
     return g_app->m_theme_shuffle.Get();
 }

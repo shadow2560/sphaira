@@ -64,6 +64,7 @@ public:
     static auto GetLogEnable() -> bool;
     static auto GetReplaceHbmenuEnable() -> bool;
     static auto GetInstallSdEnable() -> bool;
+    static auto GetInstallPrompt() -> bool;
     static auto GetThemeShuffleEnable() -> bool;
     static auto GetThemeMusicEnable() -> bool;
     static auto GetLanguage() -> long;
@@ -139,6 +140,7 @@ public:
     option::OptionBool m_log_enabled{INI_SECTION, "log_enabled", false};
     option::OptionBool m_replace_hbmenu{INI_SECTION, "replace_hbmenu", false};
     option::OptionBool m_install_sd{INI_SECTION, "install_sd", true};
+    option::OptionLong m_install_prompt{INI_SECTION, "install_prompt", true};
     option::OptionBool m_theme_shuffle{INI_SECTION, "theme_shuffle", false};
     option::OptionBool m_theme_music{INI_SECTION, "theme_music", true};
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto

@@ -610,20 +610,18 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 if (m_entries_current.size()) {
                     if (HasTypeInSelectedEntries(FsDirEntryType_File) && !m_selected_count && (GetEntry().GetExtension() == "nro" || !FindFileAssocFor().empty())) {
                         options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
-                            App::Push(std::make_shared<OptionBox>(
-                                "WARNING: Installing forwarders will lead to a ban!"_i18n,
-                                "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
-                                    if (op_index && *op_index) {
-                                        if (GetEntry().GetExtension() == "nro") {
-                                            if (R_FAILED(homebrew::Menu::InstallHomebrewFromPath(GetNewPathCurrent()))) {
-                                                log_write("failed to create forwarder\n");
-                                            }
-                                        } else {
+                            if (App::GetInstallPrompt()) {
+                                App::Push(std::make_shared<OptionBox>(
+                                    "WARNING: Installing forwarders will lead to a ban!"_i18n,
+                                    "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
+                                        if (op_index && *op_index) {
                                             InstallForwarder();
                                         }
                                     }
-                                }
-                            ));
+                                ));
+                            } else {
+                                InstallForwarder();
+                            }
                         }));
                     }
 
@@ -860,6 +858,13 @@ void Menu::SetIndex(std::size_t index) {
 }
 
 void Menu::InstallForwarder() {
+    if (GetEntry().GetExtension() == "nro") {
+        if (R_FAILED(homebrew::Menu::InstallHomebrewFromPath(GetNewPathCurrent()))) {
+            log_write("failed to create forwarder\n");
+        }
+        return;
+    }
+
     const auto assoc_list = FindFileAssocFor();
     if (assoc_list.empty()) {
         log_write("failed to find assoc for: %s ext: %s\n", GetEntry().name, GetEntry().extension.c_str());
