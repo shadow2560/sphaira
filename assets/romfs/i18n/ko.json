@@ -1,8 +1,9 @@
 {
   "[Applet Mode]": "[애플릿 모드]",
   "No Internet": "네트워크 연결 없음",
-  "Fs": "파일 탐색기",
-  "App": "앱",
+  "Files": "",
+  "Apps": "",
+  "Store": "",
   "Menu": "메뉴",
   "Options": "설정",
   "OK": "확인",
@@ -74,7 +75,7 @@
   "Replace hbmenu on exit": "hbmenu를 교체",
   "Misc": "기타",
   "Misc Options": "기타",
-  "Web": "웹 브라우저",   
+  "Web": "웹 브라우저",
 
   "FileBrowser": "파일 탐색기",
   "%zd files": "%zd개의 파일",

@@ -1,8 +1,9 @@
 {
   "[Applet Mode]": "［Appletモード］",
   "No Internet": "インターネットなし",
-  "Fs": "ファイル",
-  "App": "アプリ",
+  "Files": "",
+  "Apps": "",
+  "Store": "",
   "Menu": "メニュー",
   "Options": "設定",
   "OK": "確認",
@@ -74,7 +75,7 @@
   "Replace hbmenu on exit": "終了時に hbmenu を置き換える",
   "Misc": "その他",
   "Misc Options": "その他",
-  "Web": "ウェブブラウザ",   
+  "Web": "ウェブブラウザ",
 
   "FileBrowser": "ファイルブラウザ",
   "%zd files": "%zd個のファイル",

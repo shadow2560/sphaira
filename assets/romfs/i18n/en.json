@@ -1,8 +1,9 @@
 {
   "[Applet Mode]": "[Applet Mode]",
   "No Internet": "No Internet",
-  "Fs": "Fs",
-  "App": "App",
+  "Files": "Files",
+  "Apps": "Apps",
+  "Store": "Store",
   "Menu": "Menu",
   "Options": "Options",
   "OK": "OK",
@@ -74,7 +75,7 @@
   "Replace hbmenu on exit": "Replace hbmenu on exit",
   "Misc": "Misc",
   "Misc Options": "Misc Options",
-  "Web": "Web",   
+  "Web": "Web",
 
   "FileBrowser": "FileBrowser",
   "%zd files": "%zd files",
