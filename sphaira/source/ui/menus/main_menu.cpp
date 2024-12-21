@@ -147,7 +147,13 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
 
 MainMenu::MainMenu() {
     DownloadMemoryAsync("https://api.github.com/repos/ITotalJustice/sphaira/releases/latest", "", [this](std::vector<u8>& data, bool success){
-        m_update_state = UpdateState::None;
+        m_update_state = UpdateState::Error;
+        ON_SCOPE_EXIT( log_write("update status: %u\n", (u8)m_update_state) );
+
+        if (!success) {
+            return false;
+        }
+
         auto json = yyjson_read((const char*)data.data(), data.size(), 0);
         R_UNLESS(json, false);
         ON_SCOPE_EXIT(yyjson_doc_free(json));
@@ -160,7 +166,10 @@ MainMenu::MainMenu() {
 
         const auto version = yyjson_get_str(tag_key);
         R_UNLESS(version, false);
-        R_UNLESS(std::strcmp(APP_VERSION, version) < 0, false);
+        if (std::strcmp(APP_VERSION, version) >= 0) {
+            m_update_state = UpdateState::None;
+            return true;
+        }
 
         auto assets = yyjson_obj_get(root, "assets");
         R_UNLESS(assets, false);
@@ -320,8 +329,15 @@ void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
     if (m_current_menu == m_homebrew_menu) {
         m_current_menu = menu;
         RemoveAction(b);
+        if (b == Button::L) {
+            AddOnRPress();
+        } else {
+            AddOnLPress();
+        }
     } else {
         m_current_menu = m_homebrew_menu;
+        AddOnRPress();
+        AddOnLPress();
     }
 
     m_current_menu->OnFocusGained();
@@ -329,22 +345,18 @@ void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
     for (auto [button, action] : m_actions) {
         m_current_menu->SetAction(button, action);
     }
-
-    if (b == Button::L) {
-        AddOnRPress();
-    } else {
-        AddOnLPress();
-    }
 }
 
 void MainMenu::AddOnLPress() {
-    SetAction(Button::L, Action{"Fs"_i18n, [this]{
+    const auto label = m_current_menu == m_homebrew_menu ? "Files" : "Apps";
+    SetAction(Button::L, Action{i18n::get(label), [this]{
         OnLRPress(m_filebrowser_menu, Button::L);
     }});
 }
 
 void MainMenu::AddOnRPress() {
-    SetAction(Button::R, Action{"App"_i18n, [this]{
+    const auto label = m_current_menu == m_homebrew_menu ? "Store" : "Apps";
+    SetAction(Button::R, Action{i18n::get(label), [this]{
         OnLRPress(m_app_store_menu, Button::R);
     }});
 }
