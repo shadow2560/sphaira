@@ -363,6 +363,10 @@ auto App::GetReplaceHbmenuEnable() -> bool {
     return g_app->m_replace_hbmenu.Get();
 }
 
+auto App::GetInstallEnable() -> bool {
+    return g_app->m_install.Get();
+}
+
 auto App::GetInstallSdEnable() -> bool {
     return g_app->m_install_sd.Get();
 }
@@ -409,8 +413,16 @@ void App::SetReplaceHbmenuEnable(bool enable) {
     g_app->m_replace_hbmenu.Set(enable);
 }
 
+void App::SetInstallEnable(bool enable) {
+    g_app->m_install.Set(enable);
+}
+
 void App::SetInstallSdEnable(bool enable) {
     g_app->m_install_sd.Set(enable);
+}
+
+void App::SetInstallPrompt(bool enable) {
+    g_app->m_install_prompt.Set(enable);
 }
 
 void App::SetThemeShuffleEnable(bool enable) {

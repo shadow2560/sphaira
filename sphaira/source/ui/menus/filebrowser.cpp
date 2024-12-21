@@ -608,7 +608,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 }
 
                 if (m_entries_current.size()) {
-                    if (HasTypeInSelectedEntries(FsDirEntryType_File) && !m_selected_count && (GetEntry().GetExtension() == "nro" || !FindFileAssocFor().empty())) {
+                    if (App::GetInstallEnable() && HasTypeInSelectedEntries(FsDirEntryType_File) && !m_selected_count && (GetEntry().GetExtension() == "nro" || !FindFileAssocFor().empty())) {
                         options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
                             if (App::GetInstallPrompt()) {
                                 App::Push(std::make_shared<OptionBox>(

@@ -63,6 +63,7 @@ public:
     static auto GetNxlinkEnable() -> bool;
     static auto GetLogEnable() -> bool;
     static auto GetReplaceHbmenuEnable() -> bool;
+    static auto GetInstallEnable() -> bool;
     static auto GetInstallSdEnable() -> bool;
     static auto GetInstallPrompt() -> bool;
     static auto GetThemeShuffleEnable() -> bool;
@@ -72,7 +73,9 @@ public:
     static void SetNxlinkEnable(bool enable);
     static void SetLogEnable(bool enable);
     static void SetReplaceHbmenuEnable(bool enable);
+    static void SetInstallEnable(bool enable);
     static void SetInstallSdEnable(bool enable);
+    static void SetInstallPrompt(bool enable);
     static void SetThemeShuffleEnable(bool enable);
     static void SetThemeMusicEnable(bool enable);
     static void SetLanguage(long index);
@@ -139,6 +142,7 @@ public:
     option::OptionBool m_nxlink_enabled{INI_SECTION, "nxlink_enabled", true};
     option::OptionBool m_log_enabled{INI_SECTION, "log_enabled", false};
     option::OptionBool m_replace_hbmenu{INI_SECTION, "replace_hbmenu", false};
+    option::OptionBool m_install{INI_SECTION, "install", false};
     option::OptionBool m_install_sd{INI_SECTION, "install_sd", true};
     option::OptionLong m_install_prompt{INI_SECTION, "install_prompt", true};
     option::OptionBool m_theme_shuffle{INI_SECTION, "theme_shuffle", false};

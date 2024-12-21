@@ -204,7 +204,6 @@ MainMenu::MainMenu() {
 
             SidebarEntryArray::Items language_items;
             language_items.push_back("Auto"_i18n);
-
             language_items.push_back("English"_i18n);
             language_items.push_back("Japanese"_i18n);
             language_items.push_back("French"_i18n);
@@ -266,16 +265,9 @@ MainMenu::MainMenu() {
                 }
             }));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Language"_i18n, language_items, [this, language_items](std::size_t& index_out){
+            options->Add(std::make_shared<SidebarEntryArray>("Language"_i18n, language_items, [this](std::size_t& index_out){
                 App::SetLanguage(index_out);
             }, (std::size_t)App::GetLanguage()));
-
-            options->Add(std::make_shared<SidebarEntryBool>("Logging"_i18n, App::GetLogEnable(), [this](bool& enable){
-                App::SetLogEnable(enable);
-            }, "Enabled"_i18n, "Disabled"_i18n));
-            options->Add(std::make_shared<SidebarEntryBool>("Replace hbmenu on exit"_i18n, App::GetReplaceHbmenuEnable(), [this](bool& enable){
-                App::SetReplaceHbmenuEnable(enable);
-            }, "Enabled"_i18n, "Disabled"_i18n));
 
             options->Add(std::make_shared<SidebarEntryCallback>("Misc"_i18n, [this](){
                 auto options = std::make_shared<Sidebar>("Misc Options"_i18n, Sidebar::Side::LEFT);
@@ -284,12 +276,45 @@ MainMenu::MainMenu() {
                 options->Add(std::make_shared<SidebarEntryCallback>("Themezer"_i18n, [](){
                     App::Push(std::make_shared<menu::themezer::Menu>());
                 }));
+
                 options->Add(std::make_shared<SidebarEntryCallback>("Irs"_i18n, [](){
                     App::Push(std::make_shared<menu::irs::Menu>());
                 }));
-                options->Add(std::make_shared<SidebarEntryCallback>("Web"_i18n, [](){
-                    WebShow("https://lite.duckduckgo.com/lite");
-                }));
+
+                if (App::IsApplication()) {
+                    options->Add(std::make_shared<SidebarEntryCallback>("Web"_i18n, [](){
+                        WebShow("https://lite.duckduckgo.com/lite");
+                    }));
+                }
+            }));
+
+            options->Add(std::make_shared<SidebarEntryCallback>("Advanced"_i18n, [this](){
+                auto options = std::make_shared<Sidebar>("Advanced Options"_i18n, Sidebar::Side::LEFT);
+                ON_SCOPE_EXIT(App::Push(options));
+
+                SidebarEntryArray::Items install_items;
+                install_items.push_back("System memory"_i18n);
+                install_items.push_back("microSD card"_i18n);
+
+                options->Add(std::make_shared<SidebarEntryBool>("Logging"_i18n, App::GetLogEnable(), [this](bool& enable){
+                    App::SetLogEnable(enable);
+                }, "Enabled"_i18n, "Disabled"_i18n));
+
+                options->Add(std::make_shared<SidebarEntryBool>("Replace hbmenu on exit"_i18n, App::GetReplaceHbmenuEnable(), [this](bool& enable){
+                    App::SetReplaceHbmenuEnable(enable);
+                }, "Enabled"_i18n, "Disabled"_i18n));
+
+                options->Add(std::make_shared<SidebarEntryBool>("Install forwarders"_i18n, App::GetInstallEnable(), [this](bool& enable){
+                    App::SetInstallEnable(enable);
+                }, "Enabled"_i18n, "Disabled"_i18n));
+
+                options->Add(std::make_shared<SidebarEntryArray>("Install location"_i18n, install_items, [this](std::size_t& index_out){
+                    App::SetInstallSdEnable(index_out);
+                }, (std::size_t)App::GetInstallSdEnable()));
+
+                options->Add(std::make_shared<SidebarEntryBool>("Show install warning"_i18n, App::GetInstallPrompt(), [this](bool& enable){
+                    App::SetInstallPrompt(enable);
+                }, "Enabled"_i18n, "Disabled"_i18n));
             }));
         }})
     );
