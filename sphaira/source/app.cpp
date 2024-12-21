@@ -505,6 +505,11 @@ void App::Exit() {
     g_app->m_quit = true;
 }
 
+void App::ExitRestart() {
+    nro_launch(GetExePath());
+    Exit();
+}
+
 void App::Poll() {
     m_controller.Reset();
 

@@ -42,6 +42,7 @@ public:
     void Loop();
 
     static void Exit();
+    static void ExitRestart();
     static auto GetVg() -> NVGcontext*;
     static void Push(std::shared_ptr<ui::Widget>);
 
@@ -88,9 +89,6 @@ public:
     void Draw();
     void Update();
     void Poll();
-
-    void DrawBackground();
-    void DrawTouch();
 
     // void DrawElement(float x, float y, float w, float h, ui::ThemeEntryID id);
     auto LoadElementImage(std::string_view value) -> ElementEntry;

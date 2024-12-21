@@ -205,7 +205,6 @@ MainMenu::MainMenu() {
             auto options = std::make_shared<Sidebar>("Menu Options"_i18n, "v" APP_VERSION_HASH, Sidebar::Side::LEFT);
             ON_SCOPE_EXIT(App::Push(options));
 
-
             SidebarEntryArray::Items language_items;
             language_items.push_back("Auto"_i18n);
             language_items.push_back("English"_i18n);
@@ -261,6 +260,15 @@ MainMenu::MainMenu() {
                         }, [this](bool success){
                             if (success) {
                                 m_update_state = UpdateState::None;
+                                App::Notify("Updated to "_i18n + m_update_version);
+                                App::Push(std::make_shared<OptionBox>(
+                                    "Restart Sphaira?"_i18n,
+                                    "Back"_i18n, "Restart"_i18n, 1, [this](auto op_index){
+                                        if (op_index && *op_index) {
+                                            App::ExitRestart();
+                                        }
+                                    }
+                                ));
                             } else {
                                 App::Push(std::make_shared<ui::ErrorBox>(MAKERESULT(351, 1), "Failed to download update"_i18n));
                             }
