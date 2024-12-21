@@ -624,43 +624,6 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             }
                         }));
                     }
-
-                    if (HasTypeInSelectedEntries(FsDirEntryType_Dir)) {
-                        options->Add(std::make_shared<SidebarEntryCallback>("Set Archive Bit"_i18n, [this](){
-                            if (!m_selected_count) {
-                                AddCurrentFileToSelection(SelectedType::None);
-                            } else {
-                                AddSelectedEntries(SelectedType::None);
-                            }
-
-                            App::Push(std::make_shared<OptionBox>(
-                                "Warning! Setting the archive bit cannot be undone!"_i18n,
-                                "No"_i18n, "Yes"_i18n, 1, [this](auto op_index) {
-                                    if (op_index && *op_index == 1) {
-                                        bool re_sort{};
-                                        for (const auto&p : m_selected_files) {
-                                            const auto file_path = GetNewPath(m_selected_path, p.name);
-                                            if (p.IsDir()) {
-                                                fs::FsNativeSd fs;
-                                                if (R_SUCCEEDED(fsFsSetConcatenationFileAttribute(&fs.m_fs, file_path))) {
-                                                    log_write("updated timestamp\n");
-                                                    re_sort |= true;
-                                                } else {
-                                                    log_write("failed to set concatenation file attribute\n");
-                                                }
-                                            }
-                                        }
-
-                                        if (re_sort) {
-                                            Scan(m_path);
-                                        }
-                                    }
-                                }
-                            ));
-
-                            ResetSelection();
-                        }, true));
-                    }
                 }
             }));
         }})
