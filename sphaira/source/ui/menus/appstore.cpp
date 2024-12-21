@@ -472,7 +472,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
         }
 
         if (strncasecmp(md5_str, entry.md5.data(), entry.md5.length())) {
-            log_write("bad md5: %.*s vs %.*s\n", 32, md5_str, 32, entry.md5);
+            log_write("bad md5: %.*s vs %.*s\n", 32, md5_str, 32, entry.md5.c_str());
             return false;
         }
     }
@@ -1084,12 +1084,12 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
     if (!time_stamp.is_valid) {
         download_file = true;
     } else {
-        // check the date, if older than 1day, then fetch new file
+        // check the date, if older than 1hour, then fetch new file
         // this relaxes the spam to their server, don't want to fetch repo
         // every time the user opens the app!
         const auto time_file = time_stamp.created;
         const auto time_cur = current_time;
-        const auto day = 60 * 60 * 24;
+        const auto day = 60 * 60;
         if (time_file > time_cur || time_cur - time_file >= day) {
             log_write("repo.json expired, downloading new! time_file: %zu time_cur: %zu\n", time_file, time_cur);
             download_file = true;

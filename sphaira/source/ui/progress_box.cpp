@@ -31,6 +31,12 @@ ProgressBox::ProgressBox(const std::string& title, ProgressBoxCallback callback,
     m_pos.h = 430.f;
     m_pos.x = 255;
     m_pos.y = 145;
+    145 + 430; // 575, 200, 420
+
+    m_pos.w = 770.f;
+    m_pos.h = 295.f;
+    m_pos.x = (SCREEN_WIDTH / 2.f) - (m_pos.w / 2.f);
+    m_pos.y = (SCREEN_HEIGHT / 2.f) - (m_pos.h / 2.f);
 
     m_done = done;
     m_title = title;
@@ -81,8 +87,9 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
 
     // The pop up shape.
     // const Vec4 box = { 255, 145, 770, 430 };
-    const Vec4 prog_bar = { 400, 470, 480, 12 };
     const auto center_x = m_pos.x + m_pos.w/2;
+    const auto end_y = m_pos.y + m_pos.h;
+    const Vec4 prog_bar = { 400, end_y - 80, 480, 12 };
 
     // shapes.
     if (offset && size) {
@@ -93,12 +100,12 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
         gfx::drawTextArgs(vg, prog_bar.x + prog_bar.w + 10, prog_bar.y, 20, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, gfx::Colour::WHITE, "%u%%", percentage);
     }
 
-    gfx::drawTextArgs(vg, center_x, 200, 25, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::WHITE, title.c_str());
+    gfx::drawTextArgs(vg, center_x, m_pos.y + 60, 25, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::WHITE, title.c_str());
     // gfx::drawTextArgs(vg, center_x, 260, 20, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::SILVER, "Please do not remove the gamecard or");
     // gfx::drawTextArgs(vg, center_x, 295, 20, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::SILVER, "power off the system whilst installing.");
     // gfx::drawTextArgs(vg, center_x, 360, 20, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::WHITE, "%.2f MiB/s", 24.0);
     if (!transfer.empty()) {
-        gfx::drawTextArgs(vg, center_x, 420, 20, NVG_ALIGN_CENTER, gfx::Colour::WHITE, "%s", transfer.c_str());
+        gfx::drawTextArgs(vg, center_x, prog_bar.y - 15 - 20 * 1.5, 20, NVG_ALIGN_CENTER, gfx::Colour::WHITE, "%s", transfer.c_str());
     }
 }
 

@@ -117,10 +117,6 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
                 std::vector<char> buf(chunk_size);
                 u64 offset{};
                 while (offset < info.uncompressed_size) {
-                    if (pbox->ShouldExit()) {
-                        return false;
-                    }
-
                     const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                     if (bytes_read <= 0) {
                         // log_write("failed to read zip file: %s\n", inzip.c_str());
@@ -171,6 +167,12 @@ MainMenu::MainMenu() {
             return true;
         }
 
+        auto body_key = yyjson_obj_get(root, "body");
+        R_UNLESS(body_key, false);
+
+        const auto body = yyjson_get_str(body_key);
+        R_UNLESS(body, false);
+
         auto assets = yyjson_obj_get(root, "assets");
         R_UNLESS(assets, false);
 
@@ -185,8 +187,10 @@ MainMenu::MainMenu() {
 
         m_update_version = version;
         m_update_url = url;
+        m_update_description = body;
         m_update_state = UpdateState::Update;
         log_write("found url: %s\n", url);
+        log_write("found body: %s\n", body);
         App::Notify("Update avaliable: "_i18n + m_update_version);
 
         return true;

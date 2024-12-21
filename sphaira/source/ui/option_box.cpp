@@ -51,8 +51,8 @@ OptionBox::OptionBox(const std::string& message, const Option& a, const Option& 
 
     m_pos.w = 770.f;
     m_pos.h = 295.f;
-    m_pos.x = (1280.f / 2.f) - (m_pos.w / 2.f);
-    m_pos.y = (720.f / 2.f) - (m_pos.h / 2.f);
+    m_pos.x = (SCREEN_WIDTH / 2.f) - (m_pos.w / 2.f);
+    m_pos.y = (SCREEN_HEIGHT / 2.f) - (m_pos.h / 2.f);
 
     auto box = m_pos;
     box.w /= 2.f;
