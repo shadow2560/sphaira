@@ -1053,9 +1053,9 @@ App::~App() {
         NacpStruct nacp;
         fs::FsNativeSd fs;
         if (R_SUCCEEDED(nro_get_nacp("/hbmenu.nro", nacp)) && std::strcmp(nacp.lang[0].name, "sphaira")) {
-            log_write("backing up hbmenu\n");
+            log_write("backing up hbmenu.nro\n");
             if (R_FAILED(fs.copy_entire_file("/switch/hbmenu.nro", "/hbmenu.nro", true))) {
-                log_write("failed to copy sphaire.nro to hbmenu.nro\n");
+                log_write("failed to backup  hbmenu.nro\n");
             }
         } else {
             log_write("not backing up\n");
