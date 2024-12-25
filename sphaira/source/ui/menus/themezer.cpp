@@ -369,7 +369,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
             const auto file_path = fs::AppendPath(dir_path, name);
 
             Result rc;
-            if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_ResultPathAlreadyExists) {
+            if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                 log_write("failed to create file: %s 0x%04X\n", file_path, rc);
                 return false;
             }

@@ -548,7 +548,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
             fs.CreateDirectoryRecursivelyWithPath(output, true);
 
             Result rc;
-            if (R_FAILED(rc = fs.CreateFile(output, info.uncompressed_size, 0, true)) && rc != FsError_ResultPathAlreadyExists) {
+            if (R_FAILED(rc = fs.CreateFile(output, info.uncompressed_size, 0, true)) && rc != FsError_PathAlreadyExists) {
                 log_write("failed to create file: %s 0x%04X\n", output, rc);
                 return false;
             }

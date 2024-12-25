@@ -298,7 +298,7 @@ auto DownloadInternal(CURL* curl, DataStruct& chunk, ProgressCallback pcallback,
 
         fs::CreateDirectoryRecursivelyWithPath(&chunk.fs, tmp_buf);
 
-        if (auto rc = fsFsCreateFile(&chunk.fs, tmp_buf, 0, 0); R_FAILED(rc) && rc != FsError_ResultPathAlreadyExists) {
+        if (auto rc = fsFsCreateFile(&chunk.fs, tmp_buf, 0, 0); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
             log_write("failed to create file: %s\n", tmp_buf);
             return false;
         }

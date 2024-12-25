@@ -91,13 +91,13 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
 
             Result rc;
             if (file_path[strlen(file_path) -1] == '/') {
-                if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_ResultPathAlreadyExists) {
+                if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
                     return false;
                 }
             } else {
                 Result rc;
-                if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_ResultPathAlreadyExists) {
+                if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create file: %s 0x%04X\n", file_path, rc);
                     return false;
                 }
@@ -248,6 +248,14 @@ MainMenu::MainMenu() {
             options->Add(std::make_shared<SidebarEntryCallback>("Network"_i18n, [this](){
                 auto options = std::make_shared<Sidebar>("Network Options"_i18n, Sidebar::Side::LEFT);
                 ON_SCOPE_EXIT(App::Push(options));
+
+                options->Add(std::make_shared<SidebarEntryBool>("Ftp"_i18n, App::GetFtpEnable(), [this](bool& enable){
+                    App::SetFtpEnable(enable);
+                }, "Enabled"_i18n, "Disabled"_i18n));
+
+                options->Add(std::make_shared<SidebarEntryBool>("Mtp"_i18n, App::GetMtpEnable(), [this](bool& enable){
+                    App::SetMtpEnable(enable);
+                }, "Enabled"_i18n, "Disabled"_i18n));
 
                 options->Add(std::make_shared<SidebarEntryBool>("Nxlink"_i18n, App::GetNxlinkEnable(), [this](bool& enable){
                     App::SetNxlinkEnable(enable);

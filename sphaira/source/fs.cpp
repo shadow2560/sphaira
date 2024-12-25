@@ -134,7 +134,7 @@ Result CreateDirectoryRecursively(FsFileSystem* fs, const FsPath& _path, bool ig
             rc = CreateDirectory(path, ignore_read_only);
         }
 
-        if (R_FAILED(rc) && rc != FsError_ResultPathAlreadyExists) {
+        if (R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
             log_write("failed to create folder: %s\n", path);
             return rc;
         }
@@ -166,7 +166,7 @@ Result CreateDirectoryRecursivelyWithPath(FsFileSystem* fs, const FsPath& _path,
             rc = CreateDirectory(path, ignore_read_only);
         }
 
-        if (R_FAILED(rc) && rc != FsError_ResultPathAlreadyExists) {
+        if (R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
             log_write("failed to create folder recursively: %s\n", path);
             return rc;
         }
@@ -251,7 +251,7 @@ Result write_entire_file(FsFileSystem* _fs, const FsPath& path, const std::vecto
     FsNative fs{_fs, false};
     R_TRY(fs.GetFsOpenResult());
 
-    if (auto rc = fs.CreateFile(path, in.size(), 0, ignore_read_only); R_FAILED(rc) && rc != FsError_ResultPathAlreadyExists) {
+    if (auto rc = fs.CreateFile(path, in.size(), 0, ignore_read_only); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
         return rc;
     }
 

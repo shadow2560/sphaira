@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <poll.h>
 
 namespace {
 
@@ -114,7 +115,7 @@ auto recvall(int sock, void* buf, int size) -> bool {
             if (errno != EWOULDBLOCK && errno != EAGAIN) {
                 return false;
             }
-            svcSleepThread(YieldType_WithoutCoreMigration);
+            svcSleepThread(1e+6);
         } else {
             got += len;
             left -= len;
@@ -132,7 +133,7 @@ auto sendall(Socket sock, const void* buf, int size) -> bool {
             if (errno != EWOULDBLOCK && errno != EAGAIN) {
                 return false;
             }
-            svcSleepThread(YieldType_WithoutCoreMigration);
+            svcSleepThread(1e+6);
         }
         sent += len;
         left -= len;
@@ -170,28 +171,6 @@ auto get_file_data(Socket sock, int max) -> std::vector<u8> {
 
     return buf;
 }
-
-#if 0
-auto create_directories(fs::FsNative& fs, const std::string& path) -> Result {
-    std::size_t pos{};
-
-    // no sane person creates 20 directories deep
-    for (int i = 0; i < 20; i++) {
-        pos = path.find_first_of("/", pos);
-        if (pos == std::string::npos) {
-            break;
-        }
-        pos++;
-
-        fs::FsPath safe_buf;
-        std::strcpy(safe_buf, path.substr(0, pos).c_str());
-        const auto rc = fs.CreateDirectory(safe_buf);
-        R_UNLESS(R_SUCCEEDED(rc) || rc == FsError_ResultPathAlreadyExists, rc);
-    }
-
-    R_SUCCEED();
-}
-#endif
 
 void loop(void* args) {
     log_write("in nxlink thread func\n");
@@ -266,21 +245,36 @@ void loop(void* args) {
 
         sockaddr_in sa_remote{};
 
-        while (!g_quit) {
-            svcSleepThread(1e+8);
+        pollfd pfds[2];
+        pfds[0].fd = sock;
+        pfds[0].events = POLLIN;
+        pfds[1].fd = sock_udp;
+        pfds[1].events = POLLIN;
 
-            if (poll_network_change()) {
+        while (!g_quit) {
+            auto poll_rc = poll(pfds, std::size(pfds), 1000/60);
+            if (poll_rc < 0) {
+                break;
+            } else if (poll_rc == 0) {
+                continue;
+            } else if ((pfds[0].revents & (POLLERR|POLLHUP|POLLNVAL)) || (pfds[1].revents & (POLLERR|POLLHUP|POLLNVAL))) {
                 break;
             }
 
-            char recvbuf[256];
-            socklen_t from_len = sizeof(sa_remote);
-            const auto udp_len = recvfrom(sock_udp, recvbuf, sizeof(recvbuf), 0, (sockaddr*)&sa_remote, &from_len);
-            if (udp_len > 0 && !std::strncmp(recvbuf, UDP_MAGIC_SERVER, std::strlen(UDP_MAGIC_SERVER))) {
-                // log_write("got udp len: %d - %.*s\n", udp_len, udp_len, recvbuf);
-                sa_remote.sin_family = AF_INET;
-                sa_remote.sin_port = htons(NXLINK_CLIENT_PORT);
-                sendto(sock_udp, UDP_MAGIC_CLIENT, std::strlen(UDP_MAGIC_CLIENT), 0, (sockaddr*)&sa_remote, sizeof(sa_remote));
+            if (pfds[1].revents & POLLIN) {
+                char recvbuf[6];
+                socklen_t from_len = sizeof(sa_remote);
+                auto udp_len = recvfrom(sock_udp, recvbuf, sizeof(recvbuf), 0, (sockaddr*)&sa_remote, &from_len);
+                if (udp_len == sizeof(recvbuf) && !std::strncmp(recvbuf, UDP_MAGIC_SERVER, std::strlen(UDP_MAGIC_SERVER))) {
+                    // log_write("got udp len: %d - %.*s\n", udp_len, udp_len, recvbuf);
+                    sa_remote.sin_family = AF_INET;
+                    sa_remote.sin_port = htons(NXLINK_CLIENT_PORT);
+                    udp_len = sendto(sock_udp, UDP_MAGIC_CLIENT, std::strlen(UDP_MAGIC_CLIENT), 0, (const sockaddr*)&sa_remote, sizeof(sa_remote));
+                    if (udp_len != std::strlen(UDP_MAGIC_CLIENT)) {
+                        log_write("nxlink failed to send udp packet\n");
+                        continue;
+                    }
+                }
             }
 
             socklen_t accept_len = sizeof(sa_remote);
@@ -316,8 +310,9 @@ void loop(void* args) {
             }
 
             // check that we have enough space
+            fs::FsNativeSd fs;
             s64 sd_storage_space_free;
-            if (R_FAILED(fs::FsNativeSd().GetFreeSpace("/", &sd_storage_space_free)) || filesize >= sd_storage_space_free) {
+            if (R_FAILED(fs.GetFreeSpace("/", &sd_storage_space_free)) || filesize >= sd_storage_space_free) {
                 sendall(connfd, &ERR_SPACE, sizeof(ERR_SPACE));
                 continue;
             }
@@ -345,16 +340,6 @@ void loop(void* args) {
                 path = name;
             }
 
-            // std::strcat(temp_path, "~");
-
-            fs::FsNativeSd fs;
-
-            if (R_FAILED(rc = fs.GetFsOpenResult())) {
-                sendall(connfd, &ERR_FILE, sizeof(ERR_FILE));
-                log_write("failed to open fs: 0x%X\n", socketGetLastResult());
-                continue;
-            }
-
             // if (R_FAILED(rc = create_directories(fs, path))) {
             if (R_FAILED(rc = fs.CreateDirectoryRecursivelyWithPath(path))) {
                 sendall(connfd, &ERR_FILE, sizeof(ERR_FILE));
@@ -364,7 +349,7 @@ void loop(void* args) {
 
             // this is the path we will write to
             const auto temp_path = path + "~";
-            if (R_FAILED(rc = fs.CreateFile(temp_path, file_data.size(), 0)) && rc != FsError_ResultPathAlreadyExists) {
+            if (R_FAILED(rc = fs.CreateFile(temp_path, file_data.size(), 0)) && rc != FsError_PathAlreadyExists) {
                 sendall(connfd, &ERR_FILE, sizeof(ERR_FILE));
                 log_write("failed to create file: %X\n", rc);
                 continue;
@@ -408,7 +393,7 @@ void loop(void* args) {
                 }
             }
 
-            if (R_FAILED(rc = fs.DeleteFile(path)) && rc != FsError_ResultPathNotFound) {
+            if (R_FAILED(rc = fs.DeleteFile(path)) && rc != FsError_PathNotFound) {
                 log_write("failed to delete %X\n", rc);
                 continue;
             }
@@ -473,13 +458,14 @@ bool nxlinkInitialize(NxlinkCallback callback) {
     g_callback = callback;
     g_quit = false;
 
-    if (R_FAILED(threadCreate(&g_thread, loop, nullptr, nullptr, 1024*64, 0x2C, 2))) {
-        log_write("failed to create nxlink thread: 0x%X\n", socketGetLastResult());
+    Result rc;
+    if (R_FAILED(rc = threadCreate(&g_thread, loop, nullptr, nullptr, 1024*64, 0x2C, 2))) {
+        log_write("failed to create nxlink thread: 0x%X\n", rc);
         return false;
     }
 
-    if (R_FAILED(threadStart(&g_thread))) {
-        log_write("failed to start nxlink thread: 0x%X\n", socketGetLastResult());
+    if (R_FAILED(rc = threadStart(&g_thread))) {
+        log_write("failed to start nxlink thread: 0x%X\n", rc);
         threadClose(&g_thread);
         return false;
     }

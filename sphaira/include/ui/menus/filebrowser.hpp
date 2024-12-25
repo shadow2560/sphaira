@@ -110,19 +110,18 @@ private:
     void LoadAssocEntriesPath(const fs::FsPath& path);
     void LoadAssocEntries();
     auto FindFileAssocFor() -> std::vector<FileAssocEntry>;
-    void OnIndexChange();
 
     auto GetNewPath(const FileEntry& entry) const -> fs::FsPath {
         return GetNewPath(m_path, entry.name);
-    };
+    }
 
     auto GetNewPath(u64 index) const -> fs::FsPath {
         return GetNewPath(m_path, GetEntry(index).name);
-    };
+    }
 
     auto GetNewPathCurrent() const -> fs::FsPath {
         return GetNewPath(m_index);
-    };
+    }
 
     auto GetSelectedEntries() const -> std::vector<FileEntry> {
         if (!m_selected_count) {

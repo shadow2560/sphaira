@@ -135,6 +135,9 @@ auto NotifMananger::Clear(NotifEntry::Side side) -> void {
 }
 
 auto NotifMananger::Clear() -> void {
+    mutexLock(&m_mutex);
+    ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
+
     m_entries_left.clear();
     m_entries_right.clear();
 }

@@ -12,10 +12,12 @@
 #include "fs.hpp"
 #include "defines.hpp"
 #include "i18n.hpp"
+#include "ftpsrv_helper.hpp"
 
 #include <nanovg_dk.h>
 #include <minIni.h>
 #include <pulsar.h>
+#include <haze.h>
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -200,7 +202,13 @@ auto GetNroIcon(const std::vector<u8>& nro_icon) -> std::vector<u8> {
     return nro_icon;
 }
 
+void haze_callback(const HazeCallbackData *data) {
+    App::NotifyFlashLed();
+    evman::push(*data, false);
+}
+
 void nxlink_callback(const NxlinkCallbackData *data) {
+    App::NotifyFlashLed();
     evman::push(*data, false);
 }
 
@@ -247,6 +255,9 @@ void App::Loop() {
                 } else if constexpr(std::is_same_v<T, evman::ExitEventData>) {
                     log_write("[ExitEventData] got event\n");
                     m_quit = true;
+                } else if constexpr(std::is_same_v<T, HazeCallbackData>) {
+                    // log_write("[ExitEventData] got event\n");
+                    // m_quit = true;
                 } else if constexpr(std::is_same_v<T, NxlinkCallbackData>) {
                     switch (arg.type) {
                         case NxlinkCallbackType_Connected:
@@ -330,6 +341,28 @@ void App::NotifyClear(ui::NotifEntry::Side side) {
     g_app->m_notif_manager.Clear(side);
 }
 
+void App::NotifyFlashLed() {
+    static const HidsysNotificationLedPattern pattern = {
+        .baseMiniCycleDuration = 0x1,             // 12.5ms.
+        .totalMiniCycles = 0x1,                   // 1 mini cycle(s).
+        .totalFullCycles = 0x1,                   // 1 full run(s).
+        .startIntensity = 0xF,                    // 100%.
+        .miniCycles = {{
+            .ledIntensity = 0xF,                  // 100%.
+            .transitionSteps = 0xF,               // 1 step(s). Total 12.5ms.
+            .finalStepDuration = 0xF,             // Forced 12.5ms.
+        }}
+    };
+
+    s32 total;
+    HidsysUniquePadId unique_pad_ids[16] = {0};
+    if (R_SUCCEEDED(hidsysGetUniquePadIds(unique_pad_ids, 16, &total))) {
+        for (int i = 0; i < total; i++) {
+            hidsysSetNotificationLedPattern(&pattern, unique_pad_ids[i]);
+        }
+    }
+}
+
 auto App::GetThemeMetaList() -> std::span<ThemeMeta> {
     return g_app->m_theme_meta_entries;
 }
@@ -383,6 +416,14 @@ auto App::GetThemeMusicEnable() -> bool {
     return g_app->m_theme_music.Get();
 }
 
+auto App::GetMtpEnable() -> bool {
+    return g_app->m_mtp_enabled.Get();
+}
+
+auto App::GetFtpEnable() -> bool {
+    return g_app->m_ftp_enabled.Get();
+}
+
 auto App::GetLanguage() -> long {
     return g_app->m_language.Get();
 }
@@ -432,6 +473,28 @@ void App::SetThemeShuffleEnable(bool enable) {
 void App::SetThemeMusicEnable(bool enable) {
     g_app->m_theme_music.Set(enable);
     PlaySoundEffect(SoundEffect::SoundEffect_Music);
+}
+
+void App::SetMtpEnable(bool enable) {
+    if (App::GetMtpEnable() != enable) {
+        g_app->m_mtp_enabled.Set(enable);
+        if (enable) {
+            hazeInitialize(haze_callback);
+        } else {
+            hazeExit();
+        }
+    }
+}
+
+void App::SetFtpEnable(bool enable) {
+    if (App::GetFtpEnable() != enable) {
+        g_app->m_ftp_enabled.Set(enable);
+        if (enable) {
+            ftpsrv::Init();
+        } else {
+            ftpsrv::Exit();
+        }
+    }
 }
 
 void App::SetLanguage(long index) {
@@ -860,6 +923,14 @@ App::App(const char* argv0) {
         log_write("hello world\n");
     }
 
+    if (App::GetMtpEnable()) {
+        hazeInitialize(haze_callback);
+    }
+
+    if (App::GetFtpEnable()) {
+        ftpsrv::Init();
+    }
+
     if (App::GetNxlinkEnable()) {
         nxlinkInitialize(nxlink_callback);
     }
@@ -1090,6 +1161,16 @@ App::~App() {
                 }
             }
         }
+    }
+
+    if (App::GetMtpEnable()) {
+        log_write("closing mtp\n");
+        hazeExit();
+    }
+
+    if (App::GetFtpEnable()) {
+        log_write("closing ftp\n");
+        ftpsrv::Exit();
     }
 
     if (App::GetNxlinkEnable()) {

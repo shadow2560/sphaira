@@ -46,11 +46,12 @@ public:
     static auto GetVg() -> NVGcontext*;
     static void Push(std::shared_ptr<ui::Widget>);
 
-    // this is thread safe (todo: make it thread safe)
+    // this is thread safe
     static void Notify(std::string text, ui::NotifEntry::Side side = ui::NotifEntry::Side::RIGHT);
     static void Notify(ui::NotifEntry entry);
     static void NotifyPop(ui::NotifEntry::Side side = ui::NotifEntry::Side::RIGHT);
     static void NotifyClear(ui::NotifEntry::Side side = ui::NotifEntry::Side::RIGHT);
+    static void NotifyFlashLed();
 
     static auto GetThemeMetaList() -> std::span<ThemeMeta>;
     static void SetTheme(u64 theme_index);
@@ -61,6 +62,8 @@ public:
     // returns true if we are hbmenu.
     static auto IsHbmenu() -> bool;
 
+    static auto GetMtpEnable() -> bool;
+    static auto GetFtpEnable() -> bool;
     static auto GetNxlinkEnable() -> bool;
     static auto GetLogEnable() -> bool;
     static auto GetReplaceHbmenuEnable() -> bool;
@@ -71,6 +74,8 @@ public:
     static auto GetThemeMusicEnable() -> bool;
     static auto GetLanguage() -> long;
 
+    static void SetMtpEnable(bool enable);
+    static void SetFtpEnable(bool enable);
     static void SetNxlinkEnable(bool enable);
     static void SetLogEnable(bool enable);
     static void SetReplaceHbmenuEnable(bool enable);
@@ -138,6 +143,8 @@ public:
     bool m_quit{};
 
     option::OptionBool m_nxlink_enabled{INI_SECTION, "nxlink_enabled", true};
+    option::OptionBool m_mtp_enabled{INI_SECTION, "mtp_enabled", false};
+    option::OptionBool m_ftp_enabled{INI_SECTION, "ftp_enabled", false};
     option::OptionBool m_log_enabled{INI_SECTION, "log_enabled", false};
     option::OptionBool m_replace_hbmenu{INI_SECTION, "replace_hbmenu", false};
     option::OptionBool m_install{INI_SECTION, "install", false};

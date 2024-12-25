@@ -7,6 +7,7 @@
 #include <string>
 #include <switch.h>
 #include <nxlink.h>
+#include <haze.h>
 #include "download.hpp"
 
 namespace sphaira::evman {
@@ -23,6 +24,7 @@ struct ExitEventData {
 using EventData = std::variant<
     LaunchNroEventData,
     ExitEventData,
+    HazeCallbackData,
     NxlinkCallbackData,
     DownloadEventData
 >;

@@ -72,6 +72,7 @@ add_executable(sphaira
     source/swkbd.cpp
     source/web.cpp
     source/i18n.cpp
+    source/ftpsrv_helper.cpp
 )
 
 target_compile_definitions(sphaira PRIVATE
@@ -81,6 +82,16 @@ target_compile_definitions(sphaira PRIVATE
 
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
+
+FetchContent_Declare(ftpsrv
+    GIT_REPOSITORY https://github.com/ITotalJustice/ftpsrv.git
+    GIT_TAG 8d5a14e
+)
+
+FetchContent_Declare(libhaze
+    GIT_REPOSITORY https://github.com/ITotalJustice/libhaze.git
+    GIT_TAG 3244b9e
+)
 
 FetchContent_Declare(libpulsar
     GIT_REPOSITORY https://github.com/ITotalJustice/switch-libpulsar.git
@@ -135,12 +146,46 @@ set(YYJSON_DISABLE_NON_STANDARD ON)
 set(YYJSON_DISABLE_UTF8_VALIDATION ON)
 set(YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS OFF)
 
+set(FTPSRV_LIB_BUILD TRUE)
+set(FTPSRV_LIB_SOCK_UNISTD TRUE)
+set(FTPSRV_LIB_VFS_CUSTOM ${CMAKE_CURRENT_SOURCE_DIR}/include/ftpsrv_helper.hpp)
+set(FTPSRV_LIB_PATH_SIZE 0x301)
+set(FTPSRV_LIB_SESSIONS 32)
+set(FTPSRV_LIB_BUF_SIZE 1024*64)
+
 FetchContent_MakeAvailable(
+    ftpsrv
+    libhaze
     libpulsar
     nanovg
     stb
     minIni-sphaira
     yyjson
+)
+
+# todo: upstream cmake
+add_library(libhaze
+    ${libhaze_SOURCE_DIR}/source/async_usb_server.cpp
+    ${libhaze_SOURCE_DIR}/source/device_properties.cpp
+    ${libhaze_SOURCE_DIR}/source/event_reactor.cpp
+    ${libhaze_SOURCE_DIR}/source/haze.cpp
+    ${libhaze_SOURCE_DIR}/source/ptp_object_database.cpp
+    ${libhaze_SOURCE_DIR}/source/ptp_object_heap.cpp
+    ${libhaze_SOURCE_DIR}/source/ptp_responder_android_operations.cpp
+    ${libhaze_SOURCE_DIR}/source/ptp_responder_mtp_operations.cpp
+    ${libhaze_SOURCE_DIR}/source/ptp_responder_ptp_operations.cpp
+    ${libhaze_SOURCE_DIR}/source/ptp_responder.cpp
+    ${libhaze_SOURCE_DIR}/source/usb_session.cpp
+)
+target_include_directories(libhaze PUBLIC ${libhaze_SOURCE_DIR}/include)
+set_target_properties(libhaze PROPERTIES
+    C_STANDARD 11
+    C_EXTENSIONS ON
+    CXX_STANDARD 20
+    CXX_EXTENSIONS ON
+    # force optimisations in debug mode as otherwise vapor errors
+    # due to force_inline attribute failing...
+    COMPILE_OPTIONS "$<$<CONFIG:Debug>:-Os>"
 )
 
 # todo: upstream cmake
@@ -195,6 +240,8 @@ set_target_properties(sphaira PROPERTIES
 )
 
 target_link_libraries(sphaira PRIVATE
+    ftpsrv
+    libhaze
     libpulsar
     minIni-sphaira
     nanovg
