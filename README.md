@@ -2,8 +2,6 @@
 
 A homebrew menu for the switch.
 
-It was built for my usage, as such, features that may seem out of place are included because i found them useful.
-
 [See the gbatemp thread for more details / discussion](https://gbatemp.net/threads/sphaira-hbmenu-replacement.664523/).
 
 ## showcase
@@ -25,6 +23,14 @@ please include:
 - CFW version
 - FW version
 - The bug itself and how to reproduce it
+
+## ftp
+
+ftp can be enabled via the network menu and listens on port 5000, no username or password is required.
+
+## mtp
+
+mtp can be enabled via the network menu.
 
 ## file assoc
 
@@ -52,4 +58,5 @@ see `assets/romfs/assoc/` for more examples of file assoc entries
 - minIni
 - gbatemp
 - hb-appstore
+- haze
 - everyone who has contributed to this project!

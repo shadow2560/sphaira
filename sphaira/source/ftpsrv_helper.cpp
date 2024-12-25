@@ -203,7 +203,11 @@ int ftp_vfs_write(struct FtpVfsFile* f, const void* buf, size_t size) {
                 return vfs_fs_set_errno(rc);
             }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpointer-arith"
             buf += sz;
+#pragma GCC diagnostic pop
+
             size -= sz;
             f->off += f->buf_off;
             f->buf_off = 0;
