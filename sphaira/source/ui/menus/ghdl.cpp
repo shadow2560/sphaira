@@ -305,7 +305,7 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                             asset_items.emplace_back(p.name);
                         }
 
-                        App::Push(std::make_shared<PopupList>("Select asset to download"_i18n, asset_items, [this](auto op_index){
+                        App::Push(std::make_shared<PopupList>("Select asset to download for "_i18n + GetEntry().name, asset_items, [this](auto op_index){
                             if (!op_index) {
                                 return;
                             }
@@ -328,7 +328,7 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                     asset_items.emplace_back(p.name);
                 }
 
-                App::Push(std::make_shared<PopupList>("Select asset to download"_i18n, asset_items, [this](auto op_index){
+                App::Push(std::make_shared<PopupList>("Select asset to download for "_i18n + GetEntry().name, asset_items, [this](auto op_index){
                     if (!op_index) {
                         return;
                     }
