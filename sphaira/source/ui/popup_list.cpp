@@ -157,4 +157,14 @@ auto PopupList::Draw(NVGcontext* vg, Theme* theme) -> void {
     Widget::Draw(vg, theme);
 }
 
+auto PopupList::OnFocusGained() noexcept -> void {
+    Widget::OnFocusGained();
+    SetHidden(false);
+}
+
+auto PopupList::OnFocusLost() noexcept -> void {
+    Widget::OnFocusLost();
+    SetHidden(true);
+}
+
 } // namespace sphaira::ui

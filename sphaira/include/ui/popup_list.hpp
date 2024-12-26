@@ -21,6 +21,8 @@ public:
     auto Update(Controller* controller, TouchInfo* touch) -> void override;
     auto OnLayoutChange() -> void override;
     auto Draw(NVGcontext* vg, Theme* theme) -> void override;
+    auto OnFocusGained() noexcept -> void override;
+    auto OnFocusLost() noexcept -> void override;
 
 private:
     static constexpr Vec2 m_title_pos{70.f, 28.f};

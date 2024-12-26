@@ -1,6 +1,7 @@
 #include "ui/menus/main_menu.hpp"
 #include "ui/menus/irs_menu.hpp"
 #include "ui/menus/themezer.hpp"
+#include "ui/menus/ghdl.hpp"
 
 #include "ui/sidebar.hpp"
 #include "ui/popup_list.hpp"
@@ -295,6 +296,10 @@ MainMenu::MainMenu() {
 
                 options->Add(std::make_shared<SidebarEntryCallback>("Themezer"_i18n, [](){
                     App::Push(std::make_shared<menu::themezer::Menu>());
+                }));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("GitHub"_i18n, [](){
+                    App::Push(std::make_shared<menu::gh::Menu>());
                 }));
 
                 options->Add(std::make_shared<SidebarEntryCallback>("Irs"_i18n, [](){

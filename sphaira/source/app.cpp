@@ -845,6 +845,10 @@ void App::ScanThemes(const std::string& path) {
             continue;
         }
 
+        if (d->d_type != DT_REG) {
+            continue;
+        }
+
         const std::string name = d->d_name;
         if (!name.ends_with(".ini")) {
             continue;
@@ -917,6 +921,8 @@ App::App(const char* argv0) {
     fs::FsNativeSd fs;
     fs.CreateDirectoryRecursively("/config/sphaira/assoc");
     fs.CreateDirectoryRecursively("/config/sphaira/themes");
+    fs.CreateDirectoryRecursively("/config/sphaira/github");
+    fs.CreateDirectoryRecursively("/config/sphaira/i18n");
 
     if (App::GetLogEnable()) {
         log_file_init();

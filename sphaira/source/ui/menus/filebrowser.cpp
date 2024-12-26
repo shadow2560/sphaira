@@ -1036,6 +1036,10 @@ void Menu::LoadAssocEntriesPath(const fs::FsPath& path) {
             continue;
         }
 
+        if (d->d_type != DT_REG) {
+            continue;
+        }
+
         const auto ext = std::strrchr(d->d_name, '.');
         if (!ext || strcasecmp(ext, ".ini")) {
             continue;

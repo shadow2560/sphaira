@@ -39,13 +39,14 @@ constexpr auto cexprHash(const char *str, std::size_t v = 0) noexcept -> std::si
         JSON_SKIP_IF_NULL_PTR(str); \
         e.name = str; \
     } \
-}
+}   break
 
 #define JSON_SET_OBJ(name) case cexprHash(#name): { \
     if (yyjson_is_obj(val)) { \
         from_json(val, e.name); \
     } \
-}
+} break
+
 #define JSON_SET_UINT(name) JSON_SET_TYPE(name, uint)
 #define JSON_SET_STR(name) JSON_SET_TYPE(name, str)
 #define JSON_SET_BOOL(name) JSON_SET_TYPE(name, bool)
@@ -72,7 +73,7 @@ constexpr auto cexprHash(const char *str, std::size_t v = 0) noexcept -> std::si
             JSON_SET_ARR_TYPE(name, type); \
         } \
     } \
-}
+} break
 
 #define JSON_SET_ARR_OBJ2(name, member) case cexprHash(#name): { \
     if (yyjson_is_arr(val)) { \
@@ -87,7 +88,7 @@ constexpr auto cexprHash(const char *str, std::size_t v = 0) noexcept -> std::si
             from_json(hit, member[idx]); \
         } \
     } \
-}
+} break
 
 #define JSON_SET_ARR_OBJ(name) JSON_SET_ARR_OBJ2(name, e.name)
 

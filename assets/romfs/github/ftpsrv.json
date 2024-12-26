@@ -1,0 +1,12 @@
+{
+    "name": "ftpsrv",
+    "url": "https://github.com/ITotalJustice/ftpsrv",
+    "assets": [
+        {
+            "name": "switch_application.zip"
+        },
+        {
+            "name": "switch_sysmod.zip"
+        }
+    ]
+}
