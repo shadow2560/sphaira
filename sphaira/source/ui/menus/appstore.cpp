@@ -398,17 +398,13 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
         log_write("starting download\n");
 
         const auto url = BuildZipUrl(entry);
-        if (!DownloadFile(url, zip_out, "", [pbox](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
-            if (pbox->ShouldExit()) {
-                return false;
-            }
-            pbox->UpdateTransfer(dlnow, dltotal);
-            return true;
-        })) {
+        if (!curl::Api().ToFile(
+            curl::Url{url},
+            curl::Path{zip_out},
+            curl::OnProgress{pbox->OnDownloadProgressCallback()}
+        )) {
             log_write("error with download\n");
-            // push popup error box
             return false;
-            // return appletEnterFatalSection();
         }
     }
 
@@ -682,35 +678,28 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
                     const auto post = "name=" "switch_user" "&package=" + m_entry.name + "&message=" + out;
                     const auto file = BuildFeedbackCachePath(m_entry);
 
-                    DownloadFileAsync(URL_POST_FEEDBACK, file, post, [](std::vector<u8>& data, bool success){
-                        if (success) {
-                            log_write("got feedback!\n");
-                        } else {
-                            log_write("failed to send feedback :(");
+                    curl::Api().ToAsync(
+                        curl::Url{URL_POST_FEEDBACK},
+                        curl::Path{file},
+                        curl::Fields{post},
+                        curl::OnComplete{[](std::vector<u8>& data, bool success, long code){
+                            if (success) {
+                                log_write("got feedback!\n");
+                            } else {
+                                log_write("failed to send feedback :(");
+                            }
                         }
                     });
                 }
             }, true));
             App::Push(sidebar);
         }}),
-        // std::make_pair(Button::A, Action{m_entry.status == EntryStatus::Update ? "Update" : "Install", [this](){
-        //     App::Push(std::make_shared<ProgressBox>("App Install", [this](auto pbox){
-        //         InstallApp(pbox, m_entry);
-        //     }, 2));
-        // }}),
         std::make_pair(Button::B, Action{"Back"_i18n, [this](){
             SetPop();
         }})
     );
 
-    // SidebarEntryCallback
-            // if (!m_entries_current.empty() && !GetEntry().url.empty()) {
-            //     options->Add(std::make_shared<SidebarEntryCallback>("Show Release Page"))
-            // }
-
     SetTitleSubHeading("by " + m_entry.author);
-
-    // const char* very_long = "total@fedora:~/dev/switch/sphaira$ nxlink build/MinSizeRel/*.nro total@fedora:~/dev/switch/sphaira$ nxlink build/MinSizeRel/*.nro total@fedora:~/dev/switch/sphaira$ nxlink build/MinSizeRel/*.nro total@fedora:~/dev/switch/sphaira$ nxlink build/MinSizeRel/*.nro";
 
     m_details = std::make_shared<ScrollableText>(m_entry.details, 0, 374, 250, 768, 18);
     m_changelog = std::make_shared<ScrollableText>(m_entry.changelog, 0, 374, 250, 768, 18);
@@ -727,30 +716,17 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
 
     // race condition if we pop the widget before the download completes
     if (!m_banner.image) {
-        DownloadFileAsync(url, path, "", [this, path](std::vector<u8>& data, bool success){
-            if (success) {
-                EntryLoadImageFile(path, m_banner);
+        curl::Api().ToFileAsync(
+            curl::Url{url},
+            curl::Path{path},
+            curl::Priority::High,
+            curl::OnComplete{[this, path](std::vector<u8>& data, bool success, long code){
+                if (success) {
+                    EntryLoadImageFile(path, m_banner);
+                }
             }
-        }, nullptr, DownloadPriority::High);
+        });
     }
-
-    // ignore screen shots, most apps don't have any sadly.
-    #if 0
-    m_screens.resize(m_entry.screens);
-
-    for (u32 i = 0; i < m_screens.size(); i++) {
-        path = BuildScreensCachePath(m_entry.name, i);
-        url = BuildScreensUrl(m_entry.name, i);
-
-        if (fs::file_exists(path.c_str())) {
-            EntryLoadImageFile(path, m_screens[i]);
-        } else {
-            DownloadFileAsync(url.c_str(), path.c_str(), [this, i, path](std::vector<u8>& data, bool success){
-                EntryLoadImageFile(path, m_screens[i]);
-            }, nullptr, DownloadPriority::High);
-        }
-    }
-    #endif
 
     SetSubHeading(m_entry.binary);
     SetSubHeading(m_entry.description);
@@ -780,30 +756,17 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
     DrawIcon(vg, m_banner, m_entry.image.image ? m_entry.image : m_default_icon, banner_vec, false);
     DrawIcon(vg, m_entry.image, m_default_icon, icon_vec);
 
-    // gfx::drawImage(vg, icon_vec, m_entry.image.image);
     constexpr float text_start_x = icon_vec.x;// - 10;
     float text_start_y = 218 + line_vec.y;
     const float text_inc_y = 32;
     const float font_size = 20;
 
-    // gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "%s", m_entry.name.c_str());
-    // gfx::drawTextBox(vg, text_start_x - 20, text_start_y, font_size, icon_vec.w + 20*2, theme->elements[ThemeEntryID_TEXT].colour, m_entry.description.c_str(), NVG_ALIGN_CENTER);
-    // text_start_y += text_inc_y * 2.0;
-
-    // gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "author: %s", m_entry.author.c_str());
-    // text_start_y += text_inc_y;
     gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "version: %s"_i18n.c_str(), m_entry.version.c_str());
     text_start_y += text_inc_y;
     gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "updated: %s"_i18n.c_str(), m_entry.updated.c_str());
     text_start_y += text_inc_y;
     gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "category: %s"_i18n.c_str(), m_entry.category.c_str());
     text_start_y += text_inc_y;
-    // gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "license: %s", m_entry.license.c_str());
-    // text_start_y += text_inc_y;
-    // gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "title: %s", m_entry.title.c_str());
-    // text_start_y += text_inc_y;
-    // gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "filesize: %.2f MiB", (double)m_entry.filesize / 1024.0);
-    // text_start_y += text_inc_y;
     gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "extracted: %.2f MiB"_i18n.c_str(), (double)m_entry.extracted / 1024.0);
     text_start_y += text_inc_y;
     gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "app_dls: %s"_i18n.c_str(), AppDlToStr(m_entry.app_dls).c_str());
@@ -1058,20 +1021,6 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
     );
 
     m_repo_download_state = ImageDownloadState::Progress;
-    #if 0
-    DownloadMemoryAsync(URL_JSON, [this](std::vector<u8>& data, bool success){
-        if (success) {
-            repo_json = data;
-            repo_json.push_back('\0');
-            m_repo_download_state = ImageDownloadState::Done;
-            if (HasFocus()) {
-                ScanHomebrew();
-            }
-        } else {
-            m_repo_download_state = ImageDownloadState::Failed;
-        }
-    });
-    #else
     FsTimeStampRaw time_stamp{};
     u64 current_time{};
     bool download_file = false;
@@ -1102,20 +1051,23 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
     // download_file = true;
 
     if (download_file) {
-        DownloadFileAsync(URL_JSON, REPO_PATH, "", [this](std::vector<u8>& data, bool success){
-            if (success) {
-                m_repo_download_state = ImageDownloadState::Done;
-                if (HasFocus()) {
-                    ScanHomebrew();
+        curl::Api().ToFileAsync(
+            curl::Url{URL_JSON},
+            curl::Path{REPO_PATH},
+            curl::OnComplete{[this](std::vector<u8>& data, bool success, long code){
+                if (success) {
+                    m_repo_download_state = ImageDownloadState::Done;
+                    if (HasFocus()) {
+                        ScanHomebrew();
+                    }
+                } else {
+                    m_repo_download_state = ImageDownloadState::Failed;
                 }
-            } else {
-                m_repo_download_state = ImageDownloadState::Failed;
             }
         });
     } else {
         m_repo_download_state = ImageDownloadState::Done;
     }
-    #endif
 
     m_filter = (Filter)ini_getl(INI_SECTION, "filter", m_filter, App::CONFIG_PATH);
     m_sort = (SortType)ini_getl(INI_SECTION, "sort", m_sort, App::CONFIG_PATH);
@@ -1174,14 +1126,19 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                         } else {
                             const auto url = BuildIconUrl(e);
                             e.image.state = ImageDownloadState::Progress;
-                            DownloadFileAsync(url, path, "", [this, index](std::vector<u8>& data, bool success) {
-                                if (success) {
-                                    m_entries[index].image.state = ImageDownloadState::Done;
-                                } else {
-                                    m_entries[index].image.state = ImageDownloadState::Failed;
-                                    log_write("failed to download image\n");
+                            curl::Api().ToFileAsync(
+                                curl::Url{url},
+                                curl::Path{path},
+                                curl::Priority::High,
+                                curl::OnComplete{[this, index](std::vector<u8>& data, bool success, long code) {
+                                    if (success) {
+                                        m_entries[index].image.state = ImageDownloadState::Done;
+                                    } else {
+                                        m_entries[index].image.state = ImageDownloadState::Failed;
+                                        log_write("failed to download image\n");
+                                    }
                                 }
-                            }, nullptr, DownloadPriority::High);
+                            });
                         }
                     }   break;
                     case ImageDownloadState::Progress: {

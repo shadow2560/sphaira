@@ -276,9 +276,9 @@ void App::Loop() {
                             App::Notify("Nxlink Finished"_i18n);
                             break;
                     }
-                } else if constexpr(std::is_same_v<T, DownloadEventData>) {
+                } else if constexpr(std::is_same_v<T, curl::DownloadEventData>) {
                     log_write("[DownloadEventData] got event\n");
-                    arg.callback(arg.data, arg.result);
+                    arg.callback(arg.data, arg.result, arg.code);
                 } else {
                     static_assert(false, "non-exhaustive visitor!");
                 }
@@ -941,7 +941,7 @@ App::App(const char* argv0) {
         nxlinkInitialize(nxlink_callback);
     }
 
-    DownloadInit();
+    curl::Init();
 
     // Create the deko3d device
     this->device = dk::DeviceMaker{}
@@ -1096,7 +1096,7 @@ App::~App() {
     log_write("starting to exit\n");
 
     i18n::exit();
-    DownloadExit();
+    curl::Exit();
 
     // this has to be called before any cleanup to ensure the lifetime of
     // nvg is still active as some widgets may need to free images.

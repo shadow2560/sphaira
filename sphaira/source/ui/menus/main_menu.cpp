@@ -35,16 +35,13 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
         pbox->NewTransfer("Downloading "_i18n + version);
         log_write("starting download: %s\n", url.c_str());
 
-        DownloadClearCache(url);
-        if (!DownloadFile(url, zip_out, "", [pbox](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
-            if (pbox->ShouldExit()) {
-                return false;
-            }
-            pbox->UpdateTransfer(dlnow, dltotal);
-            return true;
-        })) {
+        curl::ClearCache(url);
+        if (!curl::Api().ToFile(
+            curl::Url{url},
+            curl::Path{zip_out},
+            curl::OnProgress{pbox->OnDownloadProgressCallback()}
+        )) {
             log_write("error with download\n");
-            // push popup error box
             return false;
         }
     }
@@ -143,58 +140,61 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
 } // namespace
 
 MainMenu::MainMenu() {
-    DownloadMemoryAsync("https://api.github.com/repos/ITotalJustice/sphaira/releases/latest", "", [this](std::vector<u8>& data, bool success){
-        m_update_state = UpdateState::Error;
-        ON_SCOPE_EXIT( log_write("update status: %u\n", (u8)m_update_state) );
+    curl::Api().ToMemoryAsync(
+        curl::Url{"https://api.github.com/repos/ITotalJustice/sphaira/releases/latest"},
+        curl::OnComplete{[this](std::vector<u8>& data, bool success, long code){
+            m_update_state = UpdateState::Error;
+            ON_SCOPE_EXIT( log_write("update status: %u\n", (u8)m_update_state) );
 
-        if (!success) {
-            return false;
-        }
+            if (!success) {
+                return false;
+            }
 
-        auto json = yyjson_read((const char*)data.data(), data.size(), 0);
-        R_UNLESS(json, false);
-        ON_SCOPE_EXIT(yyjson_doc_free(json));
+            auto json = yyjson_read((const char*)data.data(), data.size(), 0);
+            R_UNLESS(json, false);
+            ON_SCOPE_EXIT(yyjson_doc_free(json));
 
-        auto root = yyjson_doc_get_root(json);
-        R_UNLESS(root, false);
+            auto root = yyjson_doc_get_root(json);
+            R_UNLESS(root, false);
 
-        auto tag_key = yyjson_obj_get(root, "tag_name");
-        R_UNLESS(tag_key, false);
+            auto tag_key = yyjson_obj_get(root, "tag_name");
+            R_UNLESS(tag_key, false);
 
-        const auto version = yyjson_get_str(tag_key);
-        R_UNLESS(version, false);
-        if (std::strcmp(APP_VERSION, version) >= 0) {
-            m_update_state = UpdateState::None;
+            const auto version = yyjson_get_str(tag_key);
+            R_UNLESS(version, false);
+            if (std::strcmp(APP_VERSION, version) >= 0) {
+                m_update_state = UpdateState::None;
+                return true;
+            }
+
+            auto body_key = yyjson_obj_get(root, "body");
+            R_UNLESS(body_key, false);
+
+            const auto body = yyjson_get_str(body_key);
+            R_UNLESS(body, false);
+
+            auto assets = yyjson_obj_get(root, "assets");
+            R_UNLESS(assets, false);
+
+            auto idx0 = yyjson_arr_get(assets, 0);
+            R_UNLESS(idx0, false);
+
+            auto url_key = yyjson_obj_get(idx0, "browser_download_url");
+            R_UNLESS(url_key, false);
+
+            const auto url = yyjson_get_str(url_key);
+            R_UNLESS(url, false);
+
+            m_update_version = version;
+            m_update_url = url;
+            m_update_description = body;
+            m_update_state = UpdateState::Update;
+            log_write("found url: %s\n", url);
+            log_write("found body: %s\n", body);
+            App::Notify("Update avaliable: "_i18n + m_update_version);
+
             return true;
         }
-
-        auto body_key = yyjson_obj_get(root, "body");
-        R_UNLESS(body_key, false);
-
-        const auto body = yyjson_get_str(body_key);
-        R_UNLESS(body, false);
-
-        auto assets = yyjson_obj_get(root, "assets");
-        R_UNLESS(assets, false);
-
-        auto idx0 = yyjson_arr_get(assets, 0);
-        R_UNLESS(idx0, false);
-
-        auto url_key = yyjson_obj_get(idx0, "browser_download_url");
-        R_UNLESS(url_key, false);
-
-        const auto url = yyjson_get_str(url_key);
-        R_UNLESS(url, false);
-
-        m_update_version = version;
-        m_update_url = url;
-        m_update_description = body;
-        m_update_state = UpdateState::Update;
-        log_write("found url: %s\n", url);
-        log_write("found body: %s\n", body);
-        App::Notify("Update avaliable: "_i18n + m_update_version);
-
-        return true;
     });
 
     AddOnLPress();

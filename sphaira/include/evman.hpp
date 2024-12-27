@@ -26,7 +26,7 @@ using EventData = std::variant<
     ExitEventData,
     HazeCallbackData,
     NxlinkCallbackData,
-    DownloadEventData
+    curl::DownloadEventData
 >;
 
 // returns number of events

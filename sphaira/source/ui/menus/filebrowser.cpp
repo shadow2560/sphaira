@@ -232,15 +232,12 @@ auto GetRomIcon(ProgressBox* pbox, std::string filename, std::string extension, 
 
     // try and download icon
     if (!pbox->ShouldExit()) {
-        // auto png_image = DownloadMemory(ra_thumbnail_url.c_str());
         pbox->NewTransfer("Downloading "_i18n + gh_thumbnail_url);
-        auto png_image = DownloadMemory(gh_thumbnail_url, "", [pbox](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
-            if (pbox->ShouldExit()) {
-                return false;
-            }
-            pbox->UpdateTransfer(dlnow, dltotal);
-            return true;
-        });
+        auto png_image = curl::Api().ToMemory(
+            curl::Url{gh_thumbnail_url},
+            curl::OnProgress{pbox->OnDownloadProgressCallback()}
+        );
+
         if (!png_image.empty()) {
             return png_image;
         }

@@ -67,34 +67,30 @@ void from_json(const std::vector<u8>& data, GhApiEntry& e) {
     );
 }
 
-auto DownloadApp(ProgressBox* pbox, const GhApiAsset* gh_asset, const AssetEntry& entry = {}) -> bool {
+auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry& entry = {}) -> bool {
+    static const fs::FsPath temp_file{"/switch/sphaira/cache/ghdl.temp"};
     constexpr auto chunk_size = 1024 * 512; // 512KiB
 
     fs::FsNativeSd fs;
     R_TRY_RESULT(fs.GetFsOpenResult(), false);
 
-    if (!gh_asset || gh_asset->browser_download_url.empty()) {
+    if (gh_asset.browser_download_url.empty()) {
         log_write("failed to find asset\n");
         return false;
     }
 
-    static fs::FsPath temp_file{"/switch/sphaira/cache/ghdl.temp"};
-
     // 2. download the asset
     if (!pbox->ShouldExit()) {
-        pbox->NewTransfer("Downloading "_i18n + gh_asset->name);
-        log_write("starting download: %s\n", gh_asset->browser_download_url.c_str());
+        pbox->NewTransfer("Downloading "_i18n + gh_asset.name);
+        log_write("starting download: %s\n", gh_asset.browser_download_url.c_str());
 
-        DownloadClearCache(gh_asset->browser_download_url);
-        if (!DownloadFile(gh_asset->browser_download_url, temp_file, "", [pbox](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
-            if (pbox->ShouldExit()) {
-                return false;
-            }
-            pbox->UpdateTransfer(dlnow, dltotal);
-            return true;
-        })) {
+        curl::ClearCache(gh_asset.browser_download_url);
+        if (!curl::Api().ToFile(
+            curl::Url{gh_asset.browser_download_url},
+            curl::Path{temp_file},
+            curl::OnProgress{pbox->OnDownloadProgressCallback()}
+        )){
             log_write("error with download\n");
-            // push popup error box
             return false;
         }
     }
@@ -107,7 +103,7 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset* gh_asset, const AssetEntry
     }
 
     // 3. extract the zip / file
-    if (gh_asset->content_type == "application/zip") {
+    if (gh_asset.content_type == "application/zip") {
         log_write("found zip\n");
         auto zfile = unzOpen64(temp_file);
         if (!zfile) {
@@ -207,14 +203,11 @@ auto DownloadAssets(ProgressBox* pbox, const std::string& url, GhApiEntry& out) 
         pbox->NewTransfer("Downloading json"_i18n);
         log_write("starting download\n");
 
-        DownloadClearCache(url);
-        const auto json = DownloadMemory(url, "", [pbox](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
-            if (pbox->ShouldExit()) {
-                return false;
-            }
-            pbox->UpdateTransfer(dlnow, dltotal);
-            return true;
-        });
+        curl::ClearCache(url);
+        const auto json = curl::Api().ToMemory(
+            curl::Url{url},
+            curl::OnProgress{pbox->OnDownloadProgressCallback()}
+        );
 
         if (json.empty()) {
             log_write("error with download\n");
@@ -241,19 +234,18 @@ auto DownloadApp(ProgressBox* pbox, const std::string& url, const AssetEntry& en
         return false;
     }
 
-    GhApiAsset* gh_asset{};
-    for (auto& p : gh_entry.assets) {
-        if (p.name == entry.name) {
-            gh_asset = &p;
+    const auto it = std::find_if(
+        gh_entry.assets.cbegin(), gh_entry.assets.cend(), [&entry](auto& e) {
+            return entry.name == e.name;
         }
-    }
+    );
 
-    if (!gh_asset || gh_asset->browser_download_url.empty()) {
+    if (it == gh_entry.assets.cend() || it->browser_download_url.empty()) {
         log_write("failed to find asset\n");
         return false;
     }
 
-    return DownloadApp(pbox, gh_asset, entry);
+    return DownloadApp(pbox, *it, entry);
 }
 
 } // namespace
@@ -313,7 +305,7 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                             const auto index = *op_index;
                             const auto& asset_entry = gh_entry.assets[index];
                             App::Push(std::make_shared<ProgressBox>("Downloading "_i18n + GetEntry().name, [this, &asset_entry](auto pbox){
-                                return DownloadApp(pbox, &asset_entry);
+                                return DownloadApp(pbox, asset_entry);
                             }, [this](bool success){
                                 if (success) {
                                     App::Notify("Downloaded " + GetEntry().name);

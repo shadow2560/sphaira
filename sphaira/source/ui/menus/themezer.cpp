@@ -272,7 +272,7 @@ void from_json(const std::vector<u8>& data, PackList& e) {
 }
 
 auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
-    static fs::FsPath zip_out{"/switch/sphaira/cache/themezer/temp.zip"};
+    static const fs::FsPath zip_out{"/switch/sphaira/cache/themezer/temp.zip"};
     constexpr auto chunk_size = 1024 * 512; // 512KiB
 
     fs::FsNativeSd fs;
@@ -287,18 +287,15 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
 
         const auto url = apiBuildUrlDownloadPack(entry);
         log_write("using url: %s\n", url.c_str());
-        DownloadClearCache(url);
-        const auto data = DownloadMemory(url, "", [pbox](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
-            if (pbox->ShouldExit()) {
-                return false;
-            }
-            pbox->UpdateTransfer(dlnow, dltotal);
-            return true;
-        });
+        curl::ClearCache(url);
+        const auto data = curl::Api().ToMemory(
+            curl::Url{url},
+            curl::OnProgress{pbox->OnDownloadProgressCallback()}
+        );
 
         if (data.empty()) {
             log_write("error with download: %s\n", url.c_str());
-            // push popup error box
+
             return false;
         }
 
@@ -310,16 +307,19 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
         pbox->NewTransfer("Downloading "_i18n + entry.details.name);
         log_write("starting download: %s\n", download_pack.url.c_str());
 
-        DownloadClearCache(download_pack.url);
-        if (!DownloadFile(download_pack.url, zip_out, "", [pbox](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
-            if (pbox->ShouldExit()) {
-                return false;
+        curl::ClearCache(download_pack.url);
+        if (!curl::Api().ToFile(
+            curl::Url{download_pack.url},
+            curl::Path{zip_out},
+            curl::OnProgress{[pbox](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
+                if (pbox->ShouldExit()) {
+                    return false;
+                }
+                pbox->UpdateTransfer(dlnow, dltotal);
+                return true;
             }
-            pbox->UpdateTransfer(dlnow, dltotal);
-            return true;
         })) {
             log_write("error with download\n");
-            // push popup error box
             return false;
         }
     }
@@ -638,15 +638,20 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                                 const auto url = theme.preview.thumb;
                                 log_write("downloading url: %s\n", url.c_str());
                                 image.state = ImageDownloadState::Progress;
-                                DownloadFileAsync(url, path, "", [this, index, &image](std::vector<u8>& data, bool success) {
-                                    if (success) {
-                                        image.state = ImageDownloadState::Done;
-                                        log_write("downloaded themezer image\n");
-                                    } else {
-                                        image.state = ImageDownloadState::Failed;
-                                        log_write("failed to download image\n");
+                                curl::Api().ToFileAsync(
+                                    curl::Url{url},
+                                    curl::Path{path},
+                                    curl::Priority::High,
+                                    curl::OnComplete{[this, index, &image](std::vector<u8>& data, bool success, long code) {
+                                        if (success) {
+                                            image.state = ImageDownloadState::Done;
+                                            log_write("downloaded themezer image\n");
+                                        } else {
+                                            image.state = ImageDownloadState::Failed;
+                                            log_write("failed to download image\n");
+                                        }
                                     }
-                                }, nullptr, DownloadPriority::High);
+                                });
                             }
                         }   break;
                         case ImageDownloadState::Progress: {
@@ -711,34 +716,38 @@ void Menu::PackListDownload() {
     log_write("\npackList_url: %s\n\n", packList_url.c_str());
     log_write("\nthemeList_url: %s\n\n", themeList_url.c_str());
 
-    DownloadClearCache(packList_url);
-    DownloadMemoryAsync(packList_url, "", [this, page_index](std::vector<u8>& data, bool success){
-        log_write("got themezer data\n");
-        if (!success) {
+    curl::ClearCache(packList_url);
+    curl::Api().ToMemoryAsync(
+        curl::Url{packList_url},
+        curl::Priority::High,
+        curl::OnComplete{[this, page_index](std::vector<u8>& data, bool success, long code){
+            log_write("got themezer data\n");
+            if (!success) {
+                auto& page = m_pages[page_index-1];
+                page.m_ready = PageLoadState::Error;
+                log_write("failed to get themezer data...\n");
+                return;
+            }
+
+            PackList a;
+            from_json(data, a);
+
+            m_pages.resize(a.pagination.page_count);
             auto& page = m_pages[page_index-1];
-            page.m_ready = PageLoadState::Error;
-            log_write("failed to get themezer data...\n");
-            return;
+
+            page.m_packList = a.packList;
+            page.m_pagination = a.pagination;
+            page.m_ready = PageLoadState::Done;
+            m_page_index_max = a.pagination.page_count;
+
+            char subheading[128];
+            std::snprintf(subheading, sizeof(subheading), "Page %zu / %zu"_i18n.c_str(), m_page_index+1, m_page_index_max);
+            SetSubHeading(subheading);
+
+            log_write("a.pagination.page: %u\n", a.pagination.page);
+            log_write("a.pagination.page_count: %u\n", a.pagination.page_count);
         }
-
-        PackList a;
-        from_json(data, a);
-
-        m_pages.resize(a.pagination.page_count);
-        auto& page = m_pages[page_index-1];
-
-        page.m_packList = a.packList;
-        page.m_pagination = a.pagination;
-        page.m_ready = PageLoadState::Done;
-        m_page_index_max = a.pagination.page_count;
-
-        char subheading[128];
-        std::snprintf(subheading, sizeof(subheading), "Page %zu / %zu"_i18n.c_str(), m_page_index+1, m_page_index_max);
-        SetSubHeading(subheading);
-
-        log_write("a.pagination.page: %u\n", a.pagination.page);
-        log_write("a.pagination.page_count: %u\n", a.pagination.page_count);
-    }, nullptr, DownloadPriority::High);
+    });
 }
 
 } // namespace sphaira::ui::menu::themezer

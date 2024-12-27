@@ -11,8 +11,10 @@
 #include <mutex>
 #include <curl/curl.h>
 
-namespace sphaira {
+namespace sphaira::curl {
 namespace {
+
+using DownloadResult = std::pair<bool, long>;
 
 #define CURL_EASY_SETOPT_LOG(handle, opt, v) \
     if (auto r = curl_easy_setopt(handle, opt, v); r != CURLE_OK) { \
@@ -39,11 +41,14 @@ CURLSH* g_curl_share{};
 Mutex g_mutex_share[CURL_LOCK_DATA_LAST]{};
 
 struct UrlCache {
-    auto AddToCache(const std::string& url, bool force = false) {
+    auto AddToCache(const Url& url, bool force = false) {
         mutexLock(&mutex);
         ON_SCOPE_EXIT(mutexUnlock(&mutex));
-        auto it = std::find(cache.begin(), cache.end(), url);
-        if (it == cache.end()) {
+        auto it = std::find_if(cache.cbegin(), cache.cend(), [&url](const auto& e){
+            return e.m_str == url.m_str;
+        });
+
+        if (it == cache.cend()) {
             cache.emplace_back(url);
             return true;
         } else {
@@ -55,16 +60,19 @@ struct UrlCache {
         }
     }
 
-    void RemoveFromCache(const std::string& url) {
+    void RemoveFromCache(const Url& url) {
         mutexLock(&mutex);
         ON_SCOPE_EXIT(mutexUnlock(&mutex));
-        auto it = std::find(cache.begin(), cache.end(), url);
-        if (it != cache.end()) {
+        auto it = std::find_if(cache.cbegin(), cache.cend(), [&url](const auto& e){
+            return e.m_str == url.m_str;
+        });
+
+        if (it != cache.cend()) {
             cache.erase(it);
         }
     }
 
-    std::vector<std::string> cache;
+    std::vector<Url> cache;
     Mutex mutex{};
 };
 
@@ -101,7 +109,7 @@ struct ThreadEntry {
         return m_in_progress == true;
     }
 
-    auto Setup(DownloadCallback callback, ProgressCallback pcallback, std::string url, std::string file, std::string post) -> bool {
+    auto Setup(const Api& api) -> bool {
         assert(m_in_progress == false && "Setting up thread while active");
         mutexLock(&m_mutex);
         ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
@@ -109,11 +117,7 @@ struct ThreadEntry {
         if (m_in_progress) {
             return false;
         }
-        m_url = url;
-        m_file = file;
-        m_post = post;
-        m_callback = callback;
-        m_pcallback = pcallback;
+        m_api = api;
         m_in_progress = true;
         // log_write("started download :)\n");
         ueventSignal(&m_uevent);
@@ -122,22 +126,14 @@ struct ThreadEntry {
 
     CURL* m_curl{};
     Thread m_thread{};
-    std::string m_url{};
-    std::string m_file{}; // if empty, downloads to buffer
-    std::string m_post{}; // if empty, downloads to buffer
-    DownloadCallback m_callback{};
-    ProgressCallback m_pcallback{};
+    Api m_api{};
     std::atomic_bool m_in_progress{};
     Mutex m_mutex{};
     UEvent m_uevent{};
 };
 
 struct ThreadQueueEntry {
-    std::string url;
-    std::string file;
-    std::string post;
-    DownloadCallback callback;
-    ProgressCallback pcallback;
+    Api api;
     bool m_delete{};
 };
 
@@ -160,22 +156,18 @@ struct ThreadQueue {
         threadClose(&m_thread);
     }
 
-    auto Add(DownloadPriority prio, DownloadCallback callback, ProgressCallback pcallback, std::string url, std::string file, std::string post) -> bool {
+    auto Add(const Api& api) -> bool {
         mutexLock(&m_mutex);
         ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
 
         ThreadQueueEntry entry{};
-        entry.url = url;
-        entry.file = file;
-        entry.post = post;
-        entry.callback = callback;
-        entry.pcallback = pcallback;
+        entry.api = api;
 
-        switch (prio) {
-            case DownloadPriority::Normal:
+        switch (api.m_prio) {
+            case Priority::Normal:
                 m_entries.emplace_back(entry);
                 break;
-            case DownloadPriority::High:
+            case Priority::High:
                 m_entries.emplace_front(entry);
                 break;
         }
@@ -216,7 +208,7 @@ auto ProgressCallbackFunc2(void *clientp, curl_off_t dltotal, curl_off_t dlnow, 
     }
 
     // log_write("pcall called %u %u %u %u\n", dltotal, dlnow, ultotal, ulnow);
-    auto callback = *static_cast<ProgressCallback*>(clientp);
+    auto callback = *static_cast<OnProgress*>(clientp);
     if (!callback(dltotal, dlnow, ultotal, ulnow)) {
         return 1;
     }
@@ -283,36 +275,36 @@ auto WriteFileCallback(void *contents, size_t size, size_t num_files, void *user
     return realsize;
 }
 
-auto DownloadInternal(CURL* curl, DataStruct& chunk, ProgressCallback pcallback, const std::string& url, const std::string& file, const std::string& post) -> bool {
+auto DownloadInternal(CURL* curl, DataStruct& chunk, const Api& e) -> DownloadResult {
     fs::FsPath safe_buf;
     fs::FsPath tmp_buf;
-    const bool has_file = !file.empty() && file != "";
-    const bool has_post = !post.empty() && post != "";
+    const bool has_file = !e.m_path.empty() && e.m_path != "";
+    const bool has_post = !e.m_fields.m_str.empty() && e.m_fields.m_str != "";
 
     ON_SCOPE_EXIT(if (has_file) { fsFsClose(&chunk.fs); } );
 
     if (has_file) {
-        std::strcpy(safe_buf, file.c_str());
+        std::strcpy(safe_buf, e.m_path);
         GetDownloadTempPath(tmp_buf);
-        R_TRY_RESULT(fsOpenSdCardFileSystem(&chunk.fs), false);
+        R_TRY_RESULT(fsOpenSdCardFileSystem(&chunk.fs), {});
 
         fs::CreateDirectoryRecursivelyWithPath(&chunk.fs, tmp_buf);
 
         if (auto rc = fsFsCreateFile(&chunk.fs, tmp_buf, 0, 0); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
             log_write("failed to create file: %s\n", tmp_buf);
-            return false;
+            return {};
         }
 
         if (R_FAILED(fsFsOpenFile(&chunk.fs, tmp_buf, FsOpenMode_Write|FsOpenMode_Append, &chunk.f))) {
             log_write("failed to open file: %s\n", tmp_buf);
-            return false;
+            return {};
         }
     }
 
     // reserve the first chunk
     chunk.data.reserve(CHUNK_SIZE);
 
-    CURL_EASY_SETOPT_LOG(curl, CURLOPT_URL, url.c_str());
+    CURL_EASY_SETOPT_LOG(curl, CURLOPT_URL, e.m_url.m_str.c_str());
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_USERAGENT, "TotalJustice");
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_FOLLOWLOCATION, 1L);
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -322,13 +314,36 @@ auto DownloadInternal(CURL* curl, DataStruct& chunk, ProgressCallback pcallback,
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_BUFFERSIZE, 1024*512);
 
     if (has_post) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_POSTFIELDS, post.c_str());
-        log_write("setting post field: %s\n", post.c_str());
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_POSTFIELDS, e.m_fields.m_str.c_str());
+        log_write("setting post field: %s\n", e.m_fields.m_str.c_str());
+    }
+
+    struct curl_slist* list = NULL;
+    ON_SCOPE_EXIT(if (list) { curl_slist_free_all(list); } );
+
+    for (auto& [key, value] : e.m_header) {
+        // append value (if any).
+        auto header_str = key;
+        if (value.empty()) {
+            header_str += ":";
+        } else {
+            header_str += ": " + value;
+        }
+
+        // try to append header chunk.
+        auto temp = curl_slist_append(list, header_str.c_str());
+        if (temp) {
+            list = temp;
+        }
+    }
+
+    if (list) {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_HTTPHEADER, list);
     }
 
     // progress calls.
-    if (pcallback) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFODATA, &pcallback);
+    if (e.m_on_progress) {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFODATA, &e.m_on_progress);
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc2);
     } else {
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc1);
@@ -342,6 +357,9 @@ auto DownloadInternal(CURL* curl, DataStruct& chunk, ProgressCallback pcallback,
     // perform download and cleanup after and report the result.
     const auto res = curl_easy_perform(curl);
     bool success = res == CURLE_OK;
+
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     if (has_file) {
         if (res == CURLE_OK && chunk.offset) {
@@ -365,18 +383,18 @@ auto DownloadInternal(CURL* curl, DataStruct& chunk, ProgressCallback pcallback,
         }
     }
 
-    log_write("Downloaded %s %s\n", url.c_str(), curl_easy_strerror(res));
-    return success;
+    log_write("Downloaded %s %s\n", e.m_url.m_str.c_str(), curl_easy_strerror(res));
+    return {success, http_code};
 }
 
-auto DownloadInternal(DataStruct& chunk, ProgressCallback pcallback, const std::string& url, const std::string& file, const std::string& post) -> bool {
+auto DownloadInternal(DataStruct& chunk, const Api& e) -> DownloadResult {
     auto curl = curl_easy_init();
     if (!curl) {
         log_write("curl init failed\n");
-        return false;
+        return {};
     }
     ON_SCOPE_EXIT(curl_easy_cleanup(curl));
-    return DownloadInternal(curl, chunk, pcallback, url, file, post);
+    return DownloadInternal(curl, chunk, e);
 }
 
 void DownloadThread(void* p) {
@@ -393,9 +411,9 @@ void DownloadThread(void* p) {
 
         DataStruct chunk;
         #if 1
-        const auto result = DownloadInternal(data->m_curl, chunk, data->m_pcallback, data->m_url, data->m_file, data->m_post);
+        const auto [result, code] = DownloadInternal(data->m_curl, chunk, data->m_api);
         if (g_running) {
-            DownloadEventData event_data{data->m_callback, std::move(chunk.data), result};
+            DownloadEventData event_data{data->m_api.m_on_complete, std::move(chunk.data), code, result};
             evman::push(std::move(event_data), false);
         } else {
             break;
@@ -444,7 +462,7 @@ void DownloadThreadQueue(void* p) {
                 }
 
                 if (!thread.InProgress()) {
-                    thread.Setup(entry.callback, entry.pcallback, entry.url, entry.file, entry.post);
+                    thread.Setup(entry.api);
                     // log_write("[dl queue] starting download\n");
                     // mark entry for deletion
                     entry.m_delete = true;
@@ -467,13 +485,6 @@ void DownloadThreadQueue(void* p) {
         for (u32 i = 0; i < pop_count; i++) {
             data->m_entries.pop_front();
         }
-        // if (delete_any) {
-            // data->m_entries.clear();
-            // data->m_entries.
-            // data->m_entries.erase(std::remove_if(data->m_entries.begin(), data->m_entries.end(), [](auto& a) {
-                // return a.m_delete;
-            // }));
-        // }
     }
 
     log_write("exited download thread queue\n");
@@ -489,7 +500,7 @@ void my_unlock(CURL *handle, curl_lock_data data, void *useptr) {
 
 } // namespace
 
-auto DownloadInit() -> bool {
+auto Init() -> bool {
     if (CURLE_OK != curl_global_init(CURL_GLOBAL_DEFAULT)) {
         return false;
     }
@@ -521,7 +532,7 @@ auto DownloadInit() -> bool {
     return true;
 }
 
-void DownloadExit() {
+void Exit() {
     g_running = false;
 
     g_thread_queue.Close();
@@ -538,30 +549,38 @@ void DownloadExit() {
     curl_global_cleanup();
 }
 
-auto DownloadMemory(const std::string& url, const std::string& post, ProgressCallback pcallback) -> std::vector<u8> {
-    if (g_url_cache.AddToCache(url)) {
+auto ToMemory(const Api& e) -> std::vector<u8> {
+    if (!e.m_path.empty()) {
+        return {};
+    }
+
+    if (g_url_cache.AddToCache(e.m_url)) {
         DataStruct chunk{};
-        if (DownloadInternal(chunk, pcallback, url, "", post)) {
+        if (DownloadInternal(chunk, e).first) {
             return chunk.data;
         }
     }
     return {};
 }
 
-auto DownloadFile(const std::string& url, const std::string& out, const std::string& post, ProgressCallback pcallback) -> bool {
-    if (g_url_cache.AddToCache(url)) {
+auto ToFile(const Api& e) -> bool {
+    if (e.m_path.empty()) {
+        return false;
+    }
+
+    if (g_url_cache.AddToCache(e.m_url)) {
         DataStruct chunk{};
-        if (DownloadInternal(chunk, pcallback, url, out, post)) {
+        if (DownloadInternal(chunk, e).first) {
             return true;
         }
     }
     return false;
 }
 
-auto DownloadMemoryAsync(const std::string& url, const std::string& post, DownloadCallback callback, ProgressCallback pcallback, DownloadPriority prio) -> bool {
+auto ToMemoryAsync(const Api& api) -> bool {
     #if USE_THREAD_QUEUE
-    if (g_url_cache.AddToCache(url)) {
-        return g_thread_queue.Add(prio, callback, pcallback, url, "", post);
+    if (g_url_cache.AddToCache(api.m_url)) {
+        return g_thread_queue.Add(api);
     } else {
         return false;
     }
@@ -580,10 +599,10 @@ auto DownloadMemoryAsync(const std::string& url, const std::string& post, Downlo
     #endif
 }
 
-auto DownloadFileAsync(const std::string& url, const std::string& out, const std::string& post, DownloadCallback callback, ProgressCallback pcallback, DownloadPriority prio) -> bool {
+auto ToFileAsync(const Api& e) -> bool {
     #if USE_THREAD_QUEUE
-    if (g_url_cache.AddToCache(url)) {
-        return g_thread_queue.Add(prio, callback, pcallback, url, out, post);
+    if (g_url_cache.AddToCache(e.m_url)) {
+        return g_thread_queue.Add(e);
     } else {
         return false;
     }
@@ -602,9 +621,9 @@ auto DownloadFileAsync(const std::string& url, const std::string& out, const std
     #endif
 }
 
-void DownloadClearCache(const std::string& url) {
+void ClearCache(const Url& url) {
     g_url_cache.AddToCache(url);
     g_url_cache.RemoveFromCache(url);
 }
 
-} // namespace sphaira
+} // namespace sphaira::curl

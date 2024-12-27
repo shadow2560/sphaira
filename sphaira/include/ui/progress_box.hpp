@@ -30,6 +30,16 @@ struct ProgressBox final : Widget {
     auto CopyFile(const fs::FsPath& src, const fs::FsPath& dst) -> Result;
     void Yield();
 
+    auto OnDownloadProgressCallback() {
+        return [this](u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow){
+            if (this->ShouldExit()) {
+                return false;
+            }
+            this->UpdateTransfer(dlnow, dltotal);
+            return true;
+        };
+    }
+
 public:
     struct ThreadData {
         ProgressBox* pbox;
