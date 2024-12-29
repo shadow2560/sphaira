@@ -317,7 +317,7 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                             return DownloadApp(pbox, asset_entry, ptr);
                         }, [this](bool success){
                             if (success) {
-                                App::Notify("Downloaded " + GetEntry().repo);
+                                App::Notify("Downloaded "_i18n + GetEntry().name);
                             }
                         }, 2));
                     }));
