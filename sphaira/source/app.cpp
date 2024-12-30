@@ -974,7 +974,6 @@ App::App(const char* argv0) {
     }
 
     curl::Init();
-    curl::cache::init();
 
     // Create the deko3d device
     this->device = dk::DeviceMaker{}
@@ -1130,7 +1129,6 @@ App::~App() {
 
     i18n::exit();
     curl::Exit();
-    curl::cache::exit();
 
     // this has to be called before any cleanup to ensure the lifetime of
     // nvg is still active as some widgets may need to free images.

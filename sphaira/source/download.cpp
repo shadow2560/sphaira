@@ -25,9 +25,6 @@ namespace {
         log_write("curl_share_setopt(%s, %s) msg: %s\n", #opt, #v, curl_share_strerror(r)); \
     } \
 
-void DownloadThread(void* p);
-void DownloadThreadQueue(void* p);
-
 #define USE_THREAD_QUEUE 1
 constexpr auto API_AGENT = "ITotalJustice";
 constexpr u64 CHUNK_SIZE = 1024*1024;
@@ -51,22 +48,18 @@ auto generate_key_from_path(const fs::FsPath& path) -> std::string {
     return std::to_string(key);
 }
 
-struct CacheEntry {
-    constexpr CacheEntry(const fs::FsPath& _path, const char* _header_key)
-    : json_path{_path}
-    , header_key{_header_key} {
-
-    }
+struct Cache {
+    using Value = std::pair<std::string, std::string>;
 
     bool init() {
+        mutexLock(&m_mutex);
+        ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
+
         if (m_json) {
             return true;
         }
 
-        // enable for testing etag is working.
-        // fs::FsNativeSd().DeleteFile(json_path);
-
-        auto json_in = yyjson_read_file(json_path, YYJSON_READ_NOFLAG, nullptr, nullptr);
+        auto json_in = yyjson_read_file(JSON_PATH, YYJSON_READ_NOFLAG, nullptr, nullptr);
         if (json_in) {
             log_write("loading old json doc\n");
             m_json = yyjson_doc_mut_copy(json_in, nullptr);
@@ -83,12 +76,15 @@ struct CacheEntry {
     }
 
     void exit() {
+        mutexLock(&m_mutex);
+        ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
+
         if (!m_json) {
             return;
         }
 
-        if (!yyjson_mut_write_file(json_path, m_json, YYJSON_WRITE_NOFLAG, nullptr, nullptr)) {
-            log_write("failed to write etag json: %s\n", json_path.s);
+        if (!yyjson_mut_write_file(JSON_PATH, m_json, YYJSON_WRITE_NOFLAG, nullptr, nullptr)) {
+            log_write("failed to write etag json: %s\n", JSON_PATH.s);
         }
 
         yyjson_mut_doc_free(m_json);
@@ -96,77 +92,131 @@ struct CacheEntry {
         m_root = nullptr;
     }
 
-    void set_internal(const fs::FsPath& path, const std::string& value) {
+    void get(const fs::FsPath& path, curl::Header& header) {
+        mutexLock(&m_mutex);
+        ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
+
+        if (!fs::FsNativeSd().FileExists(path)) {
+            return;
+        }
+
+        const auto kkey = generate_key_from_path(path);
+        const auto it = m_cache.find(kkey);
+        if (it != m_cache.end()) {
+            return;
+        }
+
+        auto hash_key = yyjson_mut_obj_getn(m_root, kkey.c_str(), kkey.length());
+        if (!hash_key) {
+            return;
+        }
+
+        auto etag_key = yyjson_mut_obj_get(hash_key, ETAG_STR);
+        auto last_modified_key = yyjson_mut_obj_get(hash_key, LAST_MODIFIED_STR);
+
+        const auto etag_value = yyjson_mut_get_str(etag_key);
+        const auto etag_value_len = yyjson_mut_get_len(etag_key);
+        const auto last_modified_value = yyjson_mut_get_str(last_modified_key);
+        const auto last_modified_value_len = yyjson_mut_get_len(last_modified_key);
+
+        if ((!etag_value || !etag_value_len) && (!last_modified_value || !last_modified_value_len)) {
+            return;
+        }
+
+        std::string etag;
+        std::string last_modified;
+        if (etag_value && etag_value_len) {
+            etag.assign(etag_value, etag_value_len);
+        }
+        if (last_modified_value && last_modified_value_len) {
+            last_modified.assign(last_modified_value, last_modified_value_len);
+        }
+
+        m_cache.insert_or_assign(it, kkey, Value{etag, last_modified});
+        header.m_map.emplace("if-none-match", etag);
+        header.m_map.emplace("if-modified-since", last_modified);
+    }
+
+    void set(const fs::FsPath& path, const curl::Header& value) {
+        mutexLock(&m_mutex);
+        ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
+
+        std::string etag_str;
+        std::string last_modified_str;
+
+        if (auto it = value.Find(ETAG_STR); it != value.m_map.end()) {
+            etag_str = it->second;
+        }
+        if (auto it = value.Find(LAST_MODIFIED_STR); it != value.m_map.end()) {
+            last_modified_str = it->second;
+        }
+
+        if (!etag_str.empty() || !last_modified_str.empty()) {
+            set_internal(path, Value{etag_str, last_modified_str});
+        }
+    }
+
+private:
+    void set_internal(const fs::FsPath& path, const Value& value) {
         const auto kkey = generate_key_from_path(path);
 
         // check if we already have this entry
         const auto it = m_cache.find(kkey);
         if (it != m_cache.end() && it->second == value) {
-            log_write("already has etag, not updating, path: %s key: %s value: %s\n", path.s, kkey.c_str(), value.c_str());
+            log_write("already has etag, not updating, path: %s key: %s\n", path.s, kkey.c_str());
             return;
         }
 
         if (it != m_cache.end()) {
-            log_write("updating etag, path: %s old: %s new: %s\n", path.s, it->first.c_str(), it->second.c_str(), value.c_str());
+            log_write("updating etag, path: %s key: %s\n", path.s, kkey.c_str());
         } else {
-            log_write("setting new etag, path: %s key: %s value: %s\n", path.s, kkey.c_str(), value.c_str());
+            log_write("setting new etag, path: %s key: %s\n", path.s, kkey.c_str());
         }
 
         // insert new entry into cache, this will never fail.
         const auto& [jkey, jvalue] = *m_cache.insert_or_assign(it, kkey, value);
+        const auto& [etag, last_modified] = jvalue;
 
         // check if we need to add a new entry to root or simply update the value.
-        auto etag_key = yyjson_mut_obj_getn(m_root, kkey.c_str(), kkey.length());
-        if (!etag_key) {
-            if (!yyjson_mut_obj_add_str(m_json, m_root, jkey.c_str(), jvalue.c_str())) {
-                log_write("failed to set new etag key: %s\n", jkey.c_str());
-            }
+        auto hash_key = yyjson_mut_obj_getn(m_root, kkey.c_str(), kkey.length());
+        if (!hash_key) {
+            hash_key = yyjson_mut_obj_add_obj(m_json, m_root, jkey.c_str());
+        }
+
+        if (!hash_key) {
+            log_write("failed to set new cache key obj, path: %s key: %s\n", path.s, jkey.c_str());
         } else {
-            if (!yyjson_mut_set_strn(etag_key, jvalue.c_str(), jvalue.length())) {
-                log_write("failed to update etag key: %s\n", jkey.c_str());
+            const auto update_entry = [this, &hash_key](const char* tag, const std::string& value) {
+                if (value.empty()) {
+                    return true;
+                } else {
+                    auto key = yyjson_mut_obj_get(hash_key, tag);
+                    if (!key) {
+                        return yyjson_mut_obj_add_str(m_json, hash_key, tag, value.c_str());
+                    } else {
+                        return yyjson_mut_set_str(key, value.c_str());
+                    }
+                }
+            };
+
+            if (!update_entry("etag", etag)) {
+                log_write("failed to set new etag, path: %s key: %s\n", path.s, jkey.c_str());
+            }
+
+            if (!update_entry("last-modified", last_modified)) {
+                log_write("failed to set new last-modified, path: %s key: %s\n", path.s, jkey.c_str());
             }
         }
     }
 
-    auto get(const fs::FsPath& path) -> std::string {
-        if (!fs::FsNativeSd().FileExists(path)) {
-            return {};
-        }
+    static constexpr inline fs::FsPath JSON_PATH{"/switch/sphaira/cache/cache.json"};
+    static constexpr inline const char* ETAG_STR{"etag"};
+    static constexpr inline const char* LAST_MODIFIED_STR{"last-modified"};
 
-        const auto kkey = generate_key_from_path(path);
-        const auto it = m_cache.find(kkey);
-        if (it != m_cache.end()) {
-            return it->second;
-        }
-
-        auto etag_key = yyjson_mut_obj_getn(m_root, kkey.c_str(), kkey.length());
-        R_UNLESS(etag_key, {});
-
-        const auto val = yyjson_mut_get_str(etag_key);
-        const auto val_len = yyjson_mut_get_len(etag_key);
-        R_UNLESS(val && val_len, {});
-
-        const std::string ret = {val, val_len};
-        m_cache.insert_or_assign(it, kkey, ret);
-        return ret;
-    }
-
-    void set(const fs::FsPath& path, const std::string& value) {
-        set_internal(path, value);
-    }
-
-    void set(const fs::FsPath& path, const curl::Header& value) {
-        if (auto it = value.Find(header_key); it != value.m_map.end()) {
-            set_internal(path, it->second);
-        }
-    }
-
-    const fs::FsPath json_path;
-    const char* header_key;
-
+    Mutex m_mutex{};
     yyjson_mut_doc* m_json{};
     yyjson_mut_val* m_root{};
-    std::unordered_map<std::string, std::string> m_cache{};
+    std::unordered_map<std::string, Value> m_cache{};
 };
 
 struct ThreadEntry {
@@ -175,7 +225,7 @@ struct ThreadEntry {
         R_UNLESS(m_curl != nullptr, 0x1);
 
         ueventCreate(&m_uevent, true);
-        R_TRY(threadCreate(&m_thread, DownloadThread, this, nullptr, 1024*32, THREAD_PRIO, THREAD_CORE));
+        R_TRY(threadCreate(&m_thread, ThreadFunc, this, nullptr, 1024*32, THREAD_PRIO, THREAD_CORE));
         R_TRY(threadStart(&m_thread));
         R_SUCCEED();
     }
@@ -209,6 +259,8 @@ struct ThreadEntry {
         return true;
     }
 
+    static void ThreadFunc(void* p);
+
     CURL* m_curl{};
     Thread m_thread{};
     Api m_api{};
@@ -230,7 +282,7 @@ struct ThreadQueue {
 
     auto Create() -> Result {
         ueventCreate(&m_uevent, true);
-        R_TRY(threadCreate(&m_thread, DownloadThreadQueue, this, nullptr, 1024*32, THREAD_PRIO, THREAD_CORE));
+        R_TRY(threadCreate(&m_thread, ThreadFunc, this, nullptr, 1024*32, THREAD_PRIO, THREAD_CORE));
         R_TRY(threadStart(&m_thread));
         R_SUCCEED();
     }
@@ -260,14 +312,13 @@ struct ThreadQueue {
         ueventSignal(&m_uevent);
         return true;
     }
+
+    static void ThreadFunc(void* p);
 };
 
 ThreadEntry g_threads[MAX_THREADS]{};
 ThreadQueue g_thread_queue;
-
-CacheEntry g_etag{"/switch/sphaira/cache/etag.json", "etag"};
-CacheEntry g_lmt{"/switch/sphaira/cache/lmt.json", "last-modified"};
-Mutex g_cache_mutex;
+Cache g_cache;
 
 void GetDownloadTempPath(fs::FsPath& buf) {
     static Mutex mutex{};
@@ -407,11 +458,8 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
             return {};
         }
 
-        if (e.m_flags.m_flags & Flag_CacheEtag) {
-            header_in.m_map.emplace("if-none-match", cache::etag_get(e.m_path));
-        }
-        if (e.m_flags.m_flags & Flag_CacheLmt) {
-            header_in.m_map.emplace("if-modified-since", cache::lmt_get(e.m_path));
+        if (e.m_flags.m_flags & Flag_Cache) {
+            g_cache.get(e.m_path, header_in);
         }
     }
 
@@ -489,11 +537,8 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
         fsFileClose(&chunk.f);
 
         if (res == CURLE_OK && http_code != 304) {
-            if (e.m_flags.m_flags & Flag_CacheEtag) {
-                cache::etag_set(e.m_path, header_out);
-            }
-            if (e.m_flags.m_flags & Flag_CacheLmt) {
-                cache::lmt_set(e.m_path, header_out);
+            if (e.m_flags.m_flags & Flag_Cache) {
+                g_cache.set(e.m_path, header_out);
             }
 
             fs.DeleteFile(e.m_path, true);
@@ -524,7 +569,15 @@ auto DownloadInternal(const Api& e) -> ApiResult {
     return DownloadInternal(curl, e);
 }
 
-void DownloadThread(void* p) {
+void my_lock(CURL *handle, curl_lock_data data, curl_lock_access laccess, void *useptr) {
+    mutexLock(&g_mutex_share[data]);
+}
+
+void my_unlock(CURL *handle, curl_lock_data data, void *useptr) {
+    mutexUnlock(&g_mutex_share[data]);
+}
+
+void ThreadEntry::ThreadFunc(void* p) {
     auto data = static_cast<ThreadEntry*>(p);
     while (g_running) {
         auto rc = waitSingle(waiterForUEvent(&data->m_uevent), UINT64_MAX);
@@ -555,7 +608,7 @@ void DownloadThread(void* p) {
     log_write("exited download thread\n");
 }
 
-void DownloadThreadQueue(void* p) {
+void ThreadQueue::ThreadFunc(void* p) {
     auto data = static_cast<ThreadQueue*>(p);
     while (g_running) {
         auto rc = waitSingle(waiterForUEvent(&data->m_uevent), UINT64_MAX);
@@ -598,10 +651,6 @@ void DownloadThreadQueue(void* p) {
                 }
             }
 
-            if (!g_running) {
-                return;
-            }
-
             if (!keep_going) {
                 break;
             }
@@ -614,14 +663,6 @@ void DownloadThreadQueue(void* p) {
     }
 
     log_write("exited download thread queue\n");
-}
-
-void my_lock(CURL *handle, curl_lock_data data, curl_lock_access laccess, void *useptr) {
-    mutexLock(&g_mutex_share[data]);
-}
-
-void my_unlock(CURL *handle, curl_lock_data data, void *useptr) {
-    mutexUnlock(&g_mutex_share[data]);
 }
 
 } // namespace
@@ -655,6 +696,11 @@ auto Init() -> bool {
     }
 
     log_write("finished creating threads\n");
+
+    if (!g_cache.init()) {
+        log_write("failed to init json cache\n");
+    }
+
     return true;
 }
 
@@ -673,6 +719,7 @@ void Exit() {
     }
 
     curl_global_cleanup();
+    g_cache.exit();
 }
 
 auto ToMemory(const Api& e) -> ApiResult {
@@ -725,66 +772,4 @@ auto ToFileAsync(const Api& e) -> bool {
     #endif
 }
 
-namespace cache {
-
-bool init() {
-    mutexLock(&g_cache_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&g_cache_mutex));
-
-    if (!g_etag.m_json) {
-        R_UNLESS(g_etag.init(), false);
-    }
-
-    if (!g_lmt.m_json) {
-        R_UNLESS(g_lmt.init(), false);
-    }
-
-    return true;
-}
-
-void exit() {
-    mutexLock(&g_cache_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&g_cache_mutex));
-
-    g_etag.exit();
-    g_lmt.exit();
-}
-
-auto etag_get(const fs::FsPath& path) -> std::string {
-    mutexLock(&g_cache_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&g_cache_mutex));
-    return g_etag.get(path);
-}
-
-void etag_set(const fs::FsPath& path, const std::string& value) {
-    mutexLock(&g_cache_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&g_cache_mutex));
-    g_etag.set(path, value);
-}
-
-void etag_set(const fs::FsPath& path, const Header& value) {
-    mutexLock(&g_cache_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&g_cache_mutex));
-    g_etag.set(path, value);
-}
-
-auto lmt_get(const fs::FsPath& path) -> std::string {
-    mutexLock(&g_cache_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&g_cache_mutex));
-    return g_lmt.get(path);
-}
-
-void lmt_set(const fs::FsPath& path, const std::string& value) {
-    mutexLock(&g_cache_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&g_cache_mutex));
-    g_lmt.set(path, value);
-}
-
-void lmt_set(const fs::FsPath& path, const Header& value) {
-    mutexLock(&g_cache_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&g_cache_mutex));
-    g_lmt.set(path, value);
-}
-
-} // namespace cache
 } // namespace sphaira::curl

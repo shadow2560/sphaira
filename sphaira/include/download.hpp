@@ -15,9 +15,7 @@ enum {
     // requests to download send etag in the header.
     // the received etag is then saved on success.
     // this api is only available on downloading to file.
-    Flag_CacheEtag = 1 << 0,
-    Flag_CacheLmt = 1 << 1,
-    Flag_Cache = Flag_CacheEtag | Flag_CacheLmt,
+    Flag_Cache = 1 << 0,
 };
 
 enum class Priority {
@@ -193,18 +191,4 @@ private:
     }
 };
 
-namespace cache {
-
-bool init();
-void exit();
-
-auto etag_get(const fs::FsPath& path) -> std::string;
-void etag_set(const fs::FsPath& path, const std::string& value);
-void etag_set(const fs::FsPath& path, const Header& value);
-
-auto lmt_get(const fs::FsPath& path) -> std::string;
-void lmt_set(const fs::FsPath& path, const std::string& value);
-void lmt_set(const fs::FsPath& path, const Header& value);
-
-} // namespace cache
 } // namespace sphaira::curl
