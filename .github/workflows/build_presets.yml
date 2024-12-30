@@ -24,7 +24,7 @@ jobs:
 
     - name: Configure CMake
       run: |
-        cmake --preset ${{ matrix.preset }}
+        cmake --preset ${{ matrix.preset }} -DUSE_VFS_GC=0
 
     - name: Build
       run: cmake --build --preset ${{ matrix.preset }} --parallel 4

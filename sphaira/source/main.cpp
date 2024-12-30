@@ -63,6 +63,8 @@ void userAppInit(void) {
         diagAbortWithResult(rc);
     if (R_FAILED(rc = hidsysInitialize()))
         diagAbortWithResult(rc);
+    if (R_FAILED(rc = ncmInitialize()))
+        diagAbortWithResult(rc);
 
     log_nxlink_init();
 }
@@ -70,6 +72,7 @@ void userAppInit(void) {
 void userAppExit(void) {
     log_nxlink_exit();
 
+    ncmExit();
     hidsysExit();
     setExit();
     accountExit();

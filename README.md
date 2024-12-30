@@ -26,7 +26,8 @@ please include:
 
 ## ftp
 
-ftp can be enabled via the network menu and listens on port 5000, no username or password is required.
+ftp can be enabled via the network menu. It uses the same config as ftpsrv `/config/ftpsrv/config.ini`. [See here for the full list
+of all configs available](https://github.com/ITotalJustice/ftpsrv/blob/master/assets/config.ini.template).
 
 ## mtp
 

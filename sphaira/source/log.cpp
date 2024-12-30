@@ -14,6 +14,16 @@ std::FILE* file{};
 int nxlink_socket{};
 std::mutex mutex{};
 
+void log_write_arg_internal(const char* s, std::va_list& v) {
+    if (file) {
+        std::vfprintf(file, s, v);
+        std::fflush(file);
+    }
+    if (nxlink_socket) {
+        std::vprintf(s, v);
+    }
+}
+
 } // namespace
 
 auto log_file_init() -> bool {
@@ -60,13 +70,17 @@ void log_write(const char* s, ...) {
 
     std::va_list v{};
     va_start(v, s);
-    if (file) {
-        std::vfprintf(file, s, v);
-        std::fflush(file);
-    }
-    if (nxlink_socket) {
-        std::vprintf(s, v);
-    }
+    log_write_arg_internal(s, v);
     va_end(v);
 }
+
+void log_write_arg(const char* s, std::va_list& v) {
+    std::scoped_lock lock{mutex};
+    if (!file && !nxlink_socket) {
+        return;
+    }
+
+    log_write_arg_internal(s, v);
+}
+
 #endif

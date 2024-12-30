@@ -86,7 +86,7 @@ set(FETCHCONTENT_QUIET FALSE)
 
 FetchContent_Declare(ftpsrv
     GIT_REPOSITORY https://github.com/ITotalJustice/ftpsrv.git
-    GIT_TAG 8d5a14e
+    GIT_TAG 1.2.1
 )
 
 FetchContent_Declare(libhaze
@@ -114,12 +114,12 @@ FetchContent_Declare(yyjson
     GIT_TAG 0.10.0
 )
 
-FetchContent_Declare(minIni-sphaira
+FetchContent_Declare(minIni
     GIT_REPOSITORY https://github.com/ITotalJustice/minIni-nx.git
     GIT_TAG 63ec295
 )
 
-set(MININI_LIB_NAME minIni-sphaira)
+set(MININI_LIB_NAME minIni)
 set(MININI_USE_STDIO ON)
 set(MININI_USE_NX ON)
 set(MININI_USE_FLOAT OFF)
@@ -149,10 +149,40 @@ set(YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS OFF)
 
 set(FTPSRV_LIB_BUILD TRUE)
 set(FTPSRV_LIB_SOCK_UNISTD TRUE)
-set(FTPSRV_LIB_VFS_CUSTOM ${CMAKE_CURRENT_SOURCE_DIR}/include/ftpsrv_helper.hpp)
+set(FTPSRV_LIB_VFS_CUSTOM ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs_nx.h)
 set(FTPSRV_LIB_PATH_SIZE 0x301)
 set(FTPSRV_LIB_SESSIONS 32)
 set(FTPSRV_LIB_BUF_SIZE 1024*64)
+
+add_library(ftpsrv_helper
+    ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs_nx.c
+    ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_none.c
+    ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_root.c
+    ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_fs.c
+    ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_save.c
+    ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_storage.c
+    ${ftpsrv_SOURCE_DIR}/src/platform/nx/utils.c
+)
+
+# workaround until a64 container has latest libnx release.
+if (NOT DEFINED USE_VFS_GC)
+    set(USE_VFS_GC TRUE)
+endif()
+
+if (USE_VFS_GC)
+    target_sources(ftpsrv_helper PRIVATE
+        ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_gc.c
+    )
+endif()
+
+set(FTPSRV_LIB_CUSTOM_DEFINES
+    USE_VFS_SAVE=$<BOOL:TRUE>
+    USE_VFS_STORAGE=$<BOOL:TRUE>
+    USE_VFS_GC=$<BOOL:${USE_VFS_GC}>
+)
+
+target_link_libraries(ftpsrv_helper PUBLIC ftpsrv)
+target_include_directories(ftpsrv_helper PUBLIC ${ftpsrv_SOURCE_DIR}/src/platform)
 
 FetchContent_MakeAvailable(
     ftpsrv
@@ -160,7 +190,7 @@ FetchContent_MakeAvailable(
     libpulsar
     nanovg
     stb
-    minIni-sphaira
+    minIni
     yyjson
 )
 
@@ -241,10 +271,10 @@ set_target_properties(sphaira PROPERTIES
 )
 
 target_link_libraries(sphaira PRIVATE
-    ftpsrv
+    ftpsrv_helper
     libhaze
     libpulsar
-    minIni-sphaira
+    minIni
     nanovg
     stb
     yyjson
