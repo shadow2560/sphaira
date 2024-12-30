@@ -114,6 +114,10 @@ struct [[nodiscard]] Vec4 {
 
 struct TimeStamp {
     TimeStamp() {
+        Update();
+    }
+
+    void Update() {
         start = armGetSystemTick();
     }
 

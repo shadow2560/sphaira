@@ -9,8 +9,8 @@ namespace sphaira::ui::menu {
 MenuBase::MenuBase(std::string title) : m_title{title} {
     // this->SetParent(this);
     this->SetPos(30, 87, 1220 - 30, 646 - 87);
-    m_applet_type = appletGetAppletType();
     SetAction(Button::START, Action{App::Exit});
+    UpdateVars();
 }
 
 MenuBase::~MenuBase() {
@@ -18,29 +18,16 @@ MenuBase::~MenuBase() {
 
 void MenuBase::Update(Controller* controller, TouchInfo* touch) {
     Widget::Update(controller, touch);
+
+    // update every second.
+    if (m_poll_timestamp.GetSeconds() >= 1) {
+        UpdateVars();
+    }
 }
 
 void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
     DrawElement(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ThemeEntryID_BACKGROUND);
     Widget::Draw(vg, theme);
-
-    u32 battery_percetange{};
-
-    PsmChargerType charger_type{};
-    NifmInternetConnectionType type{};
-    NifmInternetConnectionStatus status{};
-    u32 strength{};
-    u32 ip{};
-
-    const auto t = time(NULL);
-    struct tm tm{};
-    localtime_r(&t, &tm);
-
-    // todo: app thread poll every 1s and this query the result
-    psmGetBatteryChargePercentage(&battery_percetange);
-    psmGetChargerType(&charger_type);
-    nifmGetInternetConnectionStatus(&type, &strength, &status);
-    nifmGetCurrentIpAddress(&ip);
 
     const float start_y = 70;
     const float font_size = 22;
@@ -58,14 +45,14 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
         start_x -= spacing;
 
     // draw("version %s", APP_VERSION);
-    draw("%u\uFE6A", battery_percetange);
-    draw("%02u:%02u:%02u", tm.tm_hour, tm.tm_min, tm.tm_sec);
-    if (ip) {
-        draw("%u.%u.%u.%u", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
+    draw("%u\uFE6A", m_battery_percetange);
+    draw("%02u:%02u:%02u", m_tm.tm_hour, m_tm.tm_min, m_tm.tm_sec);
+    if (m_ip) {
+        draw("%u.%u.%u.%u", m_ip&0xFF, (m_ip>>8)&0xFF, (m_ip>>16)&0xFF, (m_ip>>24)&0xFF);
     } else {
         draw(("No Internet"_i18n).c_str());
     }
-    if (m_applet_type == AppletType_LibraryApplet || m_applet_type == AppletType_SystemApplet) {
+    if (!App::IsApplication()) {
         draw(("[Applet Mode]"_i18n).c_str());
     }
 
@@ -94,6 +81,26 @@ void MenuBase::SetTitleSubHeading(std::string sub_heading) {
 
 void MenuBase::SetSubHeading(std::string sub_heading) {
     m_sub_heading = sub_heading;
+}
+
+void MenuBase::UpdateVars() {
+    m_tm = {};
+    m_poll_timestamp = {};
+    m_battery_percetange = {};
+    m_charger_type = {};
+    m_type = {};
+    m_status = {};
+    m_strength = {};
+    m_ip = {};
+
+    const auto t = time(NULL);
+    localtime_r(&t, &m_tm);
+    psmGetBatteryChargePercentage(&m_battery_percetange);
+    psmGetChargerType(&m_charger_type);
+    nifmGetInternetConnectionStatus(&m_type, &m_strength, &m_status);
+    nifmGetCurrentIpAddress(&m_ip);
+
+    m_poll_timestamp.Update();
 }
 
 } // namespace sphaira::ui::menu
