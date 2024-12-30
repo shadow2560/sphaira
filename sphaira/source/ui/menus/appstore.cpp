@@ -716,15 +716,9 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
     curl::Api().ToFileAsync(
         curl::Url{url},
         curl::Path{path},
-        curl::Header{
-            { "if-none-match", curl::cache::etag_get(path) },
-            { "if-modified-since", curl::cache::lmt_get(path) },
-        },
+        curl::Flags{curl::Flag_Cache},
         curl::OnComplete{[this, path](auto& result){
             if (result.success) {
-                curl::cache::etag_set(result.path, result.header);
-                curl::cache::lmt_set(result.path, result.header);
-
                 if (result.code == 304) {
                     m_banner.cached = false;
                 } else {
@@ -1030,15 +1024,9 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
     curl::Api().ToFileAsync(
         curl::Url{URL_JSON},
         curl::Path{REPO_PATH},
-        curl::Header{
-            { "if-none-match", curl::cache::etag_get(REPO_PATH) },
-            { "if-modified-since", curl::cache::lmt_get(REPO_PATH) },
-        },
+        curl::Flags{curl::Flag_Cache},
         curl::OnComplete{[this](auto& result){
             if (result.success) {
-                curl::cache::etag_set(result.path, result.header);
-                curl::cache::lmt_set(result.path, result.header);
-
                 if (result.code == 304) {
                     log_write("appstore json not updated\n");
                 } else {
@@ -1126,16 +1114,10 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                         curl::Api().ToFileAsync(
                             curl::Url{url},
                             curl::Path{path},
-                            curl::Header{
-                                { "if-none-match", curl::cache::etag_get(path) },
-                                { "if-modified-since", curl::cache::lmt_get(path) },
-                            },
+                            curl::Flags{curl::Flag_Cache},
                             curl::OnComplete{[this, &image](auto& result) {
                                 if (result.success) {
-                                    curl::cache::etag_set(result.path, result.header);
-                                    curl::cache::lmt_set(result.path, result.header);
-
-                                    image.state = ImageDownloadState::Done;
+                                   image.state = ImageDownloadState::Done;
                                     // data hasn't changed
                                     if (result.code == 304) {
                                         log_write("downloaded appstore image, was cached\n");

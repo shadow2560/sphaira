@@ -210,10 +210,9 @@ auto DownloadAssetJson(ProgressBox* pbox, const std::string& url, GhApiEntry& ou
             curl::Url{url},
             curl::Path{path},
             curl::OnProgress{pbox->OnDownloadProgressCallback()},
+            curl::Flags{curl::Flag_Cache},
             curl::Header{
                 { "Accept", "application/vnd.github+json" },
-                { "if-none-match", curl::cache::etag_get(path) },
-                { "if-modified-since", curl::cache::lmt_get(path) },
             }
         );
 
@@ -222,8 +221,6 @@ auto DownloadAssetJson(ProgressBox* pbox, const std::string& url, GhApiEntry& ou
             return false;
         }
 
-        curl::cache::etag_set(result.path, result.header);
-        curl::cache::lmt_set(result.path, result.header);
         from_json(result.path, out);
     }
 

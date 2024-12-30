@@ -656,15 +656,9 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                             curl::Api().ToFileAsync(
                                 curl::Url{url},
                                 curl::Path{path},
-                                curl::Header{
-                                    { "if-none-match", curl::cache::etag_get(path) },
-                                    { "if-modified-since", curl::cache::lmt_get(path) },
-                                },
+                                curl::Flags{curl::Flag_Cache},
                                 curl::OnComplete{[this, &image](auto& result) {
                                     if (result.success) {
-                                        curl::cache::etag_set(result.path, result.header);
-                                        curl::cache::lmt_set(result.path, result.header);
-
                                         image.state = ImageDownloadState::Done;
                                         // data hasn't changed
                                         if (result.code == 304) {
@@ -751,10 +745,7 @@ void Menu::PackListDownload() {
     curl::Api().ToFileAsync(
         curl::Url{packList_url},
         curl::Path{packlist_path},
-        curl::Header{
-            { "if-none-match", curl::cache::etag_get(packlist_path) },
-            { "if-modified-since", curl::cache::lmt_get(packlist_path) },
-        },
+        curl::Flags{curl::Flag_Cache},
         curl::OnComplete{[this, page_index](auto& result){
             log_write("got themezer data\n");
             if (!result.success) {
@@ -763,9 +754,6 @@ void Menu::PackListDownload() {
                 log_write("failed to get themezer data...\n");
                 return;
             }
-
-            curl::cache::etag_set(result.path, result.header);
-            curl::cache::lmt_set(result.path, result.header);
 
             PackList a;
             from_json(result.path, a);

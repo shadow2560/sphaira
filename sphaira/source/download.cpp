@@ -389,6 +389,7 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
     const bool has_post = !e.m_fields.m_str.empty() && e.m_fields.m_str != "";
 
     DataStruct chunk;
+    Header header_in = e.m_header;
     Header header_out;
     fs::FsNativeSd fs;
 
@@ -404,6 +405,13 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
         if (R_FAILED(fs.OpenFile(tmp_buf, FsOpenMode_Write|FsOpenMode_Append, &chunk.f))) {
             log_write("failed to open file: %s\n", tmp_buf);
             return {};
+        }
+
+        if (e.m_flags.m_flags & Flag_CacheEtag) {
+            header_in.m_map.emplace("if-none-match", cache::etag_get(e.m_path));
+        }
+        if (e.m_flags.m_flags & Flag_CacheLmt) {
+            header_in.m_map.emplace("if-modified-since", cache::lmt_get(e.m_path));
         }
     }
 
@@ -430,7 +438,7 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
     struct curl_slist* list = NULL;
     ON_SCOPE_EXIT(if (list) { curl_slist_free_all(list); } );
 
-    for (auto& [key, value] : e.m_header.m_map) {
+    for (const auto& [key, value] : header_in.m_map) {
         if (value.empty()) {
             continue;
         }
@@ -481,6 +489,13 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
         fsFileClose(&chunk.f);
 
         if (res == CURLE_OK && http_code != 304) {
+            if (e.m_flags.m_flags & Flag_CacheEtag) {
+                cache::etag_set(e.m_path, header_out);
+            }
+            if (e.m_flags.m_flags & Flag_CacheLmt) {
+                cache::lmt_set(e.m_path, header_out);
+            }
+
             fs.DeleteFile(e.m_path, true);
             fs.CreateDirectoryRecursivelyWithPath(e.m_path, true);
             if (R_FAILED(fs.RenameFile(tmp_buf, e.m_path, true))) {

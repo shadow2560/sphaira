@@ -145,10 +145,9 @@ MainMenu::MainMenu() {
     curl::Api().ToFileAsync(
         curl::Url{GITHUB_URL},
         curl::Path{CACHE_PATH},
+        curl::Flags{curl::Flag_Cache},
         curl::Header{
             { "Accept", "application/vnd.github+json" },
-            { "if-none-match", curl::cache::etag_get(CACHE_PATH) },
-            { "if-modified-since", curl::cache::lmt_get(CACHE_PATH) },
         },
         curl::OnComplete{[this](auto& result){
             log_write("inside github download\n");
@@ -164,9 +163,6 @@ MainMenu::MainMenu() {
             } else {
                 log_write("etag changed\n");
             }
-
-            curl::cache::etag_set(result.path, result.header);
-            curl::cache::lmt_set(result.path, result.header);
 
             auto json = yyjson_read_file(CACHE_PATH, YYJSON_READ_NOFLAG, nullptr, nullptr);
             R_UNLESS(json, false);

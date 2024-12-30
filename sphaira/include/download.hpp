@@ -10,6 +10,16 @@
 
 namespace sphaira::curl {
 
+enum {
+    Flag_None = 0,
+    // requests to download send etag in the header.
+    // the received etag is then saved on success.
+    // this api is only available on downloading to file.
+    Flag_CacheEtag = 1 << 0,
+    Flag_CacheLmt = 1 << 1,
+    Flag_Cache = Flag_CacheEtag | Flag_CacheLmt,
+};
+
 enum class Priority {
     Normal, // gets pushed to the back of the queue
     High, // gets pushed to the front of the queue
@@ -44,6 +54,12 @@ struct Header {
             return !strcasecmp(key.c_str(), e.first.c_str());
         });
     }
+};
+
+struct Flags {
+    Flags() = default;
+    Flags(u32 flags) : m_flags{flags} {}
+    u32 m_flags{Flag_None};
 };
 
 struct ApiResult {
@@ -99,6 +115,7 @@ struct Api {
     template <typename... Ts>
     auto ToMemory(Ts&&... ts) {
         static_assert(std::disjunction_v<std::is_same<Url, Ts>...>, "Url must be specified");
+        static_assert(!std::disjunction_v<std::is_same<Path, Ts>...>, "Path must not valid for memory");
         Api::set_option(std::forward<Ts>(ts)...);
         return curl::ToMemory(*this);
     }
@@ -115,6 +132,7 @@ struct Api {
     auto ToMemoryAsync(Ts&&... ts) {
         static_assert(std::disjunction_v<std::is_same<Url, Ts>...>, "Url must be specified");
         static_assert(std::disjunction_v<std::is_same<OnComplete, Ts>...>, "OnComplete must be specified");
+        static_assert(!std::disjunction_v<std::is_same<Path, Ts>...>, "Path must not valid for memory");
         Api::set_option(std::forward<Ts>(ts)...);
         return curl::ToMemoryAsync(*this);
     }
@@ -131,6 +149,7 @@ struct Api {
     Url m_url;
     Fields m_fields{};
     Header m_header{};
+    Flags m_flags{};
     Path m_path{};
     OnComplete m_on_complete = nullptr;
     OnProgress m_on_progress = nullptr;
@@ -145,6 +164,9 @@ private:
     }
     void SetOption(Header&& v) {
         m_header = v;
+    }
+    void SetOption(Flags&& v) {
+        m_flags = v;
     }
     void SetOption(Path&& v) {
         m_path = v;
