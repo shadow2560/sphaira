@@ -11,12 +11,16 @@ namespace sphaira::ui::menu::gh {
 struct AssetEntry {
     std::string name;
     std::string path;
+    std::string pre_install_message;
+    std::string post_install_message;
 };
 
 struct Entry {
     fs::FsPath json_path;
     std::string owner;
     std::string repo;
+    std::string pre_install_message;
+    std::string post_install_message;
     std::vector<AssetEntry> assets;
 };
 

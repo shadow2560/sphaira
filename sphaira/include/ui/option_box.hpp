@@ -33,7 +33,7 @@ public:
     using Options = std::vector<Option>;
 
 public:
-    OptionBox(const std::string& message, const Option& a, Callback cb); // confirm
+    OptionBox(const std::string& message, const Option& a, Callback cb = [](auto){}); // confirm
     OptionBox(const std::string& message, const Option& a, const Option& b, Callback cb); // yesno
     OptionBox(const std::string& message, const Option& a, const Option& b, std::size_t index, Callback cb); // yesno
     OptionBox(const std::string& message, const Option& a, const Option& b, const Option& c, Callback cb); // tri

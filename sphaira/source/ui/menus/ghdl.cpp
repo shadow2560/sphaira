@@ -40,6 +40,8 @@ void from_json(yyjson_val* json, AssetEntry& e) {
     JSON_OBJ_ITR(
         JSON_SET_STR(name);
         JSON_SET_STR(path);
+        JSON_SET_STR(pre_install_message);
+        JSON_SET_STR(post_install_message);
     );
 }
 
@@ -48,6 +50,8 @@ void from_json(const fs::FsPath& path, Entry& e) {
     JSON_OBJ_ITR(
         JSON_SET_STR(owner);
         JSON_SET_STR(repo);
+        JSON_SET_STR(pre_install_message);
+        JSON_SET_STR(post_install_message);
         JSON_SET_ARR_OBJ(assets);
     );
 }
@@ -302,17 +306,44 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                         const auto index = *op_index;
                         const auto& asset_entry = api_assets[index];
                         const AssetEntry* ptr{};
+                        auto pre_install_message = GetEntry().pre_install_message;
                         if (asset_ptr.size()) {
                             ptr = asset_ptr[index];
+                            if (!ptr->pre_install_message.empty()) {
+                                pre_install_message = ptr->pre_install_message;
+                            }
                         }
 
-                        App::Push(std::make_shared<ProgressBox>("Downloading "_i18n + GetEntry().repo, [this, &asset_entry, ptr](auto pbox){
-                            return DownloadApp(pbox, asset_entry, ptr);
-                        }, [this](bool success){
-                            if (success) {
-                                App::Notify("Downloaded "_i18n + GetEntry().repo);
-                            }
-                        }, 2));
+                        const auto func = [this, &asset_entry, ptr](){
+                            App::Push(std::make_shared<ProgressBox>("Downloading "_i18n + GetEntry().repo, [this, &asset_entry, ptr](auto pbox){
+                                return DownloadApp(pbox, asset_entry, ptr);
+                            }, [this, ptr](bool success){
+                                if (success) {
+                                    App::Notify("Downloaded "_i18n + GetEntry().repo);
+                                    auto post_install_message = GetEntry().post_install_message;
+                                    if (ptr && !ptr->post_install_message.empty()) {
+                                        post_install_message = ptr->post_install_message;
+                                    }
+
+                                    if (!post_install_message.empty()) {
+                                        App::Push(std::make_shared<OptionBox>(post_install_message, "OK"_i18n));
+                                    }
+                                }
+                            }, 2));
+                        };
+
+                        if (!pre_install_message.empty()) {
+                            App::Push(std::make_shared<OptionBox>(
+                                pre_install_message,
+                                "Back"_i18n, "Donwload"_i18n, 1, [this, func](auto op_index){
+                                    if (op_index && *op_index) {
+                                        func();
+                                    }
+                                }
+                            ));
+                        } else {
+                            func();
+                        }
                     }));
                 }
             }, 2));
@@ -462,6 +493,10 @@ void Menu::LoadEntriesFromPath(const fs::FsPath& path) {
         // check that we have a owner and repo
         if (entry.owner.empty() || entry.repo.empty()) {
             continue;
+        }
+
+        for (auto& p : entry.assets) {
+
         }
 
         entry.json_path = full_path;
