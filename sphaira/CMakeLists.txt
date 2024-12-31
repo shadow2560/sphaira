@@ -147,12 +147,40 @@ set(YYJSON_DISABLE_NON_STANDARD ON)
 set(YYJSON_DISABLE_UTF8_VALIDATION ON)
 set(YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS OFF)
 
+FetchContent_MakeAvailable(
+    # ftpsrv
+    libhaze
+    libpulsar
+    nanovg
+    stb
+    minIni
+    yyjson
+)
+
+FetchContent_GetProperties(ftpsrv)
+if (NOT ftpsrv_POPULATED)
+    FetchContent_Populate(ftpsrv)
+endif()
+
 set(FTPSRV_LIB_BUILD TRUE)
 set(FTPSRV_LIB_SOCK_UNISTD TRUE)
 set(FTPSRV_LIB_VFS_CUSTOM ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs_nx.h)
 set(FTPSRV_LIB_PATH_SIZE 0x301)
 set(FTPSRV_LIB_SESSIONS 32)
 set(FTPSRV_LIB_BUF_SIZE 1024*64)
+
+# workaround until a64 container has latest libnx release.
+if (NOT DEFINED USE_VFS_GC)
+    set(USE_VFS_GC TRUE)
+endif()
+
+set(FTPSRV_LIB_CUSTOM_DEFINES
+    USE_VFS_SAVE=$<BOOL:TRUE>
+    USE_VFS_STORAGE=$<BOOL:TRUE>
+    USE_VFS_GC=$<BOOL:${USE_VFS_GC}>
+)
+
+add_subdirectory(${ftpsrv_SOURCE_DIR} binary_dir)
 
 add_library(ftpsrv_helper
     ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs_nx.c
@@ -164,35 +192,14 @@ add_library(ftpsrv_helper
     ${ftpsrv_SOURCE_DIR}/src/platform/nx/utils.c
 )
 
-# workaround until a64 container has latest libnx release.
-if (NOT DEFINED USE_VFS_GC)
-    set(USE_VFS_GC TRUE)
-endif()
+target_link_libraries(ftpsrv_helper PUBLIC ftpsrv)
+target_include_directories(ftpsrv_helper PUBLIC ${ftpsrv_SOURCE_DIR}/src/platform)
 
 if (USE_VFS_GC)
     target_sources(ftpsrv_helper PRIVATE
         ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_gc.c
     )
 endif()
-
-set(FTPSRV_LIB_CUSTOM_DEFINES
-    USE_VFS_SAVE=$<BOOL:TRUE>
-    USE_VFS_STORAGE=$<BOOL:TRUE>
-    USE_VFS_GC=$<BOOL:${USE_VFS_GC}>
-)
-
-target_link_libraries(ftpsrv_helper PUBLIC ftpsrv)
-target_include_directories(ftpsrv_helper PUBLIC ${ftpsrv_SOURCE_DIR}/src/platform)
-
-FetchContent_MakeAvailable(
-    ftpsrv
-    libhaze
-    libpulsar
-    nanovg
-    stb
-    minIni
-    yyjson
-)
 
 # todo: upstream cmake
 add_library(libhaze
