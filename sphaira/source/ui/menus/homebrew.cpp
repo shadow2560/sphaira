@@ -273,7 +273,7 @@ void Menu::SetIndex(std::size_t index) {
 
 void Menu::InstallHomebrew() {
     const auto& nro = m_entries[m_index];
-    InstallHomebrew(nro.path, nro.nacp, nro_get_icon(nro.path, nro.size, nro.icon_offset));
+    InstallHomebrew(nro.path, nro.nacp, nro_get_icon(nro.path, nro.icon_size, nro.icon_offset));
 }
 
 void Menu::ScanHomebrew() {

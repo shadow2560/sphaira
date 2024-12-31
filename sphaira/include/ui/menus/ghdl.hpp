@@ -17,8 +17,10 @@ struct AssetEntry {
 
 struct Entry {
     fs::FsPath json_path;
+    std::string url;
     std::string owner;
     std::string repo;
+    std::string tag;
     std::string pre_install_message;
     std::string post_install_message;
     std::vector<AssetEntry> assets;

@@ -27,7 +27,11 @@ namespace {
 constexpr auto CACHE_PATH = "/switch/sphaira/cache/github";
 
 auto GenerateApiUrl(const Entry& e) {
-    return "https://api.github.com/repos/" + e.owner + "/" + e.repo + "/releases/latest";
+    if (e.tag == "latest") {
+        return "https://api.github.com/repos/" + e.owner + "/" + e.repo + "/releases/latest";
+    } else {
+        return "https://api.github.com/repos/" + e.owner + "/" + e.repo + "/releases/tags/" + e.tag;
+    }
 }
 
 auto apiBuildAssetCache(const std::string& url) -> fs::FsPath {
@@ -48,8 +52,10 @@ void from_json(yyjson_val* json, AssetEntry& e) {
 void from_json(const fs::FsPath& path, Entry& e) {
     JSON_INIT_VEC_FILE(path, nullptr, nullptr);
     JSON_OBJ_ITR(
+        JSON_SET_STR(url);
         JSON_SET_STR(owner);
         JSON_SET_STR(repo);
+        JSON_SET_STR(tag);
         JSON_SET_STR(pre_install_message);
         JSON_SET_STR(post_install_message);
         JSON_SET_ARR_OBJ(assets);
@@ -109,7 +115,7 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
     }
 
     // 3. extract the zip / file
-    if (gh_asset.content_type == "application/zip") {
+    if (gh_asset.content_type.find("zip") != gh_asset.content_type.npos) {
         log_write("found zip\n");
         auto zfile = unzOpen64(temp_file);
         if (!zfile) {
@@ -153,7 +159,11 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
                     return false;
                 }
             } else {
-                Result rc;
+                if (R_FAILED(rc = fs.CreateDirectoryRecursivelyWithPath(file_path, true)) && rc != FsError_PathAlreadyExists) {
+                    log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
+                    return false;
+                }
+
                 if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0, true)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create file: %s 0x%04X\n", file_path, rc);
                     return false;
@@ -335,7 +345,7 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                         if (!pre_install_message.empty()) {
                             App::Push(std::make_shared<OptionBox>(
                                 pre_install_message,
-                                "Back"_i18n, "Donwload"_i18n, 1, [this, func](auto op_index){
+                                "Back"_i18n, "Download"_i18n, 1, [this, func](auto op_index){
                                     if (op_index && *op_index) {
                                         func();
                                     }
@@ -420,7 +430,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             gfx::drawTextArgs(vg, x + text_xoffset, y + (h / 2.f), 20.f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, "%s By %s", e.repo.c_str(), e.owner.c_str());
         nvgRestore(vg);
 
-        gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f), 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, GenerateApiUrl(e).c_str());
+        gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f), 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, "version: %s", e.tag.c_str());
 
         y += h;
         if (!InYBounds(y)) {
@@ -490,13 +500,23 @@ void Menu::LoadEntriesFromPath(const fs::FsPath& path) {
         const auto full_path = fs::AppendPath(path, d->d_name);
         from_json(full_path, entry);
 
+        // parse owner and author from url (if needed).
+        if (!entry.url.empty()) {
+            const auto s = entry.url.substr(std::strlen("https://github.com/"));
+            const auto it = s.find('/');
+            if (it != s.npos) {
+                entry.owner = s.substr(0, it);
+                entry.repo = s.substr(it + 1);
+            }
+        }
+
         // check that we have a owner and repo
         if (entry.owner.empty() || entry.repo.empty()) {
             continue;
         }
 
-        for (auto& p : entry.assets) {
-
+        if (entry.tag.empty()) {
+            entry.tag = "latest";
         }
 
         entry.json_path = full_path;
