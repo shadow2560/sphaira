@@ -359,7 +359,7 @@ struct Controller {
         m_kup = 0;
     }
 
-    void UpdateButtonHeld(HidNpadButton buttons) {
+    void UpdateButtonHeld(u64 buttons) {
         if (m_kdown & buttons) {
             m_step = 50;
             m_counter = 0;
@@ -367,7 +367,7 @@ struct Controller {
             m_counter += m_step;
 
             if (m_counter >= m_MAX) {
-                m_kdown |= buttons;
+                m_kdown |= m_kheld & buttons;
                 m_counter = 0;
                 m_step = std::min(m_step + 50, m_MAX_STEP);
             }

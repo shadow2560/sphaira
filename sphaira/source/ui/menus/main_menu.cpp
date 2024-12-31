@@ -158,12 +158,6 @@ MainMenu::MainMenu() {
                 return false;
             }
 
-            if (result.code == 304) {
-                log_write("data hasn't changed\n");
-            } else {
-                log_write("etag changed\n");
-            }
-
             auto json = yyjson_read_file(CACHE_PATH, YYJSON_READ_NOFLAG, nullptr, nullptr);
             R_UNLESS(json, false);
             ON_SCOPE_EXIT(yyjson_doc_free(json));

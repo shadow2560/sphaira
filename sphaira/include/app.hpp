@@ -57,6 +57,8 @@ public:
     static void SetTheme(u64 theme_index);
     static auto GetThemeIndex() -> u64;
 
+    static auto GetDefaultImage(int* w = nullptr, int* h = nullptr) -> int;
+
     // returns argv[0]
     static auto GetExePath() -> fs::FsPath;
     // returns true if we are hbmenu.
@@ -119,6 +121,7 @@ public:
     u64 m_start_timestamp{};
     u64 m_prev_timestamp{};
     fs::FsPath m_prev_last_launch{};
+    int m_default_image{};
 
     bool m_is_launched_via_sphaira_forwader{};
 

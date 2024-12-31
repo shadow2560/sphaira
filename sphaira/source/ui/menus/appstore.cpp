@@ -290,26 +290,6 @@ void DrawIcon(NVGcontext* vg, const LazyImage& l, const LazyImage& d, Vec4 vec, 
     DrawIcon(vg, l, d, vec.x, vec.y, vec.w, vec.h, rounded, scale);
 }
 
-auto ScrollHelperDown(u64& index, u64& start, u64 step, u64 max, u64 size) -> bool {
-    if (size && index < (size - 1)) {
-        if (index < (size - step)) {
-            index = index + step;
-            App::PlaySoundEffect(SoundEffect_Scroll);
-        } else {
-            index = size - 1;
-            App::PlaySoundEffect(SoundEffect_Scroll);
-        }
-        if (index - start >= max) {
-            log_write("moved down\n");
-            start += step;
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
 auto AppDlToStr(u32 value) -> std::string {
     auto str = std::to_string(value);
     u32 inc = 3;
@@ -826,6 +806,7 @@ void EntryMenu::UpdateOptions() {
             return InstallApp(pbox, m_entry);
         }, [this](bool success){
             if (success) {
+                App::Notify("Downloaded "_i18n + m_entry.title);
                 m_entry.status = EntryStatus::Installed;
                 m_menu.SetDirty();
                 UpdateOptions();
@@ -838,6 +819,7 @@ void EntryMenu::UpdateOptions() {
             return UninstallApp(pbox, m_entry);
         }, [this](bool success){
             if (success) {
+                App::Notify("Removed "_i18n + m_entry.title);
                 m_entry.status = EntryStatus::Get;
                 m_menu.SetDirty();
                 UpdateOptions();
@@ -930,41 +912,23 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
             }
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
-            if (ScrollHelperDown(m_index, m_start, 3, 9, m_entries_current.size())) {
+            if (ScrollHelperDown(m_index, m_start, 3, 3, 9, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (m_entries_current.empty()) {
-                return;
-            }
-
-            if (m_index >= 3) {
-                SetIndex(m_index - 3);
-                App::PlaySoundEffect(SoundEffect_Scroll);
-                if (m_index < m_start ) {
-                    // log_write("moved up\n");
-                    m_start -= 3;
-                }
-            }
-        }}),
-        std::make_pair(Button::R2, Action{(u8)ActionType::HELD, [this](){
-            if (ScrollHelperDown(m_index, m_start, 9, 9, m_entries_current.size())) {
+            if (ScrollHelperUp(m_index, m_start, 3, 3, 9, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
-        std::make_pair(Button::L2, Action{(u8)ActionType::HELD, [this](){
-            if (m_entries.empty()) {
-                return;
+        std::make_pair(Button::R2, Action{[this](){
+            if (ScrollHelperDown(m_index, m_start, 9, 3, 9, m_entries_current.size())) {
+                SetIndex(m_index);
             }
-
-            if (m_index >= 9) {
-                SetIndex(m_index - 9);
-                App::PlaySoundEffect(SoundEffect_Scroll);
-                while (m_index < m_start) {
-                    // log_write("moved up\n");
-                    m_start -= 3;
-                }
+        }}),
+        std::make_pair(Button::L2, Action{[this](){
+            if (ScrollHelperUp(m_index, m_start, 9, 3, 9, m_entries_current.size())) {
+                SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::A, Action{"Info"_i18n, [this](){
@@ -1027,12 +991,6 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
         curl::Flags{curl::Flag_Cache},
         curl::OnComplete{[this](auto& result){
             if (result.success) {
-                if (result.code == 304) {
-                    log_write("appstore json not updated\n");
-                } else {
-                    log_write("appstore json updated\n");
-                }
-
                 m_repo_download_state = ImageDownloadState::Done;
                 if (HasFocus()) {
                     ScanHomebrew();
@@ -1120,7 +1078,6 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                                    image.state = ImageDownloadState::Done;
                                     // data hasn't changed
                                     if (result.code == 304) {
-                                        log_write("downloaded appstore image, was cached\n");
                                         image.cached = false;
                                     }
                                 } else {

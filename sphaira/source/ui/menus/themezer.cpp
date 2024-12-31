@@ -179,26 +179,6 @@ auto loadThemeImage(ThemeEntry& e) -> bool {
     }
 }
 
-auto ScrollHelperDown(u64& index, u64& start, u64 step, u64 max, u64 size) -> bool {
-    if (size && index < (size - 1)) {
-        if (index < (size - step)) {
-            index = index + step;
-            App::PlaySoundEffect(SoundEffect_Scroll);
-        } else {
-            index = size - 1;
-            App::PlaySoundEffect(SoundEffect_Scroll);
-        }
-        if (index - start >= max) {
-            log_write("moved down\n");
-            start += step;
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
 void from_json(yyjson_val* json, Creator& e) {
     JSON_OBJ_ITR(
         JSON_SET_STR(id);
@@ -449,7 +429,25 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
             const auto& page = m_pages[m_page_index];
-            if (ScrollHelperDown(m_index, m_start, 3, 6, page.m_packList.size())) {
+            if (ScrollHelperDown(m_index, m_start, 3, 3, 6, page.m_packList.size())) {
+                SetIndex(m_index);
+            }
+        }}),
+        std::make_pair(Button::UP, Action{[this](){
+            const auto& page = m_pages[m_page_index];
+            if (ScrollHelperUp(m_index, m_start, 3, 3, 6, page.m_packList.size())) {
+                SetIndex(m_index);
+            }
+        }}),
+        std::make_pair(Button::R2, Action{[this](){
+            const auto& page = m_pages[m_page_index];
+            if (ScrollHelperDown(m_index, m_start, 6, 3, 6, page.m_packList.size())) {
+                SetIndex(m_index);
+            }
+        }}),
+        std::make_pair(Button::L2, Action{[this](){
+            const auto& page = m_pages[m_page_index];
+            if (ScrollHelperUp(m_index, m_start, 6, 3, 6, page.m_packList.size())) {
                 SetIndex(m_index);
             }
         }}),
@@ -465,12 +463,10 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
 
                             App::Push(std::make_shared<ProgressBox>("Installing "_i18n + entry.details.name, [this, &entry](auto pbox){
                                 return InstallTheme(pbox, entry);
-                            }, [this](bool success){
-                                // if (success) {
-                                //     m_entry.status = EntryStatus::Installed;
-                                //     m_menu.SetDirty();
-                                //     UpdateOptions();
-                                // }
+                            }, [this, &entry](bool success){
+                                if (success) {
+                                    App::Notify("Downloaded "_i18n + entry.details.name);
+                                }
                             }, 2));
                         }
                     }
@@ -529,16 +525,6 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
                     m_search = out;
                 }
             }));
-        }}),
-        std::make_pair(Button::UP, Action{[this](){
-            if (m_index >= 3) {
-                SetIndex(m_index - 3);
-                App::PlaySoundEffect(SoundEffect_Scroll);
-                if (m_index < m_start ) {
-                    // log_write("moved up\n");
-                    m_start -= 3;
-                }
-            }
         }}),
         std::make_pair(Button::R, Action{"Next Page"_i18n, [this](){
             m_page_index++;
@@ -662,10 +648,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                                         image.state = ImageDownloadState::Done;
                                         // data hasn't changed
                                         if (result.code == 304) {
-                                            log_write("downloaded themezer image, was cached\n");
                                             image.cached = false;
-                                        } else {
-                                            log_write("downloaded new themezer image\n");
                                         }
                                     } else {
                                         image.state = ImageDownloadState::Failed;
@@ -690,9 +673,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                     }
                 }
 
-                if (image.image) {
-                    gfx::drawImageRounded(vg, x + xoff, y, 320, 180, image.image);
-                }
+                gfx::drawImageRounded(vg, x + xoff, y, 320, 180, image.image ? image.image : App::GetDefaultImage());
             }
 
             gfx::drawTextArgs(vg, x + xoff, y + 180 + 20, 18, NVG_ALIGN_LEFT, theme->elements[text_id].colour, "%s", e.details.name.c_str());

@@ -93,48 +93,14 @@ struct Cache {
     }
 
     void get(const fs::FsPath& path, curl::Header& header) {
-        mutexLock(&m_mutex);
-        ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
-
-        if (!fs::FsNativeSd().FileExists(path)) {
-            return;
+        const auto [etag, last_modified] = get_internal(path);
+        if (!etag.empty()) {
+            header.m_map.emplace("if-none-match", etag);
         }
 
-        const auto kkey = generate_key_from_path(path);
-        const auto it = m_cache.find(kkey);
-        if (it != m_cache.end()) {
-            return;
+        if (!last_modified.empty()) {
+            header.m_map.emplace("if-modified-since", last_modified);
         }
-
-        auto hash_key = yyjson_mut_obj_getn(m_root, kkey.c_str(), kkey.length());
-        if (!hash_key) {
-            return;
-        }
-
-        auto etag_key = yyjson_mut_obj_get(hash_key, ETAG_STR);
-        auto last_modified_key = yyjson_mut_obj_get(hash_key, LAST_MODIFIED_STR);
-
-        const auto etag_value = yyjson_mut_get_str(etag_key);
-        const auto etag_value_len = yyjson_mut_get_len(etag_key);
-        const auto last_modified_value = yyjson_mut_get_str(last_modified_key);
-        const auto last_modified_value_len = yyjson_mut_get_len(last_modified_key);
-
-        if ((!etag_value || !etag_value_len) && (!last_modified_value || !last_modified_value_len)) {
-            return;
-        }
-
-        std::string etag;
-        std::string last_modified;
-        if (etag_value && etag_value_len) {
-            etag.assign(etag_value, etag_value_len);
-        }
-        if (last_modified_value && last_modified_value_len) {
-            last_modified.assign(last_modified_value, last_modified_value_len);
-        }
-
-        m_cache.insert_or_assign(it, kkey, Value{etag, last_modified});
-        header.m_map.emplace("if-none-match", etag);
-        header.m_map.emplace("if-modified-since", last_modified);
     }
 
     void set(const fs::FsPath& path, const curl::Header& value) {
@@ -157,6 +123,48 @@ struct Cache {
     }
 
 private:
+    auto get_internal(const fs::FsPath& path) -> Value {
+        if (!fs::FsNativeSd().FileExists(path)) {
+            return {};
+        }
+
+        const auto kkey = generate_key_from_path(path);
+        const auto it = m_cache.find(kkey);
+        if (it != m_cache.end()) {
+            return it->second;
+        }
+
+        auto hash_key = yyjson_mut_obj_getn(m_root, kkey.c_str(), kkey.length());
+        if (!hash_key) {
+            return {};
+        }
+
+        auto etag_key = yyjson_mut_obj_get(hash_key, ETAG_STR);
+        auto last_modified_key = yyjson_mut_obj_get(hash_key, LAST_MODIFIED_STR);
+
+        const auto etag_value = yyjson_mut_get_str(etag_key);
+        const auto etag_value_len = yyjson_mut_get_len(etag_key);
+        const auto last_modified_value = yyjson_mut_get_str(last_modified_key);
+        const auto last_modified_value_len = yyjson_mut_get_len(last_modified_key);
+
+        if ((!etag_value || !etag_value_len) && (!last_modified_value || !last_modified_value_len)) {
+            return {};
+        }
+
+        std::string etag;
+        std::string last_modified;
+        if (etag_value && etag_value_len) {
+            etag.assign(etag_value, etag_value_len);
+        }
+        if (last_modified_value && last_modified_value_len) {
+            last_modified.assign(last_modified_value, last_modified_value_len);
+        }
+
+        const Value ret{etag, last_modified};
+        m_cache.insert_or_assign(it, kkey, ret);
+        return ret;
+    }
+
     void set_internal(const fs::FsPath& path, const Value& value) {
         const auto kkey = generate_key_from_path(path);
 
@@ -536,15 +544,20 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
 
         fsFileClose(&chunk.f);
 
-        if (res == CURLE_OK && http_code != 304) {
-            if (e.m_flags.m_flags & Flag_Cache) {
-                g_cache.set(e.m_path, header_out);
-            }
+        if (res == CURLE_OK) {
+            if (http_code == 304) {
+                log_write("cached download: %s\n", e.m_url.m_str.c_str());
+            } else {
+                log_write("un-cached download: %s code: %u\n", e.m_url.m_str.c_str(), http_code);
+                if (e.m_flags.m_flags & Flag_Cache) {
+                    g_cache.set(e.m_path, header_out);
+                }
 
-            fs.DeleteFile(e.m_path, true);
-            fs.CreateDirectoryRecursivelyWithPath(e.m_path, true);
-            if (R_FAILED(fs.RenameFile(tmp_buf, e.m_path, true))) {
-                success = false;
+                fs.DeleteFile(e.m_path, true);
+                fs.CreateDirectoryRecursivelyWithPath(e.m_path, true);
+                if (R_FAILED(fs.RenameFile(tmp_buf, e.m_path, true))) {
+                    success = false;
+                }
             }
         }
         chunk.data.clear();

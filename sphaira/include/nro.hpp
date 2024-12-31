@@ -19,7 +19,6 @@ struct NroEntry {
     s64 size{};
     NacpStruct nacp{};
 
-    std::vector<u8> icon{};
     u64 icon_size{};
     u64 icon_offset{};
 

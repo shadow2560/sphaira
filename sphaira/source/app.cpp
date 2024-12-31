@@ -389,6 +389,10 @@ auto App::GetThemeIndex() -> u64 {
     return g_app->m_theme_index;
 }
 
+auto App::GetDefaultImage(int* w, int* h) -> int {
+    return g_app->m_default_image;
+}
+
 auto App::GetExePath() -> fs::FsPath {
     return g_app->m_app_path;
 }
@@ -593,24 +597,7 @@ void App::Poll() {
     m_controller.m_kdown = padGetButtonsDown(&m_pad);
     m_controller.m_kheld = padGetButtons(&m_pad);
     m_controller.m_kup = padGetButtonsUp(&m_pad);
-
-    // dpad
-    m_controller.UpdateButtonHeld(HidNpadButton_Left);
-    m_controller.UpdateButtonHeld(HidNpadButton_Right);
-    m_controller.UpdateButtonHeld(HidNpadButton_Down);
-    m_controller.UpdateButtonHeld(HidNpadButton_Up);
-
-    // ls
-    m_controller.UpdateButtonHeld(HidNpadButton_StickLLeft);
-    m_controller.UpdateButtonHeld(HidNpadButton_StickLRight);
-    m_controller.UpdateButtonHeld(HidNpadButton_StickLDown);
-    m_controller.UpdateButtonHeld(HidNpadButton_StickLUp);
-
-    // rs
-    m_controller.UpdateButtonHeld(HidNpadButton_StickRLeft);
-    m_controller.UpdateButtonHeld(HidNpadButton_StickRRight);
-    m_controller.UpdateButtonHeld(HidNpadButton_StickRDown);
-    m_controller.UpdateButtonHeld(HidNpadButton_StickRUp);
+    m_controller.UpdateButtonHeld(static_cast<u64>(Button::ANY_DIRECTION));
 
     HidTouchScreenState touch_state{};
     hidGetTouchScreenStates(&touch_state, 1);
@@ -1107,6 +1094,15 @@ App::App(const char* argv0) {
         log_write("sd_total_space: %zd\n", sd_total_space);
     }
 
+    // load default image
+    if (R_SUCCEEDED(romfsInit())) {
+        ON_SCOPE_EXIT(romfsExit());
+        const auto image = ImageLoadFromFile("romfs:/default.png");
+        if (!image.data.empty()) {
+            m_default_image = nvgCreateImageRGBA(vg, image.w, image.h, 0, image.data.data());
+        }
+    }
+
     App::Push(std::make_shared<ui::menu::main::MainMenu>());
     log_write("finished app constructor\n");
 }
@@ -1133,6 +1129,7 @@ App::~App() {
     // this has to be called before any cleanup to ensure the lifetime of
     // nvg is still active as some widgets may need to free images.
     m_widgets.clear();
+    nvgDeleteImage(vg, m_default_image);
 
     appletUnhook(&m_appletHookCookie);
 

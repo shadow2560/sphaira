@@ -43,27 +43,23 @@ Menu::Menu() : MenuBase{"Homebrew"_i18n} {
             }
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
-            if (m_index < (m_entries.size() - 1)) {
-                if (m_index < (m_entries.size() - 3)) {
-                    SetIndex(m_index + 3);
-                } else {
-                    SetIndex(m_entries.size() - 1);
-                }
-                App::PlaySoundEffect(SoundEffect_Scroll);
-                if (m_index - m_start >= 9) {
-                    log_write("moved down\n");
-                    m_start += 3;
-                }
+            if (ScrollHelperDown(m_index, m_start, 3, 3, 9, m_entries.size())) {
+                SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (m_index >= 3) {
-                SetIndex(m_index - 3);
-                App::PlaySoundEffect(SoundEffect_Scroll);
-                if (m_index < m_start ) {
-                    // log_write("moved up\n");
-                    m_start -= 3;
-                }
+            if (ScrollHelperUp(m_index, m_start, 3, 3, 9, m_entries.size())) {
+                SetIndex(m_index);
+            }
+        }}),
+        std::make_pair(Button::R2, Action{[this](){
+            if (ScrollHelperDown(m_index, m_start, 9, 3, 9, m_entries.size())) {
+                SetIndex(m_index);
+            }
+        }}),
+        std::make_pair(Button::L2, Action{[this](){
+            if (ScrollHelperUp(m_index, m_start, 9, 3, 9, m_entries.size())) {
+                SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::A, Action{"Launch"_i18n, [this](){
@@ -177,15 +173,26 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * 2) - 4, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
     }
 
+    // max images per frame, in order to not hit io / gpu too hard.
+    const int image_load_max = 2;
+    int image_load_count = 0;
+
     for (u64 i = 0, pos = SCROLL, y = 110, w = 370, h = 155; pos < nro_total && i < max_entry_display; y += h + 10) {
         for (u64 j = 0, x = 75; j < 3 && pos < nro_total && i < max_entry_display; j++, i++, pos++, x += w + 10) {
             auto& e = m_entries[pos];
 
             // lazy load image
-            if (!e.image && e.icon.empty() && e.icon_size && e.icon_offset) {
-                e.icon = nro_get_icon(e.path, e.icon_size, e.icon_offset);
-                if (!e.icon.empty()) {
-                    e.image = nvgCreateImageMem(vg, 0, e.icon.data(), e.icon.size());
+            if (image_load_count < image_load_max) {
+                if (!e.image && e.icon_size && e.icon_offset) {
+                    // NOTE: it seems that images can be any size. SuperTux uses a 1024x1024
+                    // ~300Kb image, which takes a few frames to completely load.
+                    // really, switch-tools should handle this by resizing the image before
+                    // adding it to the nro, as well as validate its a valid jpeg.
+                    const auto icon = nro_get_icon(e.path, e.icon_size, e.icon_offset);
+                    if (!icon.empty()) {
+                        e.image = nvgCreateImageMem(vg, 0, icon.data(), icon.size());
+                        image_load_count++;
+                    }
                 }
             }
 
@@ -198,7 +205,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             }
 
             const float image_size = 115;
-            gfx::drawImageRounded(vg, x + 20, y + 20, image_size, image_size, e.image);
+            gfx::drawImageRounded(vg, x + 20, y + 20, image_size, image_size, e.image ? e.image : App::GetDefaultImage());
 
             nvgSave(vg);
             nvgScissor(vg, x, y, w - 30.f, h); // clip
@@ -261,12 +268,12 @@ void Menu::SetIndex(std::size_t index) {
     // log_write("name: %s hbini.ts: %lu file.ts: %lu smaller: %s\n", e.GetName(), e.hbini.timestamp, e.timestamp.modified, e.hbini.timestamp < e.timestamp.modified ? "true" : "false");
 
     SetTitleSubHeading(m_entries[m_index].path);
-    this->SetSubHeading(std::to_string(m_index + 1) + " / " + std::to_string(m_entries.size()));
+    this->SetSubHeading(std::to_string(m_index + 1) + " / " + std::to_string(m_entries.size()) + "    " + std::to_string(m_start));
 }
 
 void Menu::InstallHomebrew() {
     const auto& nro = m_entries[m_index];
-    InstallHomebrew(nro.path, nro.nacp, nro.icon);
+    InstallHomebrew(nro.path, nro.nacp, nro_get_icon(nro.path, nro.size, nro.icon_offset));
 }
 
 void Menu::ScanHomebrew() {

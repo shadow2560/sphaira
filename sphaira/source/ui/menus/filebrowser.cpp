@@ -322,23 +322,23 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
             }
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
-            if (m_index < (m_entries_current.size() - 1)) {
-                SetIndex(m_index + 1);
-                App::PlaySoundEffect(SoundEffect_Scroll);
-                if (m_index - m_index_offset >= 8) {
-                    log_write("moved down\n");
-                    m_index_offset++;
-                }
+            if (ScrollHelperDown(m_index, m_index_offset, 1, 1, 8, m_entries_current.size())) {
+                SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (m_index != 0) {
-                SetIndex(m_index - 1);
-                App::PlaySoundEffect(SoundEffect_Scroll);
-                if (m_index < m_index_offset ) {
-                    log_write("moved up\n");
-                    m_index_offset--;
-                }
+            if (ScrollHelperUp(m_index, m_index_offset, 1, 1, 8, m_entries_current.size())) {
+                SetIndex(m_index);
+            }
+        }}),
+        std::make_pair(Button::DPAD_RIGHT, Action{[this](){
+            if (ScrollHelperDown(m_index, m_index_offset, 8, 1, 8, m_entries_current.size())) {
+                SetIndex(m_index);
+            }
+        }}),
+        std::make_pair(Button::DPAD_LEFT, Action{[this](){
+            if (ScrollHelperUp(m_index, m_index_offset, 8, 1, 8, m_entries_current.size())) {
+                SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::A, Action{"Open"_i18n, [this](){
