@@ -98,16 +98,6 @@ constexpr RomDatabaseEntry PATHS[]{
 
 constexpr fs::FsPath DAYBREAK_PATH{"/switch/daybreak.nro"};
 
-constexpr const char* SORT_STR[] = {
-    "Size",
-    "Alphabetical",
-};
-
-constexpr const char* ORDER_STR[] = {
-    "Desc",
-    "Asc",
-};
-
 auto IsExtension(std::string_view ext, std::span<const std::string_view> list) -> bool {
     for (auto e : list) {
         if (e.length() == ext.length() && !strncasecmp(ext.data(), e.data(), ext.length())) {
@@ -280,7 +270,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 return;
             }
 
-            if (m_is_update_folder && m_daybreak_path.has_value()) {
+            if (m_fs_type == FsType::Sd && m_is_update_folder && m_daybreak_path.has_value()) {
                 App::Push(std::make_shared<OptionBox>("Open with DayBreak?"_i18n, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
                     if (op_index && *op_index) {
                         // daybreak uses native fs so do not use nro_add_arg_file
@@ -295,7 +285,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
             if (entry.type == FsDirEntryType_Dir) {
                 Scan(GetNewPathCurrent());
-            } else {
+            } else if (m_fs_type == FsType::Sd) {
                 // special case for nro
                 if (entry.GetExtension() == "nro") {
                     App::Push(std::make_shared<OptionBox>("Launch "_i18n + entry.GetName() + '?',
@@ -365,12 +355,12 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 order_items.push_back("Decending"_i18n);
                 order_items.push_back("Ascending"_i18n);
 
-                options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](std::size_t& index_out){
                     m_sort.Set(index_out);
                     SortAndFindLastFile();
                 }, m_sort.Get()));
 
-                options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](std::size_t& index_out){
                     m_order.Set(index_out);
                     SortAndFindLastFile();
                 }, m_order.Get()));
@@ -418,12 +408,13 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     App::Push(std::make_shared<OptionBox>(
                         "Delete Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
                             if (op_index && *op_index) {
+                                App::PopToMenu();
                                 OnDeleteCallback();
                             }
                         }
                     ));
                     log_write("pushed delete\n");
-                }, true));
+                }));
             }
 
             if (!m_selected_files.empty() && (m_selected_type == SelectedType::Cut || m_selected_type == SelectedType::Copy)) {
@@ -432,10 +423,11 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     App::Push(std::make_shared<OptionBox>(
                         buf, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
                         if (op_index && *op_index) {
+                            App::PopToMenu();
                             OnPasteCallback();
                         }
                     }));
-                }, true));
+                }));
             }
 
             // can't rename more than 1 file
@@ -445,6 +437,8 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     const auto& entry = GetEntry();
                     const auto name = entry.GetName();
                     if (R_SUCCEEDED(swkbd::ShowText(out, "Set New File Name"_i18n.c_str(), name.c_str())) && !out.empty() && out != name) {
+                        App::PopToMenu();
+
                         const auto src_path = GetNewPath(entry);
                         const auto dst_path = GetNewPath(m_path, out);
 
@@ -463,7 +457,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             App::Push(std::make_shared<ErrorBox>(rc, msg));
                         }
                     }
-                }, true));
+                }));
             }
 
             options->Add(std::make_shared<SidebarEntryCallback>("Advanced"_i18n, [this](){
@@ -473,6 +467,8 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 options->Add(std::make_shared<SidebarEntryCallback>("Create File"_i18n, [this](){
                     std::string out;
                     if (R_SUCCEEDED(swkbd::ShowText(out, "Set File Name"_i18n.c_str())) && !out.empty()) {
+                        App::PopToMenu();
+
                         fs::FsPath full_path;
                         if (out[0] == '/') {
                             full_path = out;
@@ -488,11 +484,13 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             log_write("failed to create file: %s\n", full_path);
                         }
                     }
-                }, true));
+                }));
 
                 options->Add(std::make_shared<SidebarEntryCallback>("Create Folder"_i18n, [this](){
                     std::string out;
                     if (R_SUCCEEDED(swkbd::ShowText(out, "Set Folder Name"_i18n.c_str())) && !out.empty()) {
+                        App::PopToMenu();
+
                         fs::FsPath full_path;
                         if (out[0] == '/') {
                             full_path = out;
@@ -507,15 +505,15 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             log_write("failed to create dir: %s\n", full_path);
                         }
                     }
-                }, true));
+                }));
 
-                if (m_entries_current.size() && !m_selected_count && GetEntry().IsFile() && GetEntry().file_size < 1024*64) {
+                if (m_fs_type == FsType::Sd && m_entries_current.size() && !m_selected_count && GetEntry().IsFile() && GetEntry().file_size < 1024*64) {
                     options->Add(std::make_shared<SidebarEntryCallback>("View as text (unfinished)"_i18n, [this](){
                         App::Push(std::make_shared<fileview::Menu>(GetNewPathCurrent()));
-                    }, true));
+                    }));
                 }
 
-                if (m_entries_current.size()) {
+                if (m_fs_type == FsType::Sd && m_entries_current.size()) {
                     if (App::GetInstallEnable() && HasTypeInSelectedEntries(FsDirEntryType_File) && !m_selected_count && (GetEntry().GetExtension() == "nro" || !FindFileAssocFor().empty())) {
                         options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
                             if (App::GetInstallPrompt()) {
@@ -538,14 +536,24 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     m_ignore_read_only.Set(v_out);
                     m_fs->SetIgnoreReadOnly(v_out);
                 }, "Yes"_i18n, "No"_i18n));
+
+                SidebarEntryArray::Items mount_items;
+                mount_items.push_back("Sd"_i18n);
+                mount_items.push_back("Image System memory"_i18n);
+                mount_items.push_back("Image microSD card"_i18n);
+
+                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this](std::size_t& index_out){
+                    App::PopToMenu();
+                    m_mount.Set(index_out);
+                    SetFs("/", index_out);
+                }, m_mount.Get()));
             }));
         }})
     );
 
-    m_fs = std::make_unique<fs::FsNativeSd>(m_ignore_read_only.Get());
     fs::FsPath buf;
     ini_gets("paths", "last_path", "/", buf, sizeof(buf), App::CONFIG_PATH);
-    m_path = buf;
+    SetFs(buf, m_mount.Get());
 }
 
 Menu::~Menu() {
@@ -1353,6 +1361,8 @@ void Menu::OnRenameCallback() {
 }
 
 auto Menu::CheckIfUpdateFolder() -> Result {
+    R_UNLESS(m_fs_type == FsType::Sd, FsError_InvalidMountName);
+
     // check if we have already tried to find daybreak
     if (m_daybreak_path.has_value() && m_daybreak_path.value().empty()) {
         return FsError_FileNotFound;
@@ -1444,6 +1454,51 @@ auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name
     }
 
     R_SUCCEED();
+}
+
+void Menu::SetFs(const fs::FsPath& new_path, u32 _new_type) {
+    const auto new_type = static_cast<FsType>(_new_type);
+    if (m_fs && new_type == m_fs_type) {
+        return;
+    }
+
+    // m_fs.reset();
+    m_path = new_path;
+    m_entries.clear();
+    m_entries_index.clear();
+    m_entries_index_hidden.clear();
+    m_entries_index_search.clear();
+    m_entries_current = {};
+    m_previous_highlighted_file.clear();
+    m_selected_path.clear();
+    m_selected_count = 0;
+    m_selected_type = SelectedType::None;
+
+    switch (new_type) {
+        default: case FsType::Sd:
+            m_fs = std::make_unique<fs::FsNativeSd>(m_ignore_read_only.Get());
+            m_fs_type = FsType::Sd;
+            log_write("doing fs: %u\n", _new_type);
+            break;
+        case FsType::ImageNand:
+            m_fs = std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Nand);
+            m_fs_type = FsType::ImageNand;
+            log_write("doing image nand\n");
+            break;
+        case FsType::ImageSd:
+            m_fs = std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Sd);
+            m_fs_type = FsType::ImageSd;
+            log_write("doing image sd\n");
+            break;
+    }
+
+    if (HasFocus()) {
+        if (m_path.empty()) {
+            Scan("/");
+        } else {
+            Scan(m_path);
+        }
+    }
 }
 
 } // namespace sphaira::ui::menu::filebrowser

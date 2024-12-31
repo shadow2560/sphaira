@@ -106,7 +106,11 @@ void MenuBase::UpdateVars() {
 auto MenuBase::ScrollHelperDown(u64& index, u64& start, u64 step, s64 row, s64 page, u64 size) -> bool {
     const auto old_index = index;
 
-    if (index < (size - step)) {
+    if (!size) {
+        return false;
+    }
+
+    if (index + step < size) {
         index += step;
     } else {
         index = size - 1;
@@ -131,6 +135,10 @@ auto MenuBase::ScrollHelperDown(u64& index, u64& start, u64 step, s64 row, s64 p
 
 auto MenuBase::ScrollHelperUp(u64& index, u64& start, s64 step, s64 row, s64 page, s64 size) -> bool {
     const auto old_index = index;
+
+    if (!size) {
+        return false;
+    }
 
     if (index >= step) {
         index -= step;

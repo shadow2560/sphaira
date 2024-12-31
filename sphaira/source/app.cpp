@@ -339,6 +339,16 @@ auto App::Push(std::shared_ptr<ui::Widget> widget) -> void {
     log_write("did it\n");
 }
 
+auto App::PopToMenu() -> void {
+    for (auto it = g_app->m_widgets.rbegin(); it != g_app->m_widgets.rend(); it++) {
+        const auto& p = *it;
+        if (p->IsMenu()) {
+            break;
+        }
+        p->SetPop();
+    }
+}
+
 void App::Notify(std::string text, ui::NotifEntry::Side side) {
     g_app->m_notif_manager.Push({text, side});
 }

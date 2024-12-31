@@ -9,6 +9,12 @@
 
 namespace sphaira::ui::menu::filebrowser {
 
+enum class FsType {
+    Sd,
+    ImageNand,
+    ImageSd,
+};
+
 enum class SelectedType {
     None,
     Copy,
@@ -218,11 +224,14 @@ private:
     auto get_collection(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollection& out, bool inc_file, bool inc_dir, bool inc_size) -> Result;
     auto get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out) -> Result;
 
+    void SetFs(const fs::FsPath& new_path, u32 new_type);
+
 private:
     static constexpr inline const char* INI_SECTION = "filebrowser";
 
     const std::vector<NroEntry>& m_nro_entries;
     std::unique_ptr<fs::FsNative> m_fs;
+    FsType m_fs_type;
     fs::FsPath m_path;
     std::vector<FileEntry> m_entries;
     std::vector<u32> m_entries_index; // files not including hidden
@@ -257,6 +266,7 @@ private:
     option::OptionBool m_folders_first{INI_SECTION, "folders_first", true};
     option::OptionBool m_hidden_last{INI_SECTION, "hidden_last", false};
     option::OptionBool m_ignore_read_only{INI_SECTION, "ignore_read_only", false};
+    option::OptionLong m_mount{INI_SECTION, "mount", 0};
 
     bool m_loaded_assoc_entries{};
     bool m_is_update_folder{};

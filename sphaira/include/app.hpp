@@ -45,6 +45,8 @@ public:
     static void ExitRestart();
     static auto GetVg() -> NVGcontext*;
     static void Push(std::shared_ptr<ui::Widget>);
+    // pops all widgets above a menu
+    static void PopToMenu();
 
     // this is thread safe
     static void Notify(std::string text, ui::NotifEntry::Side side = ui::NotifEntry::Side::RIGHT);
