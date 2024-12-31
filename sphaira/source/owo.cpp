@@ -191,6 +191,20 @@ struct NpdmMeta {
     u32 acid_size;
 };
 
+struct NpdmAci0 {
+    u32 magic; // "ACI0"
+    u8 _0x4[0xC];
+    u32 program_id;
+    u8 _0x18[0x8];
+    u32 fac_offset;
+    u32 fac_size;
+    u32 sac_offset;
+    u32 sac_size;
+    u32 kac_offset;
+    u32 kac_size;
+    u8 _0x38[0x8];
+};
+
 struct NpdmPatch {
     char title_name[0x10]{"Application"};
     char product_code[0x10]{};
@@ -581,7 +595,9 @@ auto romfs_build(const FileEntries& entries, u64 *out_size) -> std::vector<u8> {
 // todo: manually build npdm
 void patch_npdm(std::vector<u8>& npdm, const NpdmPatch& patch) {
     NpdmMeta meta{};
+    NpdmAci0 aci0{};
     std::memcpy(&meta, npdm.data(), sizeof(meta));
+    std::memcpy(&aci0, npdm.data() + meta.aci0_offset, sizeof(aci0));
 
     // apply patch
     std::memcpy(npdm.data() + 0x20, &patch.title_name, sizeof(patch.title_name));
@@ -589,6 +605,33 @@ void patch_npdm(std::vector<u8>& npdm, const NpdmPatch& patch) {
     std::memcpy(npdm.data() + meta.aci0_offset + 0x10, &patch.tid, sizeof(patch.tid));
     std::memcpy(npdm.data() + meta.acid_offset + 0x210, &patch.tid, sizeof(patch.tid));
     std::memcpy(npdm.data() + meta.acid_offset + 0x218, &patch.tid, sizeof(patch.tid));
+
+    // patch debug flags based on ams version
+    // SEE: https://github.com/ITotalJustice/sphaira/issues/67
+    // disabled as it doesn't seem to launch with ForceDebug set.
+    // todo: look into ams and figure out why.
+    #if 0
+    u64 ver{};
+    splInitialize();
+    ON_SCOPE_EXIT(splExit());
+    const auto SplConfigItem_ExosphereVersion = (SplConfigItem)65000;
+    splGetConfig(SplConfigItem_ExosphereVersion, &ver);
+    ver >>= 40;
+
+    const auto kac_offset = meta.aci0_offset + sizeof(aci0) + aci0.kac_offset;
+
+    for (u32 i = 0; i < aci0.kac_size; i += 4) {
+        u32 cup;
+        std::memcpy(&cup, npdm.data() + kac_offset + i, sizeof(cup));
+        if ((cup & 0x1FFFF) == 0xFFFF) {
+            if (ver >= MAKEHOSVERSION(1,7,1) && hosversionAtLeast(1, 9, 0)) {
+                cup = BIT(19) | 0xFFFF; // ForceDebug
+            }
+            std::memcpy(npdm.data() + kac_offset + i, &cup, sizeof(cup));
+            break;
+        }
+    }
+    #endif
 }
 
 void patch_nacp(NacpStruct& nacp, const NcapPatch& patch) {
