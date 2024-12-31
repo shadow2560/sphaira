@@ -256,10 +256,7 @@ private:
     option::OptionBool m_show_hidden{INI_SECTION, "show_hidden", false};
     option::OptionBool m_folders_first{INI_SECTION, "folders_first", true};
     option::OptionBool m_hidden_last{INI_SECTION, "hidden_last", false};
-
-    option::OptionBool m_search_show_files{INI_SECTION, "search_show_files", true};
-    option::OptionBool m_search_show_folders{INI_SECTION, "search_show_folders", true};
-    option::OptionBool m_search_recursive{INI_SECTION, "search_recursive", false};
+    option::OptionBool m_ignore_read_only{INI_SECTION, "ignore_read_only", false};
 
     bool m_loaded_assoc_entries{};
     bool m_is_update_folder{};

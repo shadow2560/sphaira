@@ -533,11 +533,16 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                         }));
                     }
                 }
+
+                options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_ignore_read_only.Get(), [this](bool& v_out){
+                    m_ignore_read_only.Set(v_out);
+                    m_fs->SetIgnoreReadOnly(v_out);
+                }, "Yes"_i18n, "No"_i18n));
             }));
         }})
     );
 
-    m_fs = std::make_unique<fs::FsNativeSd>();
+    m_fs = std::make_unique<fs::FsNativeSd>(m_ignore_read_only.Get());
     fs::FsPath buf;
     ini_gets("paths", "last_path", "/", buf, sizeof(buf), App::CONFIG_PATH);
     m_path = buf;

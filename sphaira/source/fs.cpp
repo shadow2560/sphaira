@@ -248,10 +248,10 @@ Result read_entire_file(FsFileSystem* _fs, const FsPath& path, std::vector<u8>& 
 Result write_entire_file(FsFileSystem* _fs, const FsPath& path, const std::vector<u8>& in, bool ignore_read_only) {
     R_UNLESS(ignore_read_only || !is_read_only(path), Fs::ResultReadOnly);
 
-    FsNative fs{_fs, false};
+    FsNative fs{_fs, false, ignore_read_only};
     R_TRY(fs.GetFsOpenResult());
 
-    if (auto rc = fs.CreateFile(path, in.size(), 0, ignore_read_only); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
+    if (auto rc = fs.CreateFile(path, in.size(), 0); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
         return rc;
     }
 

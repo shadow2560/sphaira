@@ -154,17 +154,17 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
 
             Result rc;
             if (file_path[strlen(file_path) -1] == '/') {
-                if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path, true)) && rc != FsError_PathAlreadyExists) {
+                if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
                     return false;
                 }
             } else {
-                if (R_FAILED(rc = fs.CreateDirectoryRecursivelyWithPath(file_path, true)) && rc != FsError_PathAlreadyExists) {
+                if (R_FAILED(rc = fs.CreateDirectoryRecursivelyWithPath(file_path)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
                     return false;
                 }
 
-                if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0, true)) && rc != FsError_PathAlreadyExists) {
+                if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create file: %s 0x%04X\n", file_path, rc);
                     return false;
                 }
@@ -201,9 +201,9 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
             }
         }
     } else {
-        fs.CreateDirectoryRecursivelyWithPath(root_path, true);
+        fs.CreateDirectoryRecursivelyWithPath(root_path);
         fs.DeleteFile(root_path);
-        if (R_FAILED(fs.RenameFile(temp_file, root_path, true))) {
+        if (R_FAILED(fs.RenameFile(temp_file, root_path))) {
             log_write("failed to rename file: %s -> %s\n", temp_file.s, root_path.s);
         }
     }

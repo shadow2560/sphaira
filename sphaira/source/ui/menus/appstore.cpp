@@ -522,10 +522,10 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
             }
 
             // create directories
-            fs.CreateDirectoryRecursivelyWithPath(output, true);
+            fs.CreateDirectoryRecursivelyWithPath(output);
 
             Result rc;
-            if (R_FAILED(rc = fs.CreateFile(output, info.uncompressed_size, 0, true)) && rc != FsError_PathAlreadyExists) {
+            if (R_FAILED(rc = fs.CreateFile(output, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                 log_write("failed to create file: %s 0x%04X\n", output, rc);
                 return false;
             }
@@ -614,7 +614,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
             if (!found) {
                 const auto safe_buf = fs::AppendPath("/", old_entry.path);
                 // std::strcat(safe_buf, old_entry.path);
-                if (R_FAILED(fs.DeleteFile(safe_buf, true))) {
+                if (R_FAILED(fs.DeleteFile(safe_buf))) {
                     log_write("failed to delete: %s\n", safe_buf);
                 } else {
                     log_write("deleted file: %s\n", safe_buf);

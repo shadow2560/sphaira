@@ -454,9 +454,9 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
 
     if (has_file) {
         GetDownloadTempPath(tmp_buf);
-        fs.CreateDirectoryRecursivelyWithPath(tmp_buf, true);
+        fs.CreateDirectoryRecursivelyWithPath(tmp_buf);
 
-        if (auto rc = fs.CreateFile(tmp_buf, 0, 0, true); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
+        if (auto rc = fs.CreateFile(tmp_buf, 0, 0); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
             log_write("failed to create file: %s\n", tmp_buf);
             return {};
         }
@@ -537,7 +537,7 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     if (has_file) {
-        ON_SCOPE_EXIT( fs.DeleteFile(tmp_buf, true) );
+        ON_SCOPE_EXIT( fs.DeleteFile(tmp_buf) );
         if (res == CURLE_OK && chunk.offset) {
             fsFileWrite(&chunk.f, chunk.file_offset, chunk.data.data(), chunk.offset, FsWriteOption_None);
         }
@@ -553,9 +553,9 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
                     g_cache.set(e.m_path, header_out);
                 }
 
-                fs.DeleteFile(e.m_path, true);
-                fs.CreateDirectoryRecursivelyWithPath(e.m_path, true);
-                if (R_FAILED(fs.RenameFile(tmp_buf, e.m_path, true))) {
+                fs.DeleteFile(e.m_path);
+                fs.CreateDirectoryRecursivelyWithPath(e.m_path);
+                if (R_FAILED(fs.RenameFile(tmp_buf, e.m_path))) {
                     success = false;
                 }
             }
