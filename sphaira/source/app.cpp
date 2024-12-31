@@ -1,5 +1,6 @@
 #include "ui/menus/main_menu.hpp"
 #include "ui/error_box.hpp"
+#include "ui/option_box.hpp"
 
 #include "app.hpp"
 #include "log.hpp"
@@ -468,7 +469,104 @@ void App::SetLogEnable(bool enable) {
 }
 
 void App::SetReplaceHbmenuEnable(bool enable) {
-    g_app->m_replace_hbmenu.Set(enable);
+    if (App::GetReplaceHbmenuEnable() != enable) {
+        g_app->m_replace_hbmenu.Set(enable);
+        if (!enable) {
+            // check we have already replaced hbmenu with sphaira
+            NacpStruct hbmenu_nacp;
+            if (R_FAILED(nro_get_nacp("/hbmenu.nro", hbmenu_nacp))) {
+                return;
+            }
+
+            if (std::strcmp(hbmenu_nacp.lang[0].name, "sphaira")) {
+                return;
+            }
+
+            // ask user if they want to restore hbmenu
+            App::Push(std::make_shared<ui::OptionBox>(
+                "Restore hbmenu?"_i18n,
+                "Back"_i18n, "Restore"_i18n, 1, [hbmenu_nacp](auto op_index){
+                    if (!op_index || *op_index == 0) {
+                        return;
+                    }
+
+                    NacpStruct actual_hbmenu_nacp;
+                    if (R_FAILED(nro_get_nacp("/switch/hbmenu.nro", actual_hbmenu_nacp))) {
+                        App::Push(std::make_shared<ui::OptionBox>(
+                            "Failed to find /switch/hbmenu.nro\n\
+                            Use the Appstore to re-install hbmenu"_i18n,
+                            "OK"_i18n
+                        ));
+                        return;
+                    }
+
+                    // NOTE: do NOT use rename anywhere here as it's possible
+                    // to have a race condition with another app that opens hbmenu as a file
+                    // in between the delete + rename.
+                    // this would require a sys-module to open hbmenu.nro, such as an ftp server.
+                    // a copy means that it opens the file handle, if successfull, then
+                    // the full read/write will succeed.
+                    fs::FsNativeSd fs;
+                    NacpStruct sphaira_nacp;
+                    fs::FsPath sphaira_path = "/switch/sphaira/sphaira.nro";
+                    Result rc;
+
+                    // first, try and backup sphaira, its not super important if this fails.
+                    rc = nro_get_nacp(sphaira_path, sphaira_nacp);
+                    if (R_FAILED(rc) || std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
+                        sphaira_path = "/switch/sphaira.nro";
+                        rc = nro_get_nacp(sphaira_path, sphaira_nacp);
+                    }
+
+                    if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
+                        if (std::strcmp(sphaira_nacp.display_version, hbmenu_nacp.display_version) < 0) {
+                            if (R_FAILED(rc = fs.copy_entire_file(sphaira_path, "/hbmenu.nro", true))) {
+                                log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path, rc, R_MODULE(rc), R_DESCRIPTION(rc));
+                            } else {
+                                log_write("success with updating hbmenu!\n");
+                            }
+                        }
+                    } else {
+                        // sphaira doesn't yet exist, create a new file.
+                        sphaira_path = "/switch/sphaira/sphaira.nro";
+                        fs.CreateDirectoryRecursively("/switch/sphaira/");
+                        fs.copy_entire_file(sphaira_path, "/hbmenu.nro", true);
+                    }
+
+                    // this should never fail, if it does, well then the sd card is fucked.
+                    if (R_FAILED(rc = fs.copy_entire_file("/hbmenu.nro", "/switch/hbmenu.nro", true)))  {
+                        // try and restore sphaira in a last ditch effort.
+                        if (R_FAILED(rc = fs.copy_entire_file("/hbmenu.nro", sphaira_path, true))) {
+                            App::Push(std::make_shared<ui::ErrorBox>(rc,
+                                "Failed to restore hbmenu, please re-download hbmenu"_i18n
+                            ));
+                        } else {
+                            App::Push(std::make_shared<ui::OptionBox>(
+                                "Failed to restore hbmenu, using sphaira instead"_i18n,
+                                "OK"_i18n
+                            ));
+                        }
+                        return;
+                    }
+
+                    // don't need this any more.
+                    fs.DeleteFile("/switch/hbmenu.nro", true);
+
+                    // if we were hbmenu, exit now (as romfs is gone).
+                    if (IsHbmenu()) {
+                        App::Push(std::make_shared<ui::OptionBox>(
+                            "Restored hbmenu, closing sphaira"_i18n,
+                            "OK"_i18n, [](auto) {
+                                App::Exit();
+                            }
+                        ));
+                    } else {
+                        App::Notify("Restored hbmenu"_i18n);
+                    }
+                }
+            ));
+        }
+    }
 }
 
 void App::SetInstallEnable(bool enable) {
@@ -1156,18 +1254,19 @@ App::~App() {
 
     // backup hbmenu if it is not sphaira
     if (App::GetReplaceHbmenuEnable() && !IsHbmenu()) {
-        NacpStruct nacp;
+        NacpStruct hbmenu_nacp;
         fs::FsNativeSd fs;
-        if (R_SUCCEEDED(nro_get_nacp("/hbmenu.nro", nacp)) && std::strcmp(nacp.lang[0].name, "sphaira")) {
+        Result rc;
+
+        if (R_SUCCEEDED(rc = nro_get_nacp("/hbmenu.nro", hbmenu_nacp)) && std::strcmp(hbmenu_nacp.lang[0].name, "sphaira")) {
             log_write("backing up hbmenu.nro\n");
-            if (R_FAILED(fs.copy_entire_file("/switch/hbmenu.nro", "/hbmenu.nro", true))) {
+            if (R_FAILED(rc = fs.copy_entire_file("/switch/hbmenu.nro", "/hbmenu.nro", true))) {
                 log_write("failed to backup  hbmenu.nro\n");
             }
         } else {
             log_write("not backing up\n");
         }
 
-        Result rc;
         if (R_FAILED(rc = fs.copy_entire_file("/hbmenu.nro", GetExePath(), true))) {
             log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", GetExePath(), rc, R_MODULE(rc), R_DESCRIPTION(rc));
         } else {
@@ -1175,26 +1274,33 @@ App::~App() {
         }
     } else if (IsHbmenu()) {
         // check we have a version that's newer than current.
+        NacpStruct hbmenu_nacp;
         fs::FsNativeSd fs;
-        NacpStruct sphaira_nacp;
-        fs::FsPath sphaira_path = "/switch/sphaira/sphaira.nro";
         Result rc;
 
-        rc = nro_get_nacp(sphaira_path, sphaira_nacp);
-        if (R_FAILED(rc) || std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
-            sphaira_path = "/switch/sphaira.nro";
-            rc = nro_get_nacp(sphaira_path, sphaira_nacp);
-        }
+        // ensure that are still sphaira
+        if (R_SUCCEEDED(rc = nro_get_nacp("/hbmenu.nro", hbmenu_nacp)) && !std::strcmp(hbmenu_nacp.lang[0].name, "sphaira")) {
+            NacpStruct sphaira_nacp;
+            fs::FsPath sphaira_path = "/switch/sphaira/sphaira.nro";
 
-        // found sphaira, now lets get compare version
-        if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
-            if (std::strcmp(APP_VERSION, sphaira_nacp.display_version) < 0) {
-                if (R_FAILED(rc = fs.copy_entire_file(GetExePath(), sphaira_path, true))) {
-                    log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path, rc, R_MODULE(rc), R_DESCRIPTION(rc));
-                } else {
-                    log_write("success with updating hbmenu!\n");
+            rc = nro_get_nacp(sphaira_path, sphaira_nacp);
+            if (R_FAILED(rc) || std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
+                sphaira_path = "/switch/sphaira.nro";
+                rc = nro_get_nacp(sphaira_path, sphaira_nacp);
+            }
+
+            // found sphaira, now lets get compare version
+            if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
+                if (std::strcmp(hbmenu_nacp.display_version, sphaira_nacp.display_version) < 0) {
+                    if (R_FAILED(rc = fs.copy_entire_file(GetExePath(), sphaira_path, true))) {
+                        log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path, rc, R_MODULE(rc), R_DESCRIPTION(rc));
+                    } else {
+                        log_write("success with updating hbmenu!\n");
+                    }
                 }
             }
+        } else {
+            log_write("no longer hbmenu!\n");
         }
     }
 

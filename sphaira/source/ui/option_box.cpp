@@ -118,6 +118,16 @@ auto OptionBox::Draw(NVGcontext* vg, Theme* theme) -> void {
     }
 }
 
+auto OptionBox::OnFocusGained() noexcept -> void {
+    Widget::OnFocusGained();
+    SetHidden(false);
+}
+
+auto OptionBox::OnFocusLost() noexcept -> void {
+    Widget::OnFocusLost();
+    SetHidden(true);
+}
+
 auto OptionBox::Setup(std::size_t index) -> void {
     m_index = std::min(m_entries.size() - 1, index);
     m_entries[m_index].Selected(true);
