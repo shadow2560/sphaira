@@ -178,6 +178,7 @@ set(FTPSRV_LIB_CUSTOM_DEFINES
     USE_VFS_SAVE=$<BOOL:TRUE>
     USE_VFS_STORAGE=$<BOOL:TRUE>
     USE_VFS_GC=$<BOOL:${USE_VFS_GC}>
+    VFS_NX_BUFFER_IO=$<BOOL:TRUE>
 )
 
 add_subdirectory(${ftpsrv_SOURCE_DIR} binary_dir)
