@@ -83,12 +83,22 @@ struct FileAssocEntry {
     std::vector<std::string> ext; // list of ext
     std::vector<std::string> database; // list of systems
 };
+
 struct LastFile {
     fs::FsPath name;
     u64 index;
     u64 offset;
     u64 entries_count;
 };
+
+struct FsDirCollection {
+    fs::FsPath path;
+    fs::FsPath parent_name;
+    std::vector<FsDirectoryEntry> files;
+    std::vector<FsDirectoryEntry> dirs;
+};
+
+using FsDirCollections = std::vector<FsDirCollection>;
 
 struct Menu final : MenuBase {
     Menu(const std::vector<NroEntry>& nro_entries);
@@ -205,10 +215,14 @@ private:
     void OnRenameCallback();
     auto CheckIfUpdateFolder() -> Result;
 
+    auto get_collection(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollection& out, bool inc_file, bool inc_dir, bool inc_size) -> Result;
+    auto get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out) -> Result;
+
 private:
     static constexpr inline const char* INI_SECTION = "filebrowser";
 
     const std::vector<NroEntry>& m_nro_entries;
+    std::unique_ptr<fs::FsNative> m_fs;
     fs::FsPath m_path;
     std::vector<FileEntry> m_entries;
     std::vector<u32> m_entries_index; // files not including hidden

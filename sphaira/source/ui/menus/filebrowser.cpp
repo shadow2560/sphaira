@@ -36,19 +36,10 @@
 namespace sphaira::ui::menu::filebrowser {
 namespace {
 
-struct FsDirCollection {
-    fs::FsPath path;
-    fs::FsPath parent_name;
-    std::vector<FsDirectoryEntry> files;
-    std::vector<FsDirectoryEntry> dirs;
-};
-
 struct ExtDbEntry {
     std::string_view db_name;
     std::span<const std::string_view> ext;
 };
-
-using FsDirCollections = std::vector<FsDirCollection>;
 
 constexpr std::string_view AUDIO_EXTENSIONS[] = {
     "mp3", "ogg", "flac", "wav", "aac" "ac3", "aif", "asf", "bfwav",
@@ -173,7 +164,7 @@ auto GetRomDatabaseFromPath(std::string_view path) -> int {
 }
 
 //
-auto GetRomIcon(ProgressBox* pbox, std::string filename, std::string extension, int db_idx, const NroEntry& nro) {
+auto GetRomIcon(fs::FsNative* fs, ProgressBox* pbox, std::string filename, std::string extension, int db_idx, const NroEntry& nro) {
     // if no db entries, use nro icon
     if (db_idx < 0) {
         log_write("using nro image\n");
@@ -225,7 +216,7 @@ auto GetRomIcon(ProgressBox* pbox, std::string filename, std::string extension, 
     if (!pbox->ShouldExit()) {
         pbox->NewTransfer("Trying to load "_i18n + ra_thumbnail_path);
         std::vector<u8> image_file;
-        if (R_SUCCEEDED(fs::FsNativeSd().read_entire_file(ra_thumbnail_path.c_str(), image_file))) {
+        if (R_SUCCEEDED(fs->read_entire_file(ra_thumbnail_path.c_str(), image_file))) {
             return image_file;
         }
     }
@@ -246,63 +237,6 @@ auto GetRomIcon(ProgressBox* pbox, std::string filename, std::string extension, 
     // use nro icon
     log_write("using nro image\n");
     return nro_get_icon(nro.path, nro.icon_size, nro.icon_offset);
-}
-
-auto get_collection(fs::FsNative& fs, const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollection& out, bool inc_file, bool inc_dir, bool inc_size) -> Result {
-    out.path = path;
-    out.parent_name = parent_name;
-
-    const auto fetch = [&path, &fs](std::vector<FsDirectoryEntry>& out, u32 flags) -> Result {
-        FsDir d;
-        R_TRY(fs.OpenDirectory(path, flags, &d));
-        ON_SCOPE_EXIT(fs.DirClose(&d));
-
-        s64 count;
-        R_TRY(fs.DirGetEntryCount(&d, &count));
-
-        out.resize(count);
-        return fs.DirRead(&d, &count, out.size(), out.data());
-    };
-
-    if (inc_file) {
-        u32 flags = FsDirOpenMode_ReadFiles;
-        if (!inc_size) {
-            flags |= FsDirOpenMode_NoFileSize;
-        }
-        R_TRY(fetch(out.files, flags));
-    }
-
-    if (inc_dir) {
-        R_TRY(fetch(out.dirs, FsDirOpenMode_ReadDirs));
-    }
-
-    R_SUCCEED();
-}
-
-auto get_collections(fs::FsNative& fs, const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out) -> Result {
-    // get a list of all the files / dirs
-    FsDirCollection collection;
-    R_TRY(get_collection(fs, path, parent_name, collection, true, true, false));
-    log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path, parent_name, collection.files.size(), collection.dirs.size());
-    out.emplace_back(collection);
-
-    // for (size_t i = 0; i < collection.dirs.size(); i++) {
-    for (const auto&p : collection.dirs) {
-        // use heap as to not explode the stack
-        const auto new_path = std::make_unique<fs::FsPath>(Menu::GetNewPath(path, p.name));
-        const auto new_parent_name = std::make_unique<fs::FsPath>(Menu::GetNewPath(parent_name, p.name));
-        log_write("trying to get nested collection: %s parent_name: %s\n", *new_path, *new_parent_name);
-        R_TRY(get_collections(fs, *new_path, *new_parent_name, out));
-    }
-
-    R_SUCCEED();
-}
-
-auto get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out) -> Result {
-    fs::FsNativeSd fs;
-    R_TRY(fs.GetFsOpenResult());
-
-    return get_collections(fs, path, parent_name, out);
 }
 
 } // namespace
@@ -516,9 +450,9 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
                         Result rc;
                         if (entry.IsFile()) {
-                            rc = fs::FsNativeSd().RenameFile(src_path, dst_path);
+                            rc = m_fs->RenameFile(src_path, dst_path);
                         } else {
-                            rc = fs::FsNativeSd().RenameDirectory(src_path, dst_path);
+                            rc = m_fs->RenameDirectory(src_path, dst_path);
                         }
 
                         if (R_SUCCEEDED(rc)) {
@@ -546,9 +480,8 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             full_path = fs::AppendPath(m_path, out);
                         }
 
-                        fs::FsNativeSd fs;
-                        fs.CreateDirectoryRecursivelyWithPath(full_path);
-                        if (R_SUCCEEDED(fs.CreateFile(full_path, 0, 0))) {
+                        m_fs->CreateDirectoryRecursivelyWithPath(full_path);
+                        if (R_SUCCEEDED(m_fs->CreateFile(full_path, 0, 0))) {
                             log_write("created file: %s\n", full_path);
                             Scan(m_path);
                         } else {
@@ -567,7 +500,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             full_path = fs::AppendPath(m_path, out);
                         }
 
-                        if (R_SUCCEEDED(fs::FsNativeSd().CreateDirectoryRecursively(full_path))) {
+                        if (R_SUCCEEDED(m_fs->CreateDirectoryRecursively(full_path))) {
                             log_write("created dir: %s\n", full_path);
                             Scan(m_path);
                         } else {
@@ -604,6 +537,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
         }})
     );
 
+    m_fs = std::make_unique<fs::FsNativeSd>();
     fs::FsPath buf;
     ini_gets("paths", "last_path", "/", buf, sizeof(buf), App::CONFIG_PATH);
     m_path = buf;
@@ -661,9 +595,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         if (e.IsDir()) {
             if (e.file_count == -1 && e.dir_count == -1) {
                 const auto full_path = GetNewPath(e);
-                fs::FsNativeSd fs;
-                fs.DirGetEntryCount(full_path, FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &e.file_count);
-                fs.DirGetEntryCount(full_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_NoFileSize, &e.dir_count);
+                m_fs->DirGetEntryCount(full_path, FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &e.file_count);
+                m_fs->DirGetEntryCount(full_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_NoFileSize, &e.dir_count);
             }
         } else if (!e.checked_extension) {
             e.checked_extension = true;
@@ -719,12 +652,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->elements[text_id].colour, "%zd dirs"_i18n.c_str(), e.dir_count);
         } else {
             if (!e.time_stamp.is_valid) {
-                fs::FsNativeSd fs;
                 const auto path = GetNewPath(e);
-
-                if (R_SUCCEEDED(fs.GetFsOpenResult())) {
-                    fs.GetFileTimeStampRaw(path, &e.time_stamp);
-                }
+                m_fs->GetFileTimeStampRaw(path, &e.time_stamp);
             }
             const auto t = (time_t)(e.time_stamp.modified);
             struct tm tm{};
@@ -847,7 +776,7 @@ void Menu::InstallForwarder() {
                     config.name = nro.nacp.lang[0].name + std::string{" | "} + file_name;
                     // config.name = file_name;
                     config.nacp = nro.nacp;
-                    config.icon = GetRomIcon(pbox, file_name, extension, db_idx, nro);
+                    config.icon = GetRomIcon(m_fs.get(), pbox, file_name, extension, db_idx, nro);
 
                     return R_SUCCEEDED(App::Install(pbox, config));
                 }));
@@ -877,26 +806,17 @@ auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
         ResetSelection();
     }
 
-    // fs::FsNativeSd fs;
-    // R_TRY(fs.GetFsOpenResult());
-
-    // FsDirCollection collection;
-    // R_TRY(get_collection(fs, new_path, "", collection, true, true, false));
-
-    fs::FsNativeSd fs;
-    R_TRY(fs.GetFsOpenResult());
-
     FsDir d;
-    R_TRY(fsFsOpenDirectory(&fs.m_fs, new_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &d));
+    R_TRY(m_fs->OpenDirectory(new_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &d));
     ON_SCOPE_EXIT(fsDirClose(&d));
 
     s64 count;
-    R_TRY(fs.DirGetEntryCount(&d, &count));
+    R_TRY(m_fs->DirGetEntryCount(&d, &count));
 
     // we won't run out of memory here (tm)
     std::vector<FsDirectoryEntry> dir_entries(count);
 
-    R_TRY(fs.DirRead(&d, &count, dir_entries.size(), dir_entries.data()));
+    R_TRY(m_fs->DirRead(&d, &count, dir_entries.size(), dir_entries.data()));
 
     // size may of changed
     dir_entries.resize(count);
@@ -996,7 +916,6 @@ void Menu::LoadAssocEntriesPath(const fs::FsPath& path) {
         return;
     }
     ON_SCOPE_EXIT(closedir(dir));
-    fs::FsNativeSd fs;
 
     while (auto d = readdir(dir)) {
         if (d->d_name[0] == '.') {
@@ -1052,7 +971,7 @@ void Menu::LoadAssocEntriesPath(const fs::FsPath& path) {
         // if path isn't empty, check if the file exists
         bool file_exists{};
         if (!assoc.path.empty()) {
-            file_exists = fs.FileExists(assoc.path);
+            file_exists = m_fs->FileExists(assoc.path);
         } else {
             const auto nro_name = assoc.name + ".nro";
             for (const auto& nro : m_nro_entries) {
@@ -1207,19 +1126,18 @@ void Menu::OnDeleteCallback() {
 
     // check if we only have 1 file / folder
     if (m_selected_files.size() == 1) {
-        fs::FsNativeSd fs;
         const auto& entry = m_selected_files[0];
         const auto full_path = GetNewPath(m_selected_path, entry.name);
 
         if (entry.IsDir()) {
             s64 count{};
-            fs.DirGetEntryCount(full_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &count);
+            m_fs->DirGetEntryCount(full_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &count);
             if (!count) {
-                fs.DeleteDirectory(full_path);
+                m_fs->DeleteDirectory(full_path);
                 use_progress_box = false;
             }
         } else {
-            fs.DeleteFile(full_path);
+            m_fs->DeleteFile(full_path);
             use_progress_box = false;
         }
     }
@@ -1230,7 +1148,6 @@ void Menu::OnDeleteCallback() {
         log_write("did delete\n");
     } else {
         App::Push(std::make_shared<ProgressBox>("Deleting"_i18n, [this](auto pbox){
-            fs::FsNativeSd fs;
             FsDirCollections collections;
 
             // build list of dirs / files
@@ -1263,10 +1180,10 @@ void Menu::OnDeleteCallback() {
                         pbox->NewTransfer("Deleting "_i18n + full_path);
                         if (p.type == FsDirEntryType_Dir) {
                             log_write("deleting dir: %s\n", full_path);
-                            fs.DeleteDirectory(full_path);
+                            m_fs->DeleteDirectory(full_path);
                         } else {
                             log_write("deleting file: %s\n", full_path);
-                            fs.DeleteFile(full_path);
+                            m_fs->DeleteFile(full_path);
                         }
                     }
                     return true;
@@ -1291,10 +1208,10 @@ void Menu::OnDeleteCallback() {
 
                 if (p.IsDir()) {
                     log_write("deleting dir: %s\n", full_path);
-                    fs.DeleteDirectory(full_path);
+                    m_fs->DeleteDirectory(full_path);
                 } else {
                     log_write("deleting file: %s\n", full_path);
-                    fs.DeleteFile(full_path);
+                    m_fs->DeleteFile(full_path);
                 }
             }
 
@@ -1312,14 +1229,13 @@ void Menu::OnPasteCallback() {
 
     // check if we only have 1 file / folder and is cut (rename)
     if (m_selected_files.size() == 1 && m_selected_type == SelectedType::Cut) {
-        fs::FsNativeSd fs;
         const auto& entry = m_selected_files[0];
         const auto full_path = GetNewPath(m_selected_path, entry.name);
 
         if (entry.IsDir()) {
-            fs.RenameDirectory(full_path, GetNewPath(entry));
+            m_fs->RenameDirectory(full_path, GetNewPath(entry));
         } else {
-            fs.RenameFile(full_path, GetNewPath(entry));
+            m_fs->RenameFile(full_path, GetNewPath(entry));
         }
 
         ResetSelection();
@@ -1327,7 +1243,6 @@ void Menu::OnPasteCallback() {
         log_write("did paste\n");
     } else {
         App::Push(std::make_shared<ProgressBox>("Pasting"_i18n, [this](auto pbox){
-            fs::FsNativeSd fs;
 
             if (m_selected_type == SelectedType::Cut) {
                 for (const auto& p : m_selected_files) {
@@ -1342,9 +1257,9 @@ void Menu::OnPasteCallback() {
                     pbox->NewTransfer("Pasting "_i18n + src_path);
 
                     if (p.IsDir()) {
-                        fs.RenameDirectory(src_path, dst_path);
+                        m_fs->RenameDirectory(src_path, dst_path);
                     } else {
-                        fs.RenameFile(src_path, dst_path);
+                        m_fs->RenameFile(src_path, dst_path);
                     }
                 }
             } else {
@@ -1378,7 +1293,7 @@ void Menu::OnPasteCallback() {
 
                     if (p.IsDir()) {
                         pbox->NewTransfer("Creating "_i18n + dst_path);
-                        fs.CreateDirectory(dst_path);
+                        m_fs->CreateDirectory(dst_path);
                     } else {
                         pbox->NewTransfer("Copying "_i18n + src_path);
                         R_TRY_RESULT(pbox->CopyFile(src_path, dst_path), false);
@@ -1400,7 +1315,7 @@ void Menu::OnPasteCallback() {
 
                         log_write("creating: %s to %s\n", src_path, dst_path);
                         pbox->NewTransfer("Creating "_i18n + dst_path);
-                        fs.CreateDirectory(dst_path);
+                        m_fs->CreateDirectory(dst_path);
                     }
 
                     for (const auto& p : c.files) {
@@ -1438,13 +1353,10 @@ auto Menu::CheckIfUpdateFolder() -> Result {
         return FsError_FileNotFound;
     }
 
-    fs::FsNativeSd fs;
-    R_TRY(fs.GetFsOpenResult());
-
     // check that we have daybreak installed
     if (!m_daybreak_path.has_value()) {
         auto daybreak_path = DAYBREAK_PATH;
-        if (!fs.FileExists(DAYBREAK_PATH)) {
+        if (!m_fs->FileExists(DAYBREAK_PATH)) {
             if (auto e = nro_find(m_nro_entries, "Daybreak", "Atmosphere-NX", {}); e.has_value()) {
                 daybreak_path = e.value().path;
             } else {
@@ -1458,11 +1370,11 @@ auto Menu::CheckIfUpdateFolder() -> Result {
     }
 
     FsDir d;
-    R_TRY(fs.OpenDirectory(m_path, FsDirOpenMode_ReadDirs, &d));
-    ON_SCOPE_EXIT(fs.DirClose(&d));
+    R_TRY(m_fs->OpenDirectory(m_path, FsDirOpenMode_ReadDirs, &d));
+    ON_SCOPE_EXIT(m_fs->DirClose(&d));
 
     s64 count;
-    R_TRY(fs.DirGetEntryCount(&d, &count));
+    R_TRY(m_fs->DirGetEntryCount(&d, &count));
 
     // check that we are at the bottom level
     R_UNLESS(count == 0, 0x1);
@@ -1474,6 +1386,56 @@ auto Menu::CheckIfUpdateFolder() -> Result {
     for (auto& e : m_entries) {
         const auto ext = std::strrchr(e.name, '.');
         R_UNLESS(ext && ext == nca_ext, 0x1);
+    }
+
+    R_SUCCEED();
+}
+
+auto Menu::get_collection(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollection& out, bool inc_file, bool inc_dir, bool inc_size) -> Result {
+    out.path = path;
+    out.parent_name = parent_name;
+
+    const auto fetch = [this, &path](std::vector<FsDirectoryEntry>& out, u32 flags) -> Result {
+        FsDir d;
+        R_TRY(m_fs->OpenDirectory(path, flags, &d));
+        ON_SCOPE_EXIT(m_fs->DirClose(&d));
+
+        s64 count;
+        R_TRY(m_fs->DirGetEntryCount(&d, &count));
+
+        out.resize(count);
+        return m_fs->DirRead(&d, &count, out.size(), out.data());
+    };
+
+    if (inc_file) {
+        u32 flags = FsDirOpenMode_ReadFiles;
+        if (!inc_size) {
+            flags |= FsDirOpenMode_NoFileSize;
+        }
+        R_TRY(fetch(out.files, flags));
+    }
+
+    if (inc_dir) {
+        R_TRY(fetch(out.dirs, FsDirOpenMode_ReadDirs));
+    }
+
+    R_SUCCEED();
+}
+
+auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out) -> Result {
+    // get a list of all the files / dirs
+    FsDirCollection collection;
+    R_TRY(get_collection(path, parent_name, collection, true, true, false));
+    log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path, parent_name, collection.files.size(), collection.dirs.size());
+    out.emplace_back(collection);
+
+    // for (size_t i = 0; i < collection.dirs.size(); i++) {
+    for (const auto&p : collection.dirs) {
+        // use heap as to not explode the stack
+        const auto new_path = std::make_unique<fs::FsPath>(Menu::GetNewPath(path, p.name));
+        const auto new_parent_name = std::make_unique<fs::FsPath>(Menu::GetNewPath(parent_name, p.name));
+        log_write("trying to get nested collection: %s parent_name: %s\n", *new_path, *new_parent_name);
+        R_TRY(get_collections(*new_path, *new_parent_name, out));
     }
 
     R_SUCCEED();
