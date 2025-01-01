@@ -12,6 +12,7 @@
 #include "app.hpp"
 #include "ui/progress_box.hpp"
 #include "i18n.hpp"
+#include "log.hpp"
 
 namespace sphaira {
 namespace {
@@ -191,10 +192,30 @@ struct NpdmMeta {
     u32 acid_size;
 };
 
+struct NpdmAcid {
+    u8 rsa_sig[0x100];
+    u8 rsa_pub[0x100];
+    u32 magic; // "ACID"
+    u32 size;
+    u8 version;
+    u8 _0x209[0x1];
+    u8 _0x20A[0x2];
+    u32 flags;
+    u64 program_id_min;
+    u64 program_id_max;
+    u32 fac_offset;
+    u32 fac_size;
+    u32 sac_offset;
+    u32 sac_size;
+    u32 kac_offset;
+    u32 kac_size;
+    u8 _0x238[0x8];
+};
+
 struct NpdmAci0 {
     u32 magic; // "ACI0"
     u8 _0x4[0xC];
-    u32 program_id;
+    u64 program_id;
     u8 _0x18[0x8];
     u32 fac_offset;
     u32 fac_size;
@@ -592,25 +613,41 @@ auto romfs_build(const FileEntries& entries, u64 *out_size) -> std::vector<u8> {
     return buf.buf;
 }
 
+auto npdm_patch_kc(std::vector<u8>& npdm, u32 off, u32 size, u32 bitmask, u32 value) -> bool {
+    const u32 pattern = BIT(bitmask) - 1;
+    const u32 mask = BIT(bitmask) | pattern;
+
+    for (u32 i = 0; i < size; i += 4) {
+        u32 cup;
+        std::memcpy(&cup, npdm.data() + off + i, sizeof(cup));
+        if ((cup & mask) == pattern) {
+            cup = value | pattern;
+            std::memcpy(npdm.data() + off + i, &cup, sizeof(cup));
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // todo: manually build npdm
 void patch_npdm(std::vector<u8>& npdm, const NpdmPatch& patch) {
     NpdmMeta meta{};
     NpdmAci0 aci0{};
+    NpdmAcid acid{};
     std::memcpy(&meta, npdm.data(), sizeof(meta));
     std::memcpy(&aci0, npdm.data() + meta.aci0_offset, sizeof(aci0));
+    std::memcpy(&acid, npdm.data() + meta.acid_offset, sizeof(acid));
 
     // apply patch
-    std::memcpy(npdm.data() + 0x20, &patch.title_name, sizeof(patch.title_name));
-    std::memcpy(npdm.data() + 0x30, &patch.product_code, sizeof(patch.product_code));
-    std::memcpy(npdm.data() + meta.aci0_offset + 0x10, &patch.tid, sizeof(patch.tid));
-    std::memcpy(npdm.data() + meta.acid_offset + 0x210, &patch.tid, sizeof(patch.tid));
-    std::memcpy(npdm.data() + meta.acid_offset + 0x218, &patch.tid, sizeof(patch.tid));
+    std::memcpy(meta.title_name, &patch.title_name, sizeof(meta.title_name));
+    std::memcpy(meta.product_code, &patch.product_code, sizeof(patch.product_code));
+    aci0.program_id = patch.tid;
+    acid.program_id_min = patch.tid;
+    acid.program_id_max = patch.tid;
 
     // patch debug flags based on ams version
     // SEE: https://github.com/ITotalJustice/sphaira/issues/67
-    // disabled as it doesn't seem to launch with ForceDebug set.
-    // todo: look into ams and figure out why.
-    #if 0
     u64 ver{};
     splInitialize();
     ON_SCOPE_EXIT(splExit());
@@ -618,20 +655,14 @@ void patch_npdm(std::vector<u8>& npdm, const NpdmPatch& patch) {
     splGetConfig(SplConfigItem_ExosphereVersion, &ver);
     ver >>= 40;
 
-    const auto kac_offset = meta.aci0_offset + sizeof(aci0) + aci0.kac_offset;
-
-    for (u32 i = 0; i < aci0.kac_size; i += 4) {
-        u32 cup;
-        std::memcpy(&cup, npdm.data() + kac_offset + i, sizeof(cup));
-        if ((cup & 0x1FFFF) == 0xFFFF) {
-            if (ver >= MAKEHOSVERSION(1,7,1) && hosversionAtLeast(1, 9, 0)) {
-                cup = BIT(19) | 0xFFFF; // ForceDebug
-            }
-            std::memcpy(npdm.data() + kac_offset + i, &cup, sizeof(cup));
-            break;
-        }
+    if (ver >= MAKEHOSVERSION(1,7,1)) {
+        npdm_patch_kc(npdm, meta.aci0_offset + aci0.kac_offset, aci0.kac_size, 16, BIT(19));
+        npdm_patch_kc(npdm, meta.acid_offset + acid.kac_offset, acid.kac_size, 16, BIT(19));
     }
-    #endif
+
+    std::memcpy(npdm.data(), &meta, sizeof(meta));
+    std::memcpy(npdm.data() + meta.aci0_offset, &aci0, sizeof(aci0));
+    std::memcpy(npdm.data() + meta.acid_offset, &acid, sizeof(acid));
 }
 
 void patch_nacp(NacpStruct& nacp, const NcapPatch& patch) {
