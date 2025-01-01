@@ -503,8 +503,8 @@ void App::SetReplaceHbmenuEnable(bool enable) {
                     NacpStruct actual_hbmenu_nacp;
                     if (R_FAILED(nro_get_nacp("/switch/hbmenu.nro", actual_hbmenu_nacp))) {
                         App::Push(std::make_shared<ui::OptionBox>(
-                            "Failed to find /switch/hbmenu.nro\n\
-                            Use the Appstore to re-install hbmenu"_i18n,
+                            "Failed to find /switch/hbmenu.nro\n"
+                            "Use the Appstore to re-install hbmenu"_i18n,
                             "OK"_i18n
                         ));
                         return;
