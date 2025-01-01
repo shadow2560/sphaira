@@ -268,7 +268,7 @@ void Menu::SetIndex(std::size_t index) {
     // log_write("name: %s hbini.ts: %lu file.ts: %lu smaller: %s\n", e.GetName(), e.hbini.timestamp, e.timestamp.modified, e.hbini.timestamp < e.timestamp.modified ? "true" : "false");
 
     SetTitleSubHeading(m_entries[m_index].path);
-    this->SetSubHeading(std::to_string(m_index + 1) + " / " + std::to_string(m_entries.size()) + "    " + std::to_string(m_start));
+    this->SetSubHeading(std::to_string(m_index + 1) + " / " + std::to_string(m_entries.size()));
 }
 
 void Menu::InstallHomebrew() {
