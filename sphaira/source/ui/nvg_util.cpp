@@ -77,7 +77,7 @@ inline void drawRectOutlineInternal(NVGcontext* vg, float size, const NVGcolor& 
     float gradientX, gradientY, color;
     getHighlightAnimation(&gradientX, &gradientY, &color);
 
-#if 1
+#if 0
     // NVGcolor pulsationColor = nvgRGBAf((color * out_col.r) + (1 - color) * out_col.r,
     //         (color * out_col.g) + (1 - color) * out_col.g,
     //         (color * out_col.b) + (1 - color) * out_col.b,
