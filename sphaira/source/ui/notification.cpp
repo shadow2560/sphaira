@@ -11,10 +11,6 @@ NotifEntry::NotifEntry(std::string text, Side side)
 , m_side{side} {
 }
 
-auto NotifEntry::OnLayoutChange() -> void {
-
-}
-
 auto NotifEntry::Draw(NVGcontext* vg, Theme* theme, float y) -> bool {
     m_pos.y = y;
     Draw(vg, theme);
@@ -55,11 +51,6 @@ auto NotifEntry::Draw(NVGcontext* vg, Theme* theme) -> void {
 
     gfx::drawRectOutline(vg, 4.f, overlay_col, m_pos, selected_col);
     gfx::drawText(vg, Vec2{m_pos.x + (m_pos.w / 2.f), m_pos.y + (m_pos.h / 2.f)}, font_size, text_col, m_text.c_str(), NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER);
-}
-
-auto NotifMananger::OnLayoutChange() -> void {
-    mutexLock(&m_mutex);
-    ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
 }
 
 auto NotifMananger::Draw(NVGcontext* vg, Theme* theme) -> void {

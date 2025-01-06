@@ -21,9 +21,6 @@ struct MenuBase : Widget {
     void SetTitleSubHeading(std::string sub_heading);
     void SetSubHeading(std::string sub_heading);
 
-    static auto ScrollHelperDown(u64& index, u64& start, u64 step, s64 row, s64 page, u64 size) -> bool;
-    static auto ScrollHelperUp(u64& index, u64& start, s64 step, s64 row, s64 page, s64 size) -> bool;
-
 private:
     void UpdateVars();
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/menus/menu_base.hpp"
+#include "ui/list.hpp"
 #include "fs.hpp"
 #include "option.hpp"
 #include <vector>
@@ -49,7 +50,7 @@ struct Menu final : MenuBase {
     void OnFocusGained() override;
 
 private:
-    void SetIndex(std::size_t index);
+    void SetIndex(s64 index);
     void Scan();
     void LoadEntriesFromPath(const fs::FsPath& path);
 
@@ -66,8 +67,9 @@ private:
 
 private:
     std::vector<Entry> m_entries;
-    std::size_t m_index{};
-    std::size_t m_index_offset{};
+    s64 m_index{};
+    s64 m_index_offset{};
+    std::unique_ptr<List> m_list;
 };
 
 } // namespace sphaira::ui::menu::gh

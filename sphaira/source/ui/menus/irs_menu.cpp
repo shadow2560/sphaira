@@ -139,44 +139,44 @@ Menu::Menu() : MenuBase{"Irs"_i18n} {
             format_str.emplace_back("20x15"_i18n);
         }
 
-        options->Add(std::make_shared<SidebarEntryArray>("Controller"_i18n, controller_str, [this](std::size_t& index){
+        options->Add(std::make_shared<SidebarEntryArray>("Controller"_i18n, controller_str, [this](s64& index){
             irsStopImageProcessor(m_entries[m_index].m_handle);
             m_index = index;
             UpdateConfig(&m_config);
         }, m_index));
 
-        options->Add(std::make_shared<SidebarEntryArray>("Rotation"_i18n, rotation_str, [this](std::size_t& index){
+        options->Add(std::make_shared<SidebarEntryArray>("Rotation"_i18n, rotation_str, [this](s64& index){
             m_rotation = (Rotation)index;
         }, m_rotation));
 
-        options->Add(std::make_shared<SidebarEntryArray>("Colour"_i18n, colour_str, [this](std::size_t& index){
+        options->Add(std::make_shared<SidebarEntryArray>("Colour"_i18n, colour_str, [this](s64& index){
             m_colour = (Colour)index;
             updateColourArray();
         }, m_colour));
 
-        options->Add(std::make_shared<SidebarEntryArray>("Light Target"_i18n, light_target_str, [this](std::size_t& index){
+        options->Add(std::make_shared<SidebarEntryArray>("Light Target"_i18n, light_target_str, [this](s64& index){
             m_config.light_target = index;
             UpdateConfig(&m_config);
         }, m_config.light_target));
 
-        options->Add(std::make_shared<SidebarEntryArray>("Gain"_i18n, gain_str, [this](std::size_t& index){
+        options->Add(std::make_shared<SidebarEntryArray>("Gain"_i18n, gain_str, [this](s64& index){
             m_config.gain = GAIN_MIN + index;
             UpdateConfig(&m_config);
         }, m_config.gain - GAIN_MIN));
 
-        options->Add(std::make_shared<SidebarEntryArray>("Negative Image"_i18n, is_negative_image_used_str, [this](std::size_t& index){
+        options->Add(std::make_shared<SidebarEntryArray>("Negative Image"_i18n, is_negative_image_used_str, [this](s64& index){
             m_config.is_negative_image_used = index;
             UpdateConfig(&m_config);
         }, m_config.is_negative_image_used));
 
-        options->Add(std::make_shared<SidebarEntryArray>("Format"_i18n, format_str, [this](std::size_t& index){
+        options->Add(std::make_shared<SidebarEntryArray>("Format"_i18n, format_str, [this](s64& index){
             m_config.orig_format = index;
             m_config.trimming_format = index;
             UpdateConfig(&m_config);
         }, m_config.orig_format));
 
         if (hosversionAtLeast(4,0,0)) {
-            options->Add(std::make_shared<SidebarEntryArray>("Trimming Format"_i18n, format_str, [this](std::size_t& index){
+            options->Add(std::make_shared<SidebarEntryArray>("Trimming Format"_i18n, format_str, [this](s64& index){
             // you cannot set trim a larger region than the source
             if (index < m_config.orig_format) {
                 index = m_config.orig_format;

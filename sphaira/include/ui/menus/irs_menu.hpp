@@ -61,7 +61,7 @@ private:
     Rotation m_rotation{Rotation_90};
     Colour m_colour{Colour_Grey};
     int m_image{};
-    std::size_t m_index{};
+    s64 m_index{};
 };
 
 } // namespace sphaira::ui::menu::irs

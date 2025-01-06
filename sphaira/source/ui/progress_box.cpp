@@ -119,7 +119,7 @@ auto ProgressBox::NewTransfer(const std::string& transfer)  -> ProgressBox& {
     return *this;
 }
 
-auto ProgressBox::UpdateTransfer(u64 offset, u64 size)  -> ProgressBox& {
+auto ProgressBox::UpdateTransfer(s64 offset, s64 size)  -> ProgressBox& {
     mutexLock(&m_mutex);
     m_size = size;
     m_offset = offset;

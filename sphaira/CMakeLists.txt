@@ -51,13 +51,12 @@ add_executable(sphaira
     source/ui/notification.cpp
     source/ui/nvg_util.cpp
     source/ui/option_box.cpp
-    source/ui/option_list.cpp
     source/ui/popup_list.cpp
     source/ui/progress_box.cpp
     source/ui/scrollable_text.cpp
-    source/ui/scrollbar.cpp
     source/ui/sidebar.cpp
     source/ui/widget.cpp
+    source/ui/list.cpp
 
     source/app.cpp
     source/download.cpp

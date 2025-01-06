@@ -1134,10 +1134,6 @@ auto ErrorBox::Update(Controller* controller, TouchInfo* touch) -> void {
     Widget::Update(controller, touch);
 }
 
-auto ErrorBox::OnLayoutChange() -> void {
-
-}
-
 auto ErrorBox::Draw(NVGcontext* vg, Theme* theme) -> void {
     gfx::dimBackground(vg);
     gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);

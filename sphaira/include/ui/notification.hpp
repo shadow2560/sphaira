@@ -19,7 +19,6 @@ public:
     auto IsDone() const noexcept { return m_count == 0; }
 
 private:
-    void OnLayoutChange() override;
     void Draw(NVGcontext* vg, Theme* theme) override;
 
 private:
@@ -34,7 +33,6 @@ public:
     NotifMananger() = default;
     ~NotifMananger() = default;
 
-    void OnLayoutChange() override;
     void Draw(NVGcontext* vg, Theme* theme) override;
 
     void Push(const NotifEntry& entry);

@@ -246,22 +246,22 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
             }
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
-            if (ScrollHelperDown(m_index, m_index_offset, 1, 1, 8, m_entries_current.size())) {
+            if (m_list->ScrollDown(m_index, 1, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (ScrollHelperUp(m_index, m_index_offset, 1, 1, 8, m_entries_current.size())) {
+            if (m_list->ScrollUp(m_index, 1, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::DPAD_RIGHT, Action{[this](){
-            if (ScrollHelperDown(m_index, m_index_offset, 8, 1, 8, m_entries_current.size())) {
+            if (m_list->ScrollDown(m_index, 8, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::DPAD_LEFT, Action{[this](){
-            if (ScrollHelperUp(m_index, m_index_offset, 8, 1, 8, m_entries_current.size())) {
+            if (m_list->ScrollUp(m_index, 8, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
@@ -355,12 +355,12 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 order_items.push_back("Decending"_i18n);
                 order_items.push_back("Ascending"_i18n);
 
-                options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
                     m_sort.Set(index_out);
                     SortAndFindLastFile();
                 }, m_sort.Get()));
 
-                options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
                     m_order.Set(index_out);
                     SortAndFindLastFile();
                 }, m_order.Get()));
@@ -542,7 +542,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 mount_items.push_back("Image System memory"_i18n);
                 mount_items.push_back("Image microSD card"_i18n);
 
-                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this](s64& index_out){
                     App::PopToMenu();
                     m_mount.Set(index_out);
                     SetFs("/", index_out);
@@ -550,6 +550,9 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
             }));
         }})
     );
+
+    const Vec4 v{75, GetY() + 1.f + 42.f, 1220.f-45.f*2, 60};
+    m_list = std::make_unique<List>(1, 8, m_pos, v);
 
     fs::FsPath buf;
     ini_gets("paths", "last_path", "/", buf, sizeof(buf), App::CONFIG_PATH);
@@ -562,6 +565,14 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
+    m_list->OnUpdate(controller, touch, m_entries_current.size(), [this](auto i) {
+        if (m_index == i) {
+            FireAction(Button::A);
+        } else {
+            App::PlaySoundEffect(SoundEffect_Focus);
+            SetIndex(i);
+        }
+    });
 }
 
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
@@ -574,35 +585,10 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         return;
     }
 
-    const u64 SCROLL = m_index_offset;
-    constexpr u64 max_entry_display = 8;
-    const u64 entry_total = m_entries_current.size();
-
-    // only draw scrollbar if needed
-    if (entry_total > max_entry_display) {
-        const auto scrollbar_size = 500.f;
-        const auto sb_h = 1.f / (float)entry_total * scrollbar_size;
-        const auto sb_y = SCROLL;
-        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, gfx::getColour(gfx::Colour::BLACK));
-        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * (max_entry_display - 1)) - 4, gfx::getColour(gfx::Colour::SILVER));
-    }
-
-    // constexpr Vec4 line_top{30.f, 86.f, 1220.f, 1.f};
-    // constexpr Vec4 line_bottom{30.f, 646.f, 1220.f, 1.f};
-    // constexpr Vec4 block{280.f, 110.f, 720.f, 60.f};
-    constexpr Vec4 block{75.f, 110.f, 1220.f-45.f*2, 60.f};
     constexpr float text_xoffset{15.f};
 
-    // todo: cleanup
-    const float x = block.x;
-    float y = GetY() + 1.f + 42.f;
-    const float h = block.h;
-    const float w = block.w;
-
-    nvgSave(vg);
-    nvgScissor(vg, GetX(), GetY(), GetW(), GetH());
-
-    for (std::size_t i = m_index_offset; i < m_entries_current.size(); i++) {
+    m_list->Draw(vg, theme, m_entries_current.size(), [this, text_col](auto* vg, auto* theme, auto v, auto i) {
+        const auto& [x, y, w, h] = v;
         auto& e = GetEntry(i);
 
         if (e.IsDir()) {
@@ -628,7 +614,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             text_id = ThemeEntryID_TEXT_SELECTED;
             gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
         } else {
-            if (i == m_index_offset) {
+            if (i == m_index) {
                 gfx::drawRect(vg, x, y, w, 1.f, text_col);
             }
             gfx::drawRect(vg, x, y + h, w, 1.f, text_col);
@@ -655,8 +641,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         nvgSave(vg);
-        const auto txt_clip = std::min(GetY() + GetH(), y + h) - y;
-        nvgScissor(vg, x + text_xoffset+65, y, w-(x+text_xoffset+65+50), txt_clip);
+        nvgIntersectScissor(vg, x + text_xoffset+65, y, w-(x+text_xoffset+65+50), h);
             gfx::drawText(vg, x + text_xoffset+65, y + (h / 2.f), 20.f, e.name, NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour);
         nvgRestore(vg);
 
@@ -678,14 +663,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->elements[text_id].colour, "%.2f MiB", (double)e.file_size / 1024.0 / 1024.0);
             }
         }
-
-        y += h;
-        if (!InYBounds(y)) {
-            break;
-        }
-    }
-
-    nvgRestore(vg);
+    });
 }
 
 void Menu::OnFocusGained() {
@@ -705,10 +683,10 @@ void Menu::OnFocusGained() {
     }
 }
 
-void Menu::SetIndex(std::size_t index) {
+void Menu::SetIndex(s64 index) {
     m_index = index;
     if (!m_index) {
-        m_index_offset = 0;
+        m_list->SetYoff();
     }
 
     if (!m_entries_current.empty() && !GetEntry().checked_internal_extension && GetEntry().extension == "zip") {
@@ -803,16 +781,14 @@ void Menu::InstallForwarder() {
 auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
     log_write("new scan path: %s\n", new_path);
     if (!is_walk_up && !m_path.empty() && !m_entries_current.empty()) {
-        const LastFile f{GetEntry().name, m_index, m_index_offset, m_entries_current.size()};
+        const LastFile f(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
         m_previous_highlighted_file.emplace_back(f);
     }
-
-    log_write("\nold index: %zu start: %zu\n", m_index, m_index_offset);
 
     m_path = new_path;
     m_entries.clear();
     m_index = 0;
-    m_index_offset = 0;
+    m_list->SetYoff(0);
     SetTitleSubHeading(m_path);
 
     if (m_selected_type == SelectedType::None) {
@@ -1090,7 +1066,7 @@ void Menu::Sort() {
 void Menu::SortAndFindLastFile() {
     std::optional<LastFile> last_file;
     if (!m_path.empty() && !m_entries_current.empty()) {
-        last_file = LastFile{GetEntry().name, m_index, m_index_offset, m_entries_current.size()};
+        last_file = LastFile(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
     }
 
     Sort();
@@ -1111,21 +1087,21 @@ void Menu::SetIndexFromLastFile(const LastFile& last_file) {
         }
     }
     if (index >= 0) {
-        if ((u64)index == last_file.index && m_entries_current.size() == last_file.entries_count) {
-            m_index_offset = last_file.offset;
+        if (index == last_file.index && m_entries_current.size() == last_file.entries_count) {
+            m_list->SetYoff(last_file.offset);
             log_write("index is the same as last time\n");
         } else {
             // file position changed!
             log_write("file position changed\n");
             // guesstimate where the position is
             if (index >= 8) {
-                m_index_offset = (index - 8) + 1;
+                m_list->SetYoff(((index - 8) + 1) * m_list->GetMaxY());
             } else {
-                m_index_offset = 0;
+                m_list->SetYoff(0);
             }
         }
         SetIndex(index);
-        log_write("\nnew index: %zu start: %zu mod: %zu\n", m_index, m_index_offset, index % 8);
+        log_write("\nnew index: %zu %zu mod: %zu\n", m_index, index % 8);
     }
 }
 

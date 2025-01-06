@@ -391,12 +391,12 @@ auto App::GetThemeMetaList() -> std::span<ThemeMeta> {
     return g_app->m_theme_meta_entries;
 }
 
-void App::SetTheme(u64 theme_index) {
+void App::SetTheme(s64 theme_index) {
     g_app->LoadTheme(g_app->m_theme_meta_entries[theme_index].ini_path.c_str());
     g_app->m_theme_index = theme_index;
 }
 
-auto App::GetThemeIndex() -> u64 {
+auto App::GetThemeIndex() -> s64 {
     return g_app->m_theme_index;
 }
 
@@ -701,41 +701,40 @@ void App::ExitRestart() {
 void App::Poll() {
     m_controller.Reset();
 
-    padUpdate(&m_pad);
-    m_controller.m_kdown = padGetButtonsDown(&m_pad);
-    m_controller.m_kheld = padGetButtons(&m_pad);
-    m_controller.m_kup = padGetButtonsUp(&m_pad);
-    m_controller.UpdateButtonHeld(static_cast<u64>(Button::ANY_DIRECTION));
+    HidTouchScreenState state{};
+    hidGetTouchScreenStates(&state, 1);
+    m_touch_info.is_clicked = false;
 
-    HidTouchScreenState touch_state{};
-    hidGetTouchScreenStates(&touch_state, 1);
-
-    if (touch_state.count == 1 && !m_touch_info.is_touching) {
-        m_touch_info.initial_x = m_touch_info.prev_x = m_touch_info.cur_x = touch_state.touches[0].x;
-        m_touch_info.initial_y = m_touch_info.prev_y = m_touch_info.cur_y = touch_state.touches[0].y;
-        m_touch_info.finger_id = touch_state.touches[0].finger_id;
+    if (state.count == 1 && !m_touch_info.is_touching) {
+        m_touch_info.initial = m_touch_info.cur = state.touches[0];
         m_touch_info.is_touching = true;
         m_touch_info.is_tap = true;
-        // PlaySoundEffect(SoundEffect_Limit);
-    } else if (touch_state.count >= 1 && m_touch_info.is_touching && m_touch_info.finger_id == touch_state.touches[0].finger_id) {
-        m_touch_info.prev_x = m_touch_info.cur_x;
-        m_touch_info.prev_y = m_touch_info.cur_y;
-
-        m_touch_info.cur_x = touch_state.touches[0].x;
-        m_touch_info.cur_y = touch_state.touches[0].y;
+    } else if (state.count >= 1 && m_touch_info.is_touching) {
+        m_touch_info.cur = state.touches[0];
 
         if (m_touch_info.is_tap &&
-            (std::abs(m_touch_info.initial_x - m_touch_info.cur_x) > 20 ||
-            std::abs(m_touch_info.initial_y - m_touch_info.cur_y) > 20)) {
+            (std::abs((s32)m_touch_info.initial.x - (s32)m_touch_info.cur.x) > 20 ||
+            std::abs((s32)m_touch_info.initial.y - (s32)m_touch_info.cur.y) > 20)) {
             m_touch_info.is_tap = false;
+            m_touch_info.is_scroll = true;
         }
     } else if (m_touch_info.is_touching) {
         m_touch_info.is_touching = false;
-
-        // check if we clicked on anything, if so, handle it
+        m_touch_info.is_scroll = false;
         if (m_touch_info.is_tap) {
-            // todo:
+            m_touch_info.is_clicked = true;
+        } else {
+            m_touch_info.is_end = true;
         }
+    }
+
+    // todo: better implement this to match hos
+    if (!m_touch_info.is_touching && !m_touch_info.is_clicked) {
+        padUpdate(&m_pad);
+        m_controller.m_kdown = padGetButtonsDown(&m_pad);
+        m_controller.m_kheld = padGetButtons(&m_pad);
+        m_controller.m_kup = padGetButtonsUp(&m_pad);
+        m_controller.UpdateButtonHeld(static_cast<u64>(Button::ANY_DIRECTION));
     }
 }
 
@@ -809,17 +808,21 @@ auto App::GetVg() -> NVGcontext* {
 }
 
 void DrawElement(float x, float y, float w, float h, ThemeEntryID id) {
+    DrawElement({x, y, w, h}, id);
+}
+
+void DrawElement(const Vec4& v, ThemeEntryID id) {
     const auto& e = g_app->m_theme.elements[id];
 
     switch (e.type) {
         case ElementType::None: {
         } break;
         case ElementType::Texture: {
-            const auto paint = nvgImagePattern(g_app->vg, x, y, w, h, 0, e.texture, 1.f);
-            ui::gfx::drawRect(g_app->vg, x, y, w, h, paint);
+            const auto paint = nvgImagePattern(g_app->vg, v.x, v.y, v.w, v.h, 0, e.texture, 1.f);
+            ui::gfx::drawRect(g_app->vg, v, paint);
         } break;
         case ElementType::Colour: {
-            ui::gfx::drawRect(g_app->vg, x, y, w, h, e.colour);
+            ui::gfx::drawRect(g_app->vg, v, e.colour);
         } break;
     }
 }

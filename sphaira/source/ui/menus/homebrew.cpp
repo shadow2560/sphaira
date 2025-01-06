@@ -43,22 +43,22 @@ Menu::Menu() : MenuBase{"Homebrew"_i18n} {
             }
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
-            if (ScrollHelperDown(m_index, m_start, 3, 3, 9, m_entries.size())) {
+            if (m_list->ScrollDown(m_index, 3, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (ScrollHelperUp(m_index, m_start, 3, 3, 9, m_entries.size())) {
+            if (m_list->ScrollUp(m_index, 3, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::R2, Action{[this](){
-            if (ScrollHelperDown(m_index, m_start, 9, 3, 9, m_entries.size())) {
+            if (m_list->ScrollDown(m_index, 9, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::L2, Action{[this](){
-            if (ScrollHelperUp(m_index, m_start, 9, 3, 9, m_entries.size())) {
+            if (m_list->ScrollUp(m_index, 9, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
@@ -86,12 +86,12 @@ Menu::Menu() : MenuBase{"Homebrew"_i18n} {
                     order_items.push_back("Decending"_i18n);
                     order_items.push_back("Ascending"_i18n);
 
-                    options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](std::size_t& index_out){
+                    options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
                         m_sort.Set(index_out);
                         SortAndFindLastFile();
                     }, m_sort.Get()));
 
-                    options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](std::size_t& index_out){
+                    options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
                         m_order.Set(index_out);
                         SortAndFindLastFile();
                     }, m_order.Get()));
@@ -141,6 +141,10 @@ Menu::Menu() : MenuBase{"Homebrew"_i18n} {
             }
         }})
     );
+
+    const Vec4 v{75, 110, 370, 155};
+    const Vec2 pad{10, 10};
+    m_list = std::make_unique<List>(3, 9, m_pos, v, pad);
 }
 
 Menu::~Menu() {
@@ -153,79 +157,71 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
+    m_list->OnUpdate(controller, touch, m_entries.size(), [this](auto i) {
+        if (m_index == i) {
+            FireAction(Button::A);
+        } else {
+            App::PlaySoundEffect(SoundEffect_Focus);
+            SetIndex(i);
+        }
+    });
 }
 
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
-    const u64 SCROLL = m_start;
-    const u64 max_entry_display = 9;
-    const u64 nro_total = m_entries.size();
-    const u64 cursor_pos = m_index;
-    fs::FsNativeSd fs;
-
-    // only draw scrollbar if needed
-    if (nro_total > max_entry_display) {
-        const auto scrollbar_size = 500.f;
-        const auto sb_h = 3.f / (float)nro_total * scrollbar_size;
-        const auto sb_y = SCROLL / 3.f;
-        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, theme->elements[ThemeEntryID_GRID].colour);
-        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * 2) - 4, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
-    }
-
     // max images per frame, in order to not hit io / gpu too hard.
     const int image_load_max = 2;
     int image_load_count = 0;
 
-    for (u64 i = 0, pos = SCROLL, y = 110, w = 370, h = 155; pos < nro_total && i < max_entry_display; y += h + 10) {
-        for (u64 j = 0, x = 75; j < 3 && pos < nro_total && i < max_entry_display; j++, i++, pos++, x += w + 10) {
-            auto& e = m_entries[pos];
+    m_list->Draw(vg, theme, m_entries.size(), [this, &image_load_count](auto* vg, auto* theme, auto v, auto pos) {
+        const auto& [x, y, w, h] = v;
+        auto& e = m_entries[pos];
 
-            // lazy load image
-            if (image_load_count < image_load_max) {
-                if (!e.image && e.icon_size && e.icon_offset) {
-                    // NOTE: it seems that images can be any size. SuperTux uses a 1024x1024
-                    // ~300Kb image, which takes a few frames to completely load.
-                    // really, switch-tools should handle this by resizing the image before
-                    // adding it to the nro, as well as validate its a valid jpeg.
-                    const auto icon = nro_get_icon(e.path, e.icon_size, e.icon_offset);
-                    if (!icon.empty()) {
-                        e.image = nvgCreateImageMem(vg, 0, icon.data(), icon.size());
-                        image_load_count++;
-                    }
+        // lazy load image
+        if (image_load_count < image_load_max) {
+            if (!e.image && e.icon_size && e.icon_offset) {
+                // NOTE: it seems that images can be any size. SuperTux uses a 1024x1024
+                // ~300Kb image, which takes a few frames to completely load.
+                // really, switch-tools should handle this by resizing the image before
+                // adding it to the nro, as well as validate its a valid jpeg.
+                const auto icon = nro_get_icon(e.path, e.icon_size, e.icon_offset);
+                if (!icon.empty()) {
+                    e.image = nvgCreateImageMem(vg, 0, icon.data(), icon.size());
+                    image_load_count++;
                 }
             }
-
-            auto text_id = ThemeEntryID_TEXT;
-            if (pos == cursor_pos) {
-                text_id = ThemeEntryID_TEXT_SELECTED;
-                gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
-            } else {
-                DrawElement(x, y, w, h, ThemeEntryID_GRID);
-            }
-
-            const float image_size = 115;
-            gfx::drawImageRounded(vg, x + 20, y + 20, image_size, image_size, e.image ? e.image : App::GetDefaultImage());
-
-            nvgSave(vg);
-            nvgScissor(vg, x, y, w - 30.f, h); // clip
-            {
-                bool has_star = false;
-                if (IsStarEnabled()) {
-                    if (!e.has_star.has_value()) {
-                        e.has_star = fs.FileExists(GenerateStarPath(e.path));
-                    }
-                    has_star = e.has_star.value();
-                }
-
-                const float font_size = 18;
-                gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, "%s%s", has_star ? "\u2605 " : "", e.GetName());
-                gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.GetAuthor());
-                gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.GetDisplayVersion());
-            }
-            nvgRestore(vg);
         }
-    }
+
+        auto text_id = ThemeEntryID_TEXT;
+        if (pos == m_index) {
+            text_id = ThemeEntryID_TEXT_SELECTED;
+            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, v, theme->elements[ThemeEntryID_SELECTED].colour);
+        } else {
+            DrawElement(v, ThemeEntryID_GRID);
+        }
+
+        const float image_size = 115;
+        gfx::drawImageRounded(vg, x + 20, y + 20, image_size, image_size, e.image ? e.image : App::GetDefaultImage());
+
+        nvgSave(vg);
+        nvgIntersectScissor(vg, x, y, w - 30.f, h); // clip
+        {
+            bool has_star = false;
+            if (IsStarEnabled()) {
+                if (!e.has_star.has_value()) {
+                    e.has_star = fs::FsNativeSd().FileExists(GenerateStarPath(e.path));
+                }
+                has_star = e.has_star.value();
+            }
+
+            const float font_size = 18;
+            gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, "%s%s", has_star ? "\u2605 " : "", e.GetName());
+            gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.GetAuthor());
+            gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.GetDisplayVersion());
+        }
+        nvgRestore(vg);
+    });
 }
 
 void Menu::OnFocusGained() {
@@ -235,10 +231,10 @@ void Menu::OnFocusGained() {
     }
 }
 
-void Menu::SetIndex(std::size_t index) {
+void Menu::SetIndex(s64 index) {
     m_index = index;
     if (!m_index) {
-        m_start = 0;
+        m_list->SetYoff(0);
     }
 
     const auto& e = m_entries[m_index];
@@ -428,9 +424,9 @@ void Menu::SortAndFindLastFile() {
     if (index >= 0) {
         // guesstimate where the position is
         if (index >= 9) {
-            m_start = (index - 9) / 3 * 3 + 3;
+            m_list->SetYoff((((index - 9) + 3) / 3) * m_list->GetMaxY());
         } else {
-            m_start = 0;
+            m_list->SetYoff(0);
         }
         SetIndex(index);
     }

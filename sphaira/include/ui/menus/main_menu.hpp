@@ -34,8 +34,7 @@ struct MainMenu final : Widget {
 
 private:
     void OnLRPress(std::shared_ptr<MenuBase> menu, Button b);
-    void AddOnLPress();
-    void AddOnRPress();
+    void AddOnLRPress();
 
 private:
     std::shared_ptr<homebrew::Menu> m_homebrew_menu{};

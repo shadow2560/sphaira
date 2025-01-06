@@ -7,13 +7,12 @@
 namespace sphaira::ui {
 namespace {
 
-struct SidebarSpacer : SidebarEntryBase {
-
-};
-
-struct SidebarHeader : SidebarEntryBase {
-
-};
+auto DistanceBetweenY(Vec4 va, Vec4 vb) -> Vec4 {
+    return Vec4{
+        va.x, va.y,
+        va.w, vb.y - va.y
+    };
+}
 
 } // namespace
 
@@ -127,7 +126,7 @@ SidebarEntryArray::SidebarEntryArray(std::string title, Items items, Callback cb
     }
 }
 
-SidebarEntryArray::SidebarEntryArray(std::string title, Items items, Callback cb, std::size_t index)
+SidebarEntryArray::SidebarEntryArray(std::string title, Items items, Callback cb, s64 index)
 : SidebarEntryBase{std::forward<std::string>(title)}
 , m_items{std::move(items)}
 , m_callback{cb}
@@ -191,24 +190,12 @@ Sidebar::Sidebar(std::string title, std::string sub, Side side, Items&& items)
     m_title_pos = Vec2{m_pos.x + 30.f, m_pos.y + 40.f};
     m_base_pos = Vec4{GetX() + 30.f, GetY() + 170.f, m_pos.w - (30.f * 2.f), 70.f};
 
-    // each item has it's own Action, but we take over B
-    SetAction(Button::B, Action{"Back"_i18n, [this](){
-        SetPop();
-    }});
+    // set button positions
+    SetUiButtonPos({m_pos.x + m_pos.w - 60.f, 675});
 
-    m_selected_y = m_base_pos.y;
-
-    if (!m_items.empty()) {
-        // setup positions
-        m_selected_y = m_base_pos.y;
-        // for (auto&p : m_items) {
-        //     p->SetPos(m_base_pos);
-        //     m_base_pos.y += m_base_pos.h;
-        // }
-
-        // // give focus to first entry.
-        // m_items[m_index]->OnFocusGained();
-    }
+    const Vec4 pos = DistanceBetweenY(m_top_bar, m_bottom_bar);
+    m_list = std::make_unique<List>(1, 6, pos, m_base_pos);
+    m_list->SetScrollBarPos(GetX() + GetW() - 20, m_base_pos.y - 10, pos.h - m_base_pos.y + 48);
 }
 
 Sidebar::Sidebar(std::string title, std::string sub, Side side)
@@ -217,46 +204,21 @@ Sidebar::Sidebar(std::string title, std::string sub, Side side)
 
 
 auto Sidebar::Update(Controller* controller, TouchInfo* touch) -> void {
-    m_items[m_index]->Update(controller, touch);
     Widget::Update(controller, touch);
+
+    // if touched out of bounds, pop the sidebar and all widgets below it.
+    if (touch->is_clicked && !touch->in_range(GetPos())) {
+        App::PopToMenu();
+    } else {
+        m_list->OnUpdate(controller, touch, m_items.size(), [this](auto i) {
+            SetIndex(i);
+            FireAction(Button::A);
+        });
+    }
 
     if (m_items[m_index]->ShouldPop()) {
         SetPop();
     }
-
-    const auto old_index = m_index;
-    if (controller->GotDown(Button::ANY_DOWN) && m_index < (m_items.size() - 1)) {
-        m_index++;
-        m_selected_y += m_box_size.y;
-    } else if (controller->GotDown(Button::ANY_UP) && m_index != 0) {
-        m_index--;
-        m_selected_y -= m_box_size.y;
-    }
-
-    // if we moved
-    if (m_index != old_index) {
-        App::PlaySoundEffect(SoundEffect_Scroll);
-        m_items[old_index]->OnFocusLost();
-        m_items[m_index]->OnFocusGained();
-
-        // move offset
-        if ((m_selected_y + m_box_size.y) >= m_bottom_bar.y) {
-            m_selected_y -= m_box_size.y;
-            m_index_offset++;
-            // LOG("move down\n");
-        } else if (m_selected_y <= m_top_bar.y) {
-            // LOG("move up sely %.2f top %.2f\n", m_selected_y, m_top_bar.y);
-            m_selected_y += m_box_size.y;
-            m_index_offset--;
-        }
-    }
-}
-
-auto DistanceBetweenY(Vec4 va, Vec4 vb) -> Vec4 {
-    return Vec4{
-        va.x, va.y,
-        va.w, vb.y - va.y
-    };
 }
 
 auto Sidebar::Draw(NVGcontext* vg, Theme* theme) -> void {
@@ -268,26 +230,13 @@ auto Sidebar::Draw(NVGcontext* vg, Theme* theme) -> void {
     gfx::drawRect(vg, m_top_bar, theme->elements[ThemeEntryID_TEXT].colour);
     gfx::drawRect(vg, m_bottom_bar, theme->elements[ThemeEntryID_TEXT].colour);
 
-    const auto dist = DistanceBetweenY(m_top_bar, m_bottom_bar);
-    nvgSave(vg);
-    nvgScissor(vg, dist.x, dist.y, dist.w, dist.h);
+    Widget::Draw(vg, theme);
 
-    // for (std::size_t i = m_index_offset; i < m_items.size(); ++i) {
-    //     m_items[i]->Draw(vg, theme);
-    // }
-
-    for (auto&p : m_items) {
-        p->Draw(vg, theme);
-    }
-
-    nvgRestore(vg);
-
-    // draw the buttons. fetch the actions from current item and insert into array.
-    Actions draw_actions{m_actions};
-    const auto& actions_ref = m_items[m_index]->GetActions();
-    draw_actions.insert(actions_ref.cbegin(), actions_ref.cend());
-
-    gfx::drawButtons(vg, draw_actions, theme->elements[ThemeEntryID_TEXT].colour, m_pos.x + m_pos.w - 60.f);
+    m_list->Draw(vg, theme, m_items.size(), [this](auto* vg, auto* theme, auto v, auto i) {
+        const auto& [x, y, w, h] = v;
+        m_items[i]->SetY(y);
+        m_items[i]->Draw(vg, theme);
+    });
 }
 
 auto Sidebar::OnFocusGained() noexcept -> void {
@@ -303,23 +252,56 @@ auto Sidebar::OnFocusLost() noexcept -> void {
 void Sidebar::Add(std::shared_ptr<SidebarEntryBase> entry) {
     m_items.emplace_back(entry);
     m_items.back()->SetPos(m_base_pos);
-    m_base_pos.y += m_base_pos.h;
-
-    // for (auto&p : m_items) {
-    //     p->SetPos(base_pos);
-    //     m_base_pos.y += m_base_pos.h;
-    // }
 
     // give focus to first entry.
-    m_items[m_index]->OnFocusGained();
+    if (m_items.size() == 1) {
+        m_items[m_index]->OnFocusGained();
+        SetupButtons();
+    }
 }
 
-void Sidebar::AddSpacer() {
+void Sidebar::SetIndex(s64 index) {
+    // if we moved
+    if (m_index != index) {
+        m_items[m_index]->OnFocusLost();
+        m_index = index;
+        m_items[m_index]->OnFocusGained();
 
+        if (m_index > m_index_offset && m_index - m_index_offset >= 5) {
+            m_index_offset = m_index - 5;
+        }
+
+        SetupButtons();
+    }
 }
 
-void Sidebar::AddHeader(std::string name) {
+void Sidebar::SetupButtons() {
+    RemoveActions();
 
+    // add entry actions
+    for (const auto& [button, action] :  m_items[m_index]->GetActions()) {
+        SetAction(button, action);
+    }
+
+    // add default actions, overriding if needed.
+    this->SetActions(
+        std::make_pair(Button::DOWN, Action{[this](){
+            auto index = m_index;
+            if (m_list->ScrollDown(index, 1, m_items.size())) {
+                SetIndex(index);
+            }
+        }}),
+        std::make_pair(Button::UP, Action{[this](){
+            auto index = m_index;
+            if (m_list->ScrollUp(index, 1, m_items.size())) {
+                SetIndex(index);
+            }
+        }}),
+        // each item has it's own Action, but we take over B
+        std::make_pair(Button::B, Action{"Back"_i18n, [this](){
+            SetPop();
+        }})
+    );
 }
 
 } // namespace sphaira::ui

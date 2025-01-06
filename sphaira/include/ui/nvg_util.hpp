@@ -1,7 +1,7 @@
 #pragma once
 
 #include "nanovg.h"
-#include "ui/widget.hpp"
+#include "ui/types.hpp"
 
 namespace sphaira::ui::gfx {
 
@@ -81,10 +81,11 @@ void textBounds(NVGcontext*, float x, float y, float *bounds, const char* str, .
 // void textBounds(NVGcontext*, float *bounds, const char* str);
 
 auto getButton(Button button) -> const char*;
-void drawButton(NVGcontext* vg, float x, float y, float size, Button button);
-void drawButtons(NVGcontext* vg, const Widget::Actions& actions, const NVGcolor& c, float start_x = 1220.f);
+void drawScrollbar(NVGcontext* vg, Theme* theme, u32 index_off, u32 count, u32 max_per_page);
+void drawScrollbar(NVGcontext* vg, Theme* theme, float x, float y, float h, u32 index_off, u32 count, u32 max_per_page);
 
-void drawDimBackground(NVGcontext* vg);
+void drawScrollbar2(NVGcontext* vg, Theme* theme, float x, float y, float h, s64 index_off, s64 count, s64 row, s64 page);
+void drawScrollbar2(NVGcontext* vg, Theme* theme, s64 index_off, s64 count, s64 row, s64 page);
 
 void updateHighlightAnimation();
 void getHighlightAnimation(float* gradientX, float* gradientY, float* color);

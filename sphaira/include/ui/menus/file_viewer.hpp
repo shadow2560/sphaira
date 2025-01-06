@@ -23,8 +23,8 @@ private:
 
     std::unique_ptr<ScrollableText> m_scroll_text;
 
-    std::size_t m_start{};
-    std::size_t m_index{}; // where i am in the array
+    s64 m_start{};
+    s64 m_index{}; // where i am in the array
 };
 
 } // namespace sphaira::ui::menu::fileview

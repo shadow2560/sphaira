@@ -38,7 +38,7 @@ Mutex g_mutex_share[CURL_LOCK_DATA_LAST]{};
 
 struct DataStruct {
     std::vector<u8> data;
-    u64 offset{};
+    s64 offset{};
     FsFile f{};
     s64 file_offset{};
 };

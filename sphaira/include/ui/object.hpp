@@ -9,8 +9,6 @@ public:
     Object() = default;
     virtual ~Object() = default;
 
-    // virtual auto OnLayoutChange() -> void = 0;
-    virtual auto OnLayoutChange() -> void {};
     virtual auto Draw(NVGcontext* vg, Theme* theme) -> void = 0;
 
     auto GetPos() const noexcept {

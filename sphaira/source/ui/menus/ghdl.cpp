@@ -182,7 +182,7 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
                 }
 
                 std::vector<char> buf(chunk_size);
-                u64 offset{};
+                s64 offset{};
                 while (offset < info.uncompressed_size) {
                     const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                     if (bytes_read <= 0) {
@@ -248,22 +248,22 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
 
     this->SetActions(
         std::make_pair(Button::DOWN, Action{[this](){
-            if (ScrollHelperDown(m_index, m_index_offset, 1, 1, 8, m_entries.size())) {
+            if (m_list->ScrollDown(m_index, 1, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (ScrollHelperUp(m_index, m_index_offset, 1, 1, 8, m_entries.size())) {
+            if (m_list->ScrollUp(m_index, 1, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::DPAD_RIGHT, Action{[this](){
-            if (ScrollHelperDown(m_index, m_index_offset, 8, 1, 8, m_entries.size())) {
+            if (m_list->ScrollDown(m_index, 8, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::DPAD_LEFT, Action{[this](){
-            if (ScrollHelperUp(m_index, m_index_offset, 8, 1, 8, m_entries.size())) {
+            if (m_list->ScrollUp(m_index, 8, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
@@ -363,6 +363,9 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
             SetPop();
         }})
     );
+
+    const Vec4 v{75, GetY() + 1.f + 42.f, 1220.f-45.f*2, 60};
+    m_list = std::make_unique<List>(1, 8, m_pos, v);
 }
 
 Menu::~Menu() {
@@ -370,6 +373,14 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
+    m_list->OnUpdate(controller, touch, m_entries.size(), [this](auto i) {
+        if (m_index == i) {
+            FireAction(Button::A);
+        } else {
+            App::PlaySoundEffect(SoundEffect_Focus);
+            SetIndex(i);
+        }
+    });
 }
 
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
@@ -382,35 +393,10 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         return;
     }
 
-    const u64 SCROLL = m_index_offset;
-    constexpr u64 max_entry_display = 8;
-    const u64 entry_total = m_entries.size();
-
-    // only draw scrollbar if needed
-    if (entry_total > max_entry_display) {
-        const auto scrollbar_size = 500.f;
-        const auto sb_h = 1.f / (float)entry_total * scrollbar_size;
-        const auto sb_y = SCROLL;
-        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, gfx::getColour(gfx::Colour::BLACK));
-        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * (max_entry_display - 1)) - 4, gfx::getColour(gfx::Colour::SILVER));
-    }
-
-    // constexpr Vec4 line_top{30.f, 86.f, 1220.f, 1.f};
-    // constexpr Vec4 line_bottom{30.f, 646.f, 1220.f, 1.f};
-    // constexpr Vec4 block{280.f, 110.f, 720.f, 60.f};
-    constexpr Vec4 block{75.f, 110.f, 1220.f-45.f*2, 60.f};
     constexpr float text_xoffset{15.f};
 
-    // todo: cleanup
-    const float x = block.x;
-    float y = GetY() + 1.f + 42.f;
-    const float h = block.h;
-    const float w = block.w;
-
-    nvgSave(vg);
-    nvgScissor(vg, GetX(), GetY(), GetW(), GetH());
-
-    for (std::size_t i = m_index_offset; i < m_entries.size(); i++) {
+    m_list->Draw(vg, theme, m_entries.size(), [this, text_col](auto* vg, auto* theme, auto v, auto i) {
+        const auto& [x, y, w, h] = v;
         auto& e = m_entries[i];
 
         auto text_id = ThemeEntryID_TEXT;
@@ -425,20 +411,12 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         nvgSave(vg);
-        const auto txt_clip = std::min(GetY() + GetH(), y + h) - y;
-        nvgScissor(vg, x + text_xoffset, y, w-(x+text_xoffset+50), txt_clip);
+        nvgIntersectScissor(vg, x + text_xoffset, y, w-(x+text_xoffset+50), h);
             gfx::drawTextArgs(vg, x + text_xoffset, y + (h / 2.f), 20.f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, "%s By %s", e.repo.c_str(), e.owner.c_str());
         nvgRestore(vg);
 
         gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f), 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, "version: %s", e.tag.c_str());
-
-        y += h;
-        if (!InYBounds(y)) {
-            break;
-        }
-    }
-
-    nvgRestore(vg);
+    });
 }
 
 void Menu::OnFocusGained() {
@@ -448,10 +426,14 @@ void Menu::OnFocusGained() {
     }
 }
 
-void Menu::SetIndex(std::size_t index) {
+void Menu::SetIndex(s64 index) {
     m_index = index;
     if (!m_index) {
         m_index_offset = 0;
+    }
+
+    if (m_index > m_index_offset && m_index - m_index_offset >= 7) {
+        m_index_offset = m_index - 7;
     }
 
     SetTitleSubHeading(m_entries[m_index].json_path);

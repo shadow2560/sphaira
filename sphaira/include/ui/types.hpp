@@ -196,39 +196,31 @@ struct Theme {
     fs::FsPath path;
     PLSR_BFSTM music;
     ElementEntry elements[ThemeEntryID_MAX];
-
-    // NVGcolor background; // bg
-    // NVGcolor lines; // grid lines
-    // NVGcolor spacer; // lines in popup box
-    // NVGcolor text; // text colour
-    // NVGcolor text_info; // description text
-    NVGcolor selected; // selected colours
-    // NVGcolor overlay; // popup overlay colour
-
-    // void DrawElement(float x, float y, float w, float h, ThemeEntryID id);
 };
 
-enum class TouchState {
-    Start, // set when touch has started
-    Touching, // set when touch is held longer than 1 frame
-    Stop, // set after touch is released
-    None, // set when there is no touch
-};
+// enum class TouchGesture {
+//     None,
+//     Tap,
+//     Scroll,
+// };
 
 struct TouchInfo {
-    s32 initial_x;
-    s32 initial_y;
+    HidTouchState initial;
+    HidTouchState cur;
 
-    s32 cur_x;
-    s32 cur_y;
+    auto in_range(const Vec4& v) const -> bool {
+        return cur.x >= v.x && cur.x <= v.x + v.w && cur.y >= v.y && cur.y <= v.y + v.h;
+    }
 
-    s32 prev_x;
-    s32 prev_y;
-
-    u32 finger_id;
+    auto in_range(s32 x, s32 y, s32 w, s32 h) const -> bool {
+        return in_range(Vec4(x, y, w, h));
+    }
 
     bool is_touching;
     bool is_tap;
+    bool is_scroll;
+    bool is_clicked;
+    bool is_end;
 };
 
 enum class Button : u64 {

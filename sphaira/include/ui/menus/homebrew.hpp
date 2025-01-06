@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/menus/menu_base.hpp"
+#include "ui/list.hpp"
 #include "nro.hpp"
 #include "fs.hpp"
 #include "option.hpp"
@@ -29,7 +30,7 @@ struct Menu final : MenuBase {
     void Draw(NVGcontext* vg, Theme* theme) override;
     void OnFocusGained() override;
 
-    void SetIndex(std::size_t index);
+    void SetIndex(s64 index);
     void InstallHomebrew();
     void ScanHomebrew();
     void Sort();
@@ -50,8 +51,8 @@ private:
     static constexpr inline const char* INI_SECTION = "homebrew";
 
     std::vector<NroEntry> m_entries;
-    std::size_t m_start{};
-    std::size_t m_index{}; // where i am in the array
+    s64 m_index{}; // where i am in the array
+    std::unique_ptr<List> m_list;
 
     option::OptionLong m_sort{INI_SECTION, "sort", SortType::SortType_AlphabeticalStar};
     option::OptionLong m_order{INI_SECTION, "order", OrderType::OrderType_Decending};
