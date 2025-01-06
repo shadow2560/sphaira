@@ -95,7 +95,7 @@ FetchContent_Declare(libhaze
 
 FetchContent_Declare(libpulsar
     GIT_REPOSITORY https://github.com/ITotalJustice/switch-libpulsar.git
-    GIT_TAG d729be3
+    GIT_TAG de656e4
 )
 
 FetchContent_Declare(nanovg
@@ -224,39 +224,6 @@ set_target_properties(libhaze PROPERTIES
     # force optimisations in debug mode as otherwise vapor errors
     # due to force_inline attribute failing...
     COMPILE_OPTIONS "$<$<CONFIG:Debug>:-Os>"
-)
-
-# todo: upstream cmake
-add_library(libpulsar
-    ${libpulsar_SOURCE_DIR}/src/archive/archive_file.c
-    ${libpulsar_SOURCE_DIR}/src/archive/archive.c
-    ${libpulsar_SOURCE_DIR}/src/bfgrp/bfgrp_location.c
-    ${libpulsar_SOURCE_DIR}/src/bfgrp/bfgrp.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_file.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_group.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_sound.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_string.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_wave_archive.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar.c
-    ${libpulsar_SOURCE_DIR}/src/bfstm/bfstm_channel.c
-    ${libpulsar_SOURCE_DIR}/src/bfstm/bfstm_info.c
-    ${libpulsar_SOURCE_DIR}/src/bfstm/bfstm.c
-    ${libpulsar_SOURCE_DIR}/src/bfwar/bfwar_file.c
-    ${libpulsar_SOURCE_DIR}/src/bfwar/bfwar.c
-    ${libpulsar_SOURCE_DIR}/src/bfwav/bfwav_info.c
-    ${libpulsar_SOURCE_DIR}/src/bfwav/bfwav.c
-    ${libpulsar_SOURCE_DIR}/src/bfwsd/bfwsd_sound_data.c
-    ${libpulsar_SOURCE_DIR}/src/bfwsd/bfwsd_wave_id.c
-    ${libpulsar_SOURCE_DIR}/src/bfwsd/bfwsd.c
-    ${libpulsar_SOURCE_DIR}/src/player/player_load_formats.c
-    ${libpulsar_SOURCE_DIR}/src/player/player_load_lookup.c
-    ${libpulsar_SOURCE_DIR}/src/player/player_load.c
-    ${libpulsar_SOURCE_DIR}/src/player/player.c
-)
-target_include_directories(libpulsar PUBLIC ${libpulsar_SOURCE_DIR}/include)
-set_target_properties(libpulsar PROPERTIES
-    C_STANDARD 11
-    C_EXTENSIONS ON
 )
 
 add_library(stb INTERFACE)
