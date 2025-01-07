@@ -542,13 +542,14 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
         }})
     );
 
-    m_page_index = 0;
-    m_pages.resize(1);
-    PackListDownload();
-
+    
     const Vec4 v{75, 110, 350, 250};
     const Vec2 pad{10, 10};
     m_list = std::make_unique<List>(3, 6, m_pos, v, pad);
+
+    m_page_index = 0;
+    m_pages.resize(1);
+    PackListDownload();
 }
 
 Menu::~Menu() {
