@@ -767,11 +767,6 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
         if (m_index == i) {
             text_id = ThemeEntryID_TEXT_SELECTED;
             gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
-        } else {
-            // if (i == m_index_offset) {
-                // gfx::drawRect(vg, x, y, w, 1.f, text_col);
-            // }
-            // gfx::drawRect(vg, x, y + h, w, 1.f, text_col);
         }
 
         gfx::drawTextArgs(vg, x + w / 2, y + h / 2, 22, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER, theme->elements[ThemeEntryID_TEXT].colour, option.display_text.c_str());

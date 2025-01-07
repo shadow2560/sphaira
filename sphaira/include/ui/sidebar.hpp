@@ -13,7 +13,6 @@ public:
 
 protected:
     std::string m_title;
-    Vec2 m_offset{};
 };
 
 class SidebarEntryBool final : public SidebarEntryBase {
@@ -117,7 +116,6 @@ private:
     Side m_side;
     Items m_items;
     s64 m_index{};
-    s64 m_index_offset{};
 
     std::unique_ptr<List> m_list;
 

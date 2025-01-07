@@ -36,7 +36,6 @@ private:
     Items m_items;
     Callback m_callback;
     s64 m_index; // index in list array
-    s64 m_index_offset{}; // drawing from array start
 
     std::unique_ptr<List> m_list;
 

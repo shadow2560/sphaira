@@ -266,11 +266,6 @@ void Sidebar::SetIndex(s64 index) {
         m_items[m_index]->OnFocusLost();
         m_index = index;
         m_items[m_index]->OnFocusGained();
-
-        if (m_index > m_index_offset && m_index - m_index_offset >= 5) {
-            m_index_offset = m_index - 5;
-        }
-
         SetupButtons();
     }
 }

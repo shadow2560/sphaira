@@ -23,7 +23,7 @@ PopupList::PopupList(std::string title, Items items, std::string& index_ref)
     if (it != m_items.cend()) {
         m_index = std::distance(m_items.cbegin(), it);
         if (m_index >= 7) {
-            m_index_offset = m_index - 6;
+            // m_list->SetYoff((m_index - 6) * m_list->GetMaxY());
         }
     }
 
@@ -51,7 +51,7 @@ PopupList::PopupList(std::string title, Items items, Callback cb, std::string in
     if (it != m_items.cend()) {
         SetIndex(std::distance(m_items.cbegin(), it));
         if (m_index >= 7) {
-            m_index_offset = m_index - 6;
+            // m_list->SetYoff((m_index - 6) * m_list->GetMaxY());
         }
     }
 }
@@ -89,15 +89,16 @@ PopupList::PopupList(std::string title, Items items, Callback cb, s64 index)
     m_pos.y = 720.f - m_pos.h;
     m_line_top = m_pos.y + 70.f;
     m_line_bottom = 720.f - 73.f;
-    if (m_index >= 7) {
-        m_index_offset = m_index - 6;
-    }
 
     Vec4 v{m_block};
     v.y = m_line_top + 1.f + 42.f;
     const Vec4 pos{0, m_line_top, 1280.f, m_line_bottom - m_line_top};
     m_list = std::make_unique<List>(1, 7, pos, v);
     m_list->SetScrollBarPos(1250, m_line_top + 20, m_line_bottom - m_line_top - 40);
+
+    if (m_index >= 7) {
+        m_list->SetYoff((m_index - 6) * m_list->GetMaxY());
+    }
 }
 
 auto PopupList::Update(Controller* controller, TouchInfo* touch) -> void {
@@ -143,10 +144,6 @@ auto PopupList::OnFocusLost() noexcept -> void {
 
 void PopupList::SetIndex(s64 index) {
     m_index = index;
-
-    if (m_index > m_index_offset && m_index - m_index_offset >= 6) {
-        m_index_offset = m_index - 6;
-    }
 }
 
 } // namespace sphaira::ui

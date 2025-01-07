@@ -68,7 +68,6 @@ private:
 private:
     std::vector<Entry> m_entries;
     s64 m_index{};
-    s64 m_index_offset{};
     std::unique_ptr<List> m_list;
 };
 

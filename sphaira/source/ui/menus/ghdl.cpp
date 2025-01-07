@@ -404,7 +404,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             text_id = ThemeEntryID_TEXT_SELECTED;
             gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
         } else {
-            if (i == m_index_offset) {
+            if (i == m_index) {
                 gfx::drawRect(vg, x, y, w, 1.f, text_col);
             }
             gfx::drawRect(vg, x, y + h, w, 1.f, text_col);
@@ -429,11 +429,7 @@ void Menu::OnFocusGained() {
 void Menu::SetIndex(s64 index) {
     m_index = index;
     if (!m_index) {
-        m_index_offset = 0;
-    }
-
-    if (m_index > m_index_offset && m_index - m_index_offset >= 7) {
-        m_index_offset = m_index - 7;
+        m_list->SetYoff(0);
     }
 
     SetTitleSubHeading(m_entries[m_index].json_path);
@@ -442,8 +438,6 @@ void Menu::SetIndex(s64 index) {
 
 void Menu::Scan() {
     m_entries.clear();
-    m_index = 0;
-    m_index_offset = 0;
 
     // load from romfs first
     if (R_SUCCEEDED(romfsInit())) {
