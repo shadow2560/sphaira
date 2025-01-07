@@ -186,14 +186,12 @@ struct ThemeMeta {
     std::string name;
     std::string author;
     std::string version;
-    std::string ini_path;
+    fs::FsPath inherit;
+    fs::FsPath ini_path;
 };
 
 struct Theme {
-    std::string name;
-    std::string author;
-    std::string version;
-    fs::FsPath path;
+    ThemeMeta meta;
     PLSR_BFSTM music;
     ElementEntry elements[ThemeEntryID_MAX];
 };

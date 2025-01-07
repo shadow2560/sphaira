@@ -25,6 +25,7 @@ enum SoundEffect {
     SoundEffect_Startup,
     SoundEffect_Install,
     SoundEffect_Error,
+    SoundEffect_MAX,
 };
 
 enum class LaunchType {
@@ -106,7 +107,7 @@ public:
     auto LoadElementColour(std::string_view value) -> ElementEntry;
     auto LoadElement(std::string_view data) -> ElementEntry;
 
-    void LoadTheme(const fs::FsPath& path);
+    void LoadTheme(const ThemeMeta& meta);
     void CloseTheme();
     void ScanThemes(const std::string& path);
     void ScanThemeEntries();
@@ -162,7 +163,7 @@ public:
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto
 
     PLSR_BFSAR m_qlaunch_bfsar{};
-    PLSR_PlayerSoundId m_sound_ids[24]{};
+    PLSR_PlayerSoundId m_sound_ids[SoundEffect_MAX]{};
 
 private: // from nanovg decko3d example by adubbz
     static constexpr unsigned NumFramebuffers = 2;
