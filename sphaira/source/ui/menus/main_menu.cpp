@@ -225,6 +225,7 @@ MainMenu::MainMenu() {
             language_items.push_back("Portuguese"_i18n);
             language_items.push_back("Russian"_i18n);
             language_items.push_back("Swedish"_i18n);
+            language_items.push_back("Vietnamese"_i18n);
 
             options->Add(std::make_shared<SidebarEntryCallback>("Theme"_i18n, [this](){
                 SidebarEntryArray::Items theme_items{};
