@@ -107,7 +107,7 @@ public:
     auto LoadElementColour(std::string_view value) -> ElementEntry;
     auto LoadElement(std::string_view data, ElementType type) -> ElementEntry;
 
-    void LoadTheme(ThemeMeta meta, int inherit_level = 0);
+    void LoadTheme(const ThemeMeta& meta);
     void CloseTheme();
     void ScanThemes(const std::string& path);
     void ScanThemeEntries();
@@ -164,9 +164,6 @@ public:
 
     PLSR_BFSAR m_qlaunch_bfsar{};
     PLSR_PlayerSoundId m_sound_ids[SoundEffect_MAX]{};
-
-private:
-    void CloseMusic();
 
 private: // from nanovg decko3d example by adubbz
     static constexpr unsigned NumFramebuffers = 2;

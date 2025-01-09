@@ -33,6 +33,44 @@ extern "C" {
 namespace sphaira {
 namespace {
 
+struct ThemeData {
+    fs::FsPath music_path{"/config/sphaira/themes/default_music.bfstm"};
+    std::string elements[ThemeEntryID_MAX]{};
+};
+
+struct ThemeIdPair {
+    const char* label;
+    ThemeEntryID id;
+    ElementType type{ElementType::None};
+};
+
+constexpr ThemeIdPair THEME_ENTRIES[] = {
+    { "background", ThemeEntryID_BACKGROUND },
+    { "grid", ThemeEntryID_GRID },
+    { "text", ThemeEntryID_TEXT, ElementType::Colour },
+    { "text_info", ThemeEntryID_TEXT_INFO, ElementType::Colour },
+    { "text_selected", ThemeEntryID_TEXT_SELECTED, ElementType::Colour },
+    { "selected_background", ThemeEntryID_SELECTED_BACKGROUND, ElementType::Colour },
+    { "popup", ThemeEntryID_POPUP, ElementType::Colour },
+    { "line", ThemeEntryID_LINE, ElementType::Colour },
+    { "line_seperator", ThemeEntryID_LINE_SEPERATOR, ElementType::Colour },
+    { "sidebar", ThemeEntryID_SIDEBAR, ElementType::Colour },
+    { "scrollbar", ThemeEntryID_SCROLLBAR, ElementType::Colour },
+    { "scrollbar_background", ThemeEntryID_SCROLLBAR_BACKGROUND, ElementType::Colour },
+    { "progressbar", ThemeEntryID_PROGRESSBAR, ElementType::Colour },
+    { "progressbar_background", ThemeEntryID_PROGRESSBAR_BACKGROUND, ElementType::Colour },
+    { "highlight_1", ThemeEntryID_HIGHLIGHT_1, ElementType::Colour },
+    { "highlight_2", ThemeEntryID_HIGHLIGHT_2, ElementType::Colour },
+    { "icon_colour", ThemeEntryID_ICON_COLOUR, ElementType::Colour },
+    { "icon_audio", ThemeEntryID_ICON_AUDIO, ElementType::Texture },
+    { "icon_video", ThemeEntryID_ICON_VIDEO, ElementType::Texture },
+    { "icon_image", ThemeEntryID_ICON_IMAGE, ElementType::Texture },
+    { "icon_file", ThemeEntryID_ICON_FILE, ElementType::Texture },
+    { "icon_folder", ThemeEntryID_ICON_FOLDER, ElementType::Texture },
+    { "icon_zip", ThemeEntryID_ICON_ZIP, ElementType::Texture },
+    { "icon_nro", ThemeEntryID_ICON_NRO, ElementType::Texture },
+};
+
 constinit App* g_app{};
 
 void deko3d_error_cb(void* userData, const char* context, DkResult result, const char* message) {
@@ -234,6 +272,62 @@ auto LoadThemeMeta(const fs::FsPath& path, ThemeMeta& meta) -> bool {
     log_write("loaded meta from: %s\n", path.s);
     meta.ini_path = path;
     return true;
+}
+
+void LoadThemeInternal(ThemeMeta meta, ThemeData& theme_data, int inherit_level = 0) {
+    constexpr auto inherit_level_max = 5;
+
+    // all themes will inherit from black theme by default.
+    if (meta.inherit.empty() && !inherit_level) {
+        meta.inherit = "romfs:/themes/base_black_theme.ini";
+    }
+
+    // check if the theme inherits from another, if so, load it.
+    // block inheriting from itself.
+    if (inherit_level < inherit_level_max && !meta.inherit.empty() && strcasecmp(meta.inherit, "none") && meta.inherit != meta.ini_path) {
+        log_write("inherit is not empty: %s\n", meta.inherit.s);
+        if (R_SUCCEEDED(romfsInit())) {
+            ThemeMeta inherit_meta;
+            const auto has_meta = LoadThemeMeta(meta.inherit, inherit_meta);
+            romfsExit();
+
+            // base themes do not have a meta
+            if (!has_meta) {
+                inherit_meta.ini_path = meta.inherit;
+            }
+
+            LoadThemeInternal(inherit_meta, theme_data, inherit_level + 1);
+        }
+    }
+
+    static constexpr auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
+        auto theme_data = static_cast<ThemeData*>(UserData);
+
+        if (!std::strcmp(Section, "theme")) {
+            if (!std::strcmp(Key, "music")) {
+                theme_data->music_path = Value;
+            } else {
+                for (auto& e : THEME_ENTRIES) {
+                    if (!std::strcmp(Key, e.label)) {
+                        theme_data->elements[e.id] = Value;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return 1;
+    };
+
+    if (R_SUCCEEDED(romfsInit())) {
+        ON_SCOPE_EXIT(romfsExit());
+
+        if (!ini_browse(cb, &theme_data, meta.ini_path)) {
+            log_write("failed to open ini: %s\n", meta.ini_path.s);
+        } else {
+            log_write("opened ini: %s\n", meta.ini_path);
+        }
+    }
 }
 
 void haze_callback(const HazeCallbackData *data) {
@@ -975,16 +1069,12 @@ auto App::LoadElement(std::string_view value, ElementType type) -> ElementEntry 
     return {};
 }
 
-void App::CloseMusic() {
+void App::CloseTheme() {
     if (m_sound_ids[SoundEffect_Music]) {
         plsrPlayerFree(m_sound_ids[SoundEffect_Music]);
         m_sound_ids[SoundEffect_Music] = nullptr;
         plsrBFSTMClose(&m_theme.music);
     }
-}
-
-void App::CloseTheme() {
-    CloseMusic();
 
     for (auto& e : m_theme.elements) {
         if (e.type == ElementType::Texture) {
@@ -995,100 +1085,29 @@ void App::CloseTheme() {
     m_theme = {};
 }
 
-void App::LoadTheme(ThemeMeta meta, int inherit_level) {
+void App::LoadTheme(const ThemeMeta& meta) {
     // reset theme
     CloseTheme();
 
-    static constexpr struct ThemeIdPair{
-        const char* label;
-        ThemeEntryID id;
-        ElementType type{ElementType::None};
-    } theme_entries[] = {
-        { "background", ThemeEntryID_BACKGROUND },
-        { "grid", ThemeEntryID_GRID },
-        { "text", ThemeEntryID_TEXT, ElementType::Colour },
-        { "text_info", ThemeEntryID_TEXT_INFO, ElementType::Colour },
-        { "text_selected", ThemeEntryID_TEXT_SELECTED, ElementType::Colour },
-        { "selected_background", ThemeEntryID_SELECTED_BACKGROUND, ElementType::Colour },
-        { "popup", ThemeEntryID_POPUP, ElementType::Colour },
-        { "line", ThemeEntryID_LINE, ElementType::Colour },
-        { "line_seperator", ThemeEntryID_LINE_SEPERATOR, ElementType::Colour },
-        { "sidebar", ThemeEntryID_SIDEBAR, ElementType::Colour },
-        { "scrollbar", ThemeEntryID_SCROLLBAR, ElementType::Colour },
-        { "scrollbar_background", ThemeEntryID_SCROLLBAR_BACKGROUND, ElementType::Colour },
-        { "progressbar", ThemeEntryID_PROGRESSBAR, ElementType::Colour },
-        { "progressbar_background", ThemeEntryID_PROGRESSBAR_BACKGROUND, ElementType::Colour },
-        { "highlight_1", ThemeEntryID_HIGHLIGHT_1, ElementType::Colour },
-        { "highlight_2", ThemeEntryID_HIGHLIGHT_2, ElementType::Colour },
-        { "icon_colour", ThemeEntryID_ICON_COLOUR, ElementType::Colour },
-        { "icon_audio", ThemeEntryID_ICON_AUDIO, ElementType::Texture },
-        { "icon_video", ThemeEntryID_ICON_VIDEO, ElementType::Texture },
-        { "icon_image", ThemeEntryID_ICON_IMAGE, ElementType::Texture },
-        { "icon_file", ThemeEntryID_ICON_FILE, ElementType::Texture },
-        { "icon_folder", ThemeEntryID_ICON_FOLDER, ElementType::Texture },
-        { "icon_zip", ThemeEntryID_ICON_ZIP, ElementType::Texture },
-        { "icon_nro", ThemeEntryID_ICON_NRO, ElementType::Texture },
-    };
-
-    const auto inherit_level_max = 5;
-
-    // all themes will inherit from black theme by default.
-    if (meta.inherit.empty() && !inherit_level) {
-        meta.inherit = "romfs:/themes/base_black_theme.ini";
-    }
-
-    // check if the theme inherits from another, if so, load it.
-    // block inheriting from itself.
-    if (inherit_level < inherit_level_max && !meta.inherit.empty() && strcasecmp(meta.inherit, "none") && meta.inherit != meta.ini_path) {
-        log_write("inherit is not empty: %s\n", meta.inherit.s);
-        if (R_SUCCEEDED(romfsInit())) {
-            ThemeMeta inherit_meta;
-            const auto has_meta = LoadThemeMeta(meta.inherit, inherit_meta);
-            romfsExit();
-
-            // base themes do not have a meta
-            if (!has_meta) {
-                inherit_meta.ini_path = meta.inherit;
-            }
-
-            LoadTheme(inherit_meta, inherit_level + 1);
-        }
-    }
-
+    ThemeData theme_data{};
+    LoadThemeInternal(meta, theme_data);
     m_theme.meta = meta;
-
-    const auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
-        auto app = static_cast<App*>(UserData);
-        auto& theme = app->m_theme;
-
-        if (!std::strcmp(Section, "theme")) {
-            if (!std::strcmp(Key, "music")) {
-                app->CloseMusic();
-                if (R_SUCCEEDED(plsrBFSTMOpen(Value, &theme.music))) {
-                    if (R_SUCCEEDED(plsrPlayerLoadStream(&theme.music, &app->m_sound_ids[SoundEffect_Music]))) {
-                        app->PlaySoundEffect(SoundEffect_Music);
-                    }
-                }
-            } else {
-                for (auto& e : theme_entries) {
-                    if (!std::strcmp(Key, e.label)) {
-                        // log_write("\tfound: %s value: %s\n", Key, Value);
-                        theme.elements[e.id] = app->LoadElement(Value, e.type);
-                        break;
-                    }
-                }
-            }
-        }
-
-        return 1;
-    };
 
     if (R_SUCCEEDED(romfsInit())) {
         ON_SCOPE_EXIT(romfsExit());
-        if (!ini_browse(cb, this, meta.ini_path)) {
-            log_write("failed to open ini: %s\n", meta.ini_path.s);
-        } else {
-            log_write("opened ini: %s\n", meta.ini_path);
+
+        // load all assets / colours.
+        for (auto& e : THEME_ENTRIES) {
+            m_theme.elements[e.id] = LoadElement(theme_data.elements[e.id], e.type);
+        }
+
+        // load music
+        if (!theme_data.music_path.empty()) {
+            if (R_SUCCEEDED(plsrBFSTMOpen(theme_data.music_path, &m_theme.music))) {
+                if (R_SUCCEEDED(plsrPlayerLoadStream(&m_theme.music, &m_sound_ids[SoundEffect_Music]))) {
+                    PlaySoundEffect(SoundEffect_Music);
+                }
+            }
         }
     }
 }
