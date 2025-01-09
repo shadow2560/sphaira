@@ -578,7 +578,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
-    const auto& text_col = theme->elements[ThemeEntryID_TEXT].colour;
+    const auto& text_col = theme->GetColour(ThemeEntryID_TEXT);
 
     if (m_entries_current.empty()) {
         gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, text_col, "Empty..."_i18n.c_str());
@@ -605,19 +605,17 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         if (e.IsSelected()) {
-            // gfx::drawText(vg, x - 60.f, y + (h / 2.f) - (48.f / 2), 48.f, "\uE14B", nullptr, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, gfx::Colour::CYAN);
-            gfx::drawText(vg, x, y + (h / 2.f) - (24.f / 2), 24.f, "\uE14B", nullptr, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, gfx::Colour::CYAN);
+            gfx::drawText(vg, Vec2{x, y + (h / 2.f) - (24.f / 2)}, 24.f, "\uE14B", nullptr, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT_SELECTED));
         }
 
         auto text_id = ThemeEntryID_TEXT;
         if (m_index == i) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
-            if (i == m_index) {
-                gfx::drawRect(vg, x, y, w, 1.f, text_col);
+            if (i != m_entries_current.size() - 1) {
+                gfx::drawRect(vg, Vec4{x, y + h, w, 1.f}, theme->GetColour(ThemeEntryID_LINE_SEPERATOR));
             }
-            gfx::drawRect(vg, x, y + h, w, 1.f, text_col);
         }
 
         if (e.IsDir()) {
@@ -642,12 +640,12 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
         nvgSave(vg);
         nvgIntersectScissor(vg, x + text_xoffset+65, y, w-(x+text_xoffset+65+50), h);
-            gfx::drawText(vg, x + text_xoffset+65, y + (h / 2.f), 20.f, e.name, NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour);
+            gfx::drawText(vg, x + text_xoffset+65, y + (h / 2.f), 20.f, e.name, NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id));
         nvgRestore(vg);
 
         if (e.IsDir()) {
-            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->elements[text_id].colour, "%zd files"_i18n.c_str(), e.file_count);
-            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->elements[text_id].colour, "%zd dirs"_i18n.c_str(), e.dir_count);
+            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%zd files"_i18n.c_str(), e.file_count);
+            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(text_id), "%zd dirs"_i18n.c_str(), e.dir_count);
         } else {
             if (!e.time_stamp.is_valid) {
                 const auto path = GetNewPath(e);
@@ -656,11 +654,11 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             const auto t = (time_t)(e.time_stamp.modified);
             struct tm tm{};
             localtime_r(&t, &tm);
-            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->elements[text_id].colour, "%02u/%02u/%u", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
+            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(text_id), "%02u/%02u/%u", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
             if ((double)e.file_size / 1024.0 / 1024.0 <= 0.009) {
-                gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->elements[text_id].colour, "%.2f KiB", (double)e.file_size / 1024.0);
+                gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%.2f KiB", (double)e.file_size / 1024.0);
             } else {
-                gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->elements[text_id].colour, "%.2f MiB", (double)e.file_size / 1024.0 / 1024.0);
+                gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%.2f MiB", (double)e.file_size / 1024.0 / 1024.0);
             }
         }
     });

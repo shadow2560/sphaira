@@ -162,21 +162,55 @@ struct ElementEntry {
 };
 
 enum ThemeEntryID {
+    // colour of the background, can be an image.
     ThemeEntryID_BACKGROUND,
-
+    // colour of the grid background (homebrew, appstore), can be an image.
     ThemeEntryID_GRID,
-    ThemeEntryID_SELECTED,
-    ThemeEntryID_SELECTED_OVERLAY,
-    ThemeEntryID_TEXT,
-    ThemeEntryID_TEXT_SELECTED,
+    // background colour of a popup.
+    ThemeEntryID_POPUP,
+    // colour of the error text / button.
+    ThemeEntryID_ERROR,
 
+    // colour of all text.
+    ThemeEntryID_TEXT,
+    // colour of text info and subheaders.
+    ThemeEntryID_TEXT_INFO,
+    // colour of selected item text.
+    ThemeEntryID_TEXT_SELECTED,
+    // background colour of a selected item, can be an image (not recommended).
+    ThemeEntryID_SELECTED_BACKGROUND,
+
+    // colour of line separators in a list.
+    ThemeEntryID_LINE,
+    ThemeEntryID_LINE_SEPERATOR,
+
+    // colour of the sidebar backrgound.
+    ThemeEntryID_SIDEBAR,
+
+    // colour of the scrollbar (full portion).
+    ThemeEntryID_SCROLLBAR,
+    // colour of the scrollbar background (empty portion).
+    ThemeEntryID_SCROLLBAR_BACKGROUND,
+
+    // colour of the progressbar (full portion).
+    ThemeEntryID_PROGRESSBAR,
+    // colour of the progressbar background (empty portion).
+    ThemeEntryID_PROGRESSBAR_BACKGROUND,
+
+    // the colours of the pulsing effect, from 1 -> 2.
+    ThemeEntryID_HIGHLIGHT_1,
+    ThemeEntryID_HIGHLIGHT_2,
+
+    // changes the colours of the internal icons used below.
+    ThemeEntryID_ICON_COLOUR,
+
+    // images used in the filebrowser.
     ThemeEntryID_ICON_AUDIO,
     ThemeEntryID_ICON_VIDEO,
     ThemeEntryID_ICON_IMAGE,
     ThemeEntryID_ICON_FILE,
     ThemeEntryID_ICON_FOLDER,
     ThemeEntryID_ICON_ZIP,
-    ThemeEntryID_ICON_GAME,
     ThemeEntryID_ICON_NRO,
 
     ThemeEntryID_MAX,
@@ -194,6 +228,10 @@ struct Theme {
     ThemeMeta meta;
     PLSR_BFSTM music;
     ElementEntry elements[ThemeEntryID_MAX];
+
+    auto GetColour(ThemeEntryID id) const {
+        return elements[id].colour;
+    }
 };
 
 // enum class TouchGesture {

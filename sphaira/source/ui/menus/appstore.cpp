@@ -271,10 +271,18 @@ void DrawIcon(NVGcontext* vg, const LazyImage& l, const LazyImage& d, float x, f
         rounded_image = false;
         gfx::drawRect(vg, x, y, w, h, nvgRGB(i.first_pixel[0], i.first_pixel[1], i.first_pixel[2]), rounded);
     }
+    if (iw > w || ih > h) {
+        crop = true;
+        nvgSave(vg);
+        nvgIntersectScissor(vg, x, y, w, h);
+    }
     if (rounded_image) {
         gfx::drawImageRounded(vg, ix, iy, iw, ih, i.image);
     } else {
         gfx::drawImage(vg, ix, iy, iw, ih, i.image);
+    }
+    if (crop) {
+        nvgRestore(vg);
     }
 }
 
@@ -725,11 +733,13 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
     constexpr Vec4 line_vec(30, 86, 1220, 646);
     constexpr Vec4 banner_vec(70, line_vec.y + 20, 848.f, 208.f);
     constexpr Vec4 icon_vec(968, line_vec.y + 30, 256, 150);
+    constexpr Vec4 grid_vec(icon_vec.x - 50, line_vec.y + 1, line_vec.w, line_vec.h - line_vec.y - 1);
 
     // nvgSave(vg);
     // nvgScissor(vg, line_vec.x, line_vec.y, line_vec.w - line_vec.x, line_vec.h - line_vec.y); // clip
     // ON_SCOPE_EXIT(nvgRestore(vg));
 
+    gfx::drawRect(vg, grid_vec, theme->GetColour(ThemeEntryID_GRID));
     DrawIcon(vg, m_banner, m_entry.image.image ? m_entry.image : m_default_icon, banner_vec, false);
     DrawIcon(vg, m_entry.image, m_default_icon, icon_vec);
 
@@ -738,19 +748,19 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
     const float text_inc_y = 32;
     const float font_size = 20;
 
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "version: %s"_i18n.c_str(), m_entry.version.c_str());
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "version: %s"_i18n.c_str(), m_entry.version.c_str());
     text_start_y += text_inc_y;
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "updated: %s"_i18n.c_str(), m_entry.updated.c_str());
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "updated: %s"_i18n.c_str(), m_entry.updated.c_str());
     text_start_y += text_inc_y;
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "category: %s"_i18n.c_str(), m_entry.category.c_str());
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "category: %s"_i18n.c_str(), m_entry.category.c_str());
     text_start_y += text_inc_y;
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "extracted: %.2f MiB"_i18n.c_str(), (double)m_entry.extracted / 1024.0);
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "extracted: %.2f MiB"_i18n.c_str(), (double)m_entry.extracted / 1024.0);
     text_start_y += text_inc_y;
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "app_dls: %s"_i18n.c_str(), AppDlToStr(m_entry.app_dls).c_str());
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "app_dls: %s"_i18n.c_str(), AppDlToStr(m_entry.app_dls).c_str());
     text_start_y += text_inc_y;
 
     // for (const auto& option : m_options) {
-    const auto& text_col = theme->elements[ThemeEntryID_TEXT].colour;
+    const auto& text_col = theme->GetColour(ThemeEntryID_TEXT);
 
     // todo: rewrite this mess and use list
     constexpr float mm = 0;//20;
@@ -766,10 +776,10 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
         auto text_id = ThemeEntryID_TEXT;
         if (m_index == i) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, Vec4{x, y, w, h});
         }
 
-        gfx::drawTextArgs(vg, x + w / 2, y + h / 2, 22, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER, theme->elements[ThemeEntryID_TEXT].colour, option.display_text.c_str());
+        gfx::drawTextArgs(vg, x + w / 2, y + h / 2, 22, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER, theme->GetColour(ThemeEntryID_TEXT), option.display_text.c_str());
         y -= block.h + 18;
     }
 
@@ -1022,12 +1032,12 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
     if (m_entries.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Loading..."_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Loading..."_i18n.c_str());
         return;
     }
 
     if (m_entries_current.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Empty!"_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty!"_i18n.c_str());
         return;
     }
 
@@ -1096,7 +1106,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         auto text_id = ThemeEntryID_TEXT;
         if (pos == m_index) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
             DrawElement(x, y, w, h, ThemeEntryID_GRID);
         }
@@ -1111,9 +1121,9 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         nvgIntersectScissor(vg, v.x, v.y, w - 30.f, h); // clip
         {
             const float font_size = 18;
-            gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.title.c_str());
-            gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.author.c_str());
-            gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.version.c_str());
+            gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.title.c_str());
+            gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.author.c_str());
+            gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.version.c_str());
         }
         nvgRestore(vg);
 

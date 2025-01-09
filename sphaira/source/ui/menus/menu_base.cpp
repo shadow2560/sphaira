@@ -41,7 +41,7 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
     #define draw(...) \
         gfx::textBounds(vg, 0, 0, bounds, __VA_ARGS__); \
         start_x -= bounds[2] - bounds[0]; \
-        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT].colour, __VA_ARGS__); \
+        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT), __VA_ARGS__); \
         start_x -= spacing;
 
     // draw("version %s", APP_VERSION);
@@ -58,17 +58,15 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
 
     #undef draw
 
-    gfx::drawRect(vg, 30.f, 86.f, 1220.f, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
-    gfx::drawRect(vg, 30.f, 646.0f, 1220.f, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
+    gfx::drawRect(vg, 30.f, 86.f, 1220.f, 1.f, theme->GetColour(ThemeEntryID_TEXT));
+    gfx::drawRect(vg, 30.f, 646.0f, 1220.f, 1.f, theme->GetColour(ThemeEntryID_TEXT));
 
     nvgFontSize(vg, 28);
     gfx::textBounds(vg, 0, 0, bounds, m_title.c_str());
-    gfx::drawTextArgs(vg, 80, start_y, 28.f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
-    gfx::drawTextArgs(vg, 80 + (bounds[2] - bounds[0]) + 10, start_y, 16, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT].colour, m_title_sub_heading.c_str());
+    gfx::drawTextArgs(vg, 80, start_y, 28.f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str());
+    gfx::drawTextArgs(vg, 80 + (bounds[2] - bounds[0]) + 10, start_y, 16, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT_INFO), m_title_sub_heading.c_str());
 
-    // gfx::drawTextArgs(vg, 80, 65, 28.f, NVG_ALIGN_LEFT, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
-    // gfx::drawTextArgs(vg, 80, 680.f, 18, NVG_ALIGN_LEFT, theme->elements[ThemeEntryID_TEXT].colour, "%s", m_sub_heading.c_str());
-    gfx::drawTextArgs(vg, 80, 685.f, 18, NVG_ALIGN_LEFT, theme->elements[ThemeEntryID_TEXT].colour, "%s", m_sub_heading.c_str());
+    gfx::drawTextArgs(vg, 80, 685.f, 18, NVG_ALIGN_LEFT, theme->GetColour(ThemeEntryID_TEXT), "%s", m_sub_heading.c_str());
 }
 
 void MenuBase::SetTitle(std::string title) {

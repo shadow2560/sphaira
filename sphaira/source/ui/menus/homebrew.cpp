@@ -196,7 +196,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         auto text_id = ThemeEntryID_TEXT;
         if (pos == m_index) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, v, theme->elements[ThemeEntryID_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
             DrawElement(v, ThemeEntryID_GRID);
         }
@@ -216,9 +216,9 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             }
 
             const float font_size = 18;
-            gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, "%s%s", has_star ? "\u2605 " : "", e.GetName());
-            gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.GetAuthor());
-            gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.GetDisplayVersion());
+            gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), "%s%s", has_star ? "\u2605 " : "", e.GetName());
+            gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetAuthor());
+            gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetDisplayVersion());
         }
         nvgRestore(vg);
     });

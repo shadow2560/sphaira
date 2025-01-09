@@ -747,6 +747,48 @@ void App::Poll() {
     hidGetTouchScreenStates(&state, 1);
     m_touch_info.is_clicked = false;
 
+// todo: replace old touch code with gestures from below
+#if 0
+    static HidGestureState prev_gestures[17]{};
+    HidGestureState gestures[17]{};
+    const auto gesture_count = hidGetGestureStates(gestures, std::size(gestures));
+    for (int i = (int)gesture_count - 1; i >= 0; i--) {
+        bool found = false;
+        for (int j = 0; j < gesture_count; j++) {
+            if (gestures[i].type == prev_gestures[j].type && gestures[i].sampling_number == prev_gestures[j].sampling_number) {
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            continue;
+        }
+
+        auto gesture = gestures[i];
+        if (gesture_count && gesture.type == HidGestureType_Swipe) {
+            log_write("[SWIPE] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Tap) {
+            log_write("[TAP] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Press) {
+            log_write("[PRESS] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Cancel) {
+            log_write("[CANCEL] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Complete) {
+            log_write("[COMPLETE] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Pan) {
+            log_write("[PAN] got gesture sampling_number: %d context_number: %d x: %d y: %d dx: %d dy: %d vx: %.2f vy: %.2f count: %d\n", gesture.sampling_number, gesture.context_number, gesture.x, gesture.y, gesture.delta_x, gesture.delta_y, gesture.velocity_x, gesture.velocity_y, gesture.point_count);
+        }
+    }
+
+    memcpy(prev_gestures, gestures, sizeof(gestures));
+#endif
+
     if (state.count == 1 && !m_touch_info.is_touching) {
         m_touch_info.initial = m_touch_info.cur = state.touches[0];
         m_touch_info.is_touching = true;
@@ -860,7 +902,13 @@ void DrawElement(const Vec4& v, ThemeEntryID id) {
         case ElementType::None: {
         } break;
         case ElementType::Texture: {
-            const auto paint = nvgImagePattern(g_app->vg, v.x, v.y, v.w, v.h, 0, e.texture, 1.f);
+            auto paint = nvgImagePattern(g_app->vg, v.x, v.y, v.w, v.h, 0, e.texture, 1.f);
+            // override the icon colours if set
+            if (id > ThemeEntryID_ICON_COLOUR && id < ThemeEntryID_MAX) {
+                if (g_app->m_theme.elements[ThemeEntryID_ICON_COLOUR].type != ElementType::None) {
+                    paint.innerColor = g_app->m_theme.GetColour(ThemeEntryID_ICON_COLOUR);
+                }
+            }
             ui::gfx::drawRect(g_app->vg, v, paint);
         } break;
         case ElementType::Colour: {
@@ -885,62 +933,113 @@ auto App::LoadElementColour(std::string_view value) -> ElementEntry {
 
     if (value.starts_with("0x")) {
         value = value.substr(2);
-    } else if (value.starts_with('#')) {
-        value = value.substr(1);
+    } else {
+        return {};
     }
 
-    const u32 c = std::strtol(value.data(), nullptr, 16);
-    if (c) {
-        entry.colour = nvgRGBA((c >> 24) & 0xFF, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
-        entry.type = ElementType::Colour;
+    char* end;
+    u32 c = std::strtoul(value.data(), &end, 16);
+    if (!c && value.data() == end) {
+        return {};
     }
 
+    // force alpha bit if not already set.
+    if (value.length() <= 6) {
+        c <<= 8;
+        c |= 0xFF;
+    }
+
+    entry.colour = nvgRGBA((c >> 24) & 0xFF, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
+    entry.type = ElementType::Colour;
     return entry;
 }
 
-auto App::LoadElement(std::string_view value) -> ElementEntry {
+auto App::LoadElement(std::string_view value, ElementType type) -> ElementEntry {
     if (value.size() <= 1) {
         return {};
     }
 
-    if (auto e = LoadElementImage(value); e.type != ElementType::None) {
-        return e;
+    if (type == ElementType::None || type == ElementType::Colour) {
+        // most assets are colours, so prioritise this first
+        if (auto e = LoadElementColour(value); e.type != ElementType::None) {
+            return e;
+        }
     }
 
-    if (auto e = LoadElementColour(value); e.type != ElementType::None) {
-        return e;
+    if (type == ElementType::None || type == ElementType::Texture) {
+        if (auto e = LoadElementImage(value); e.type != ElementType::None) {
+            return e;
+        }
     }
 
     return {};
 }
 
-void App::CloseTheme() {
-    m_theme.meta.name.clear();
-    m_theme.meta.author.clear();
-    m_theme.meta.version.clear();
-    m_theme.meta.ini_path.clear();
-
+void App::CloseMusic() {
     if (m_sound_ids[SoundEffect_Music]) {
         plsrPlayerFree(m_sound_ids[SoundEffect_Music]);
         m_sound_ids[SoundEffect_Music] = nullptr;
         plsrBFSTMClose(&m_theme.music);
     }
+}
+
+void App::CloseTheme() {
+    CloseMusic();
 
     for (auto& e : m_theme.elements) {
         if (e.type == ElementType::Texture) {
             nvgDeleteImage(vg, e.texture);
         }
-        e.type = ElementType::None;
     }
+
+    m_theme = {};
 }
 
-void App::LoadTheme(const ThemeMeta& meta) {
+void App::LoadTheme(ThemeMeta meta, int inherit_level) {
     // reset theme
     CloseTheme();
 
+    static constexpr struct ThemeIdPair{
+        const char* label;
+        ThemeEntryID id;
+        ElementType type{ElementType::None};
+    } theme_entries[] = {
+        { "background", ThemeEntryID_BACKGROUND },
+        { "grid", ThemeEntryID_GRID },
+        { "text", ThemeEntryID_TEXT, ElementType::Colour },
+        { "text_info", ThemeEntryID_TEXT_INFO, ElementType::Colour },
+        { "text_selected", ThemeEntryID_TEXT_SELECTED, ElementType::Colour },
+        { "selected_background", ThemeEntryID_SELECTED_BACKGROUND, ElementType::Colour },
+        { "popup", ThemeEntryID_POPUP, ElementType::Colour },
+        { "line", ThemeEntryID_LINE, ElementType::Colour },
+        { "line_seperator", ThemeEntryID_LINE_SEPERATOR, ElementType::Colour },
+        { "sidebar", ThemeEntryID_SIDEBAR, ElementType::Colour },
+        { "scrollbar", ThemeEntryID_SCROLLBAR, ElementType::Colour },
+        { "scrollbar_background", ThemeEntryID_SCROLLBAR_BACKGROUND, ElementType::Colour },
+        { "progressbar", ThemeEntryID_PROGRESSBAR, ElementType::Colour },
+        { "progressbar_background", ThemeEntryID_PROGRESSBAR_BACKGROUND, ElementType::Colour },
+        { "highlight_1", ThemeEntryID_HIGHLIGHT_1, ElementType::Colour },
+        { "highlight_2", ThemeEntryID_HIGHLIGHT_2, ElementType::Colour },
+        { "icon_colour", ThemeEntryID_ICON_COLOUR, ElementType::Colour },
+        { "icon_audio", ThemeEntryID_ICON_AUDIO, ElementType::Texture },
+        { "icon_video", ThemeEntryID_ICON_VIDEO, ElementType::Texture },
+        { "icon_image", ThemeEntryID_ICON_IMAGE, ElementType::Texture },
+        { "icon_file", ThemeEntryID_ICON_FILE, ElementType::Texture },
+        { "icon_folder", ThemeEntryID_ICON_FOLDER, ElementType::Texture },
+        { "icon_zip", ThemeEntryID_ICON_ZIP, ElementType::Texture },
+        { "icon_nro", ThemeEntryID_ICON_NRO, ElementType::Texture },
+    };
+
+    const auto inherit_level_max = 5;
+
+    // all themes will inherit from black theme by default.
+    if (meta.inherit.empty() && !inherit_level) {
+        meta.inherit = "romfs:/themes/base_black_theme.ini";
+    }
+
     // check if the theme inherits from another, if so, load it.
     // block inheriting from itself.
-    if (!meta.inherit.empty() && meta.inherit != meta.ini_path) {
+    if (inherit_level < inherit_level_max && !meta.inherit.empty() && strcasecmp(meta.inherit, "none") && meta.inherit != meta.ini_path) {
         log_write("inherit is not empty: %s\n", meta.inherit.s);
         if (R_SUCCEEDED(romfsInit())) {
             ThemeMeta inherit_meta;
@@ -952,7 +1051,7 @@ void App::LoadTheme(const ThemeMeta& meta) {
                 inherit_meta.ini_path = meta.inherit;
             }
 
-            LoadTheme(inherit_meta);
+            LoadTheme(inherit_meta, inherit_level + 1);
         }
     }
 
@@ -961,45 +1060,23 @@ void App::LoadTheme(const ThemeMeta& meta) {
     const auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
         auto app = static_cast<App*>(UserData);
         auto& theme = app->m_theme;
-        std::string_view section{Section};
-        std::string_view key{Key};
-        std::string_view value{Value};
 
-        if (section == "theme") {
-            if (key == "background") {
-                theme.elements[ThemeEntryID_BACKGROUND] = app->LoadElement(value);
-            } else if (key == "music") {
+        if (!std::strcmp(Section, "theme")) {
+            if (!std::strcmp(Key, "music")) {
+                app->CloseMusic();
                 if (R_SUCCEEDED(plsrBFSTMOpen(Value, &theme.music))) {
                     if (R_SUCCEEDED(plsrPlayerLoadStream(&theme.music, &app->m_sound_ids[SoundEffect_Music]))) {
                         app->PlaySoundEffect(SoundEffect_Music);
                     }
                 }
-            } else if (key == "grid") {
-                theme.elements[ThemeEntryID_GRID] = app->LoadElement(value);
-            } else if (key == "selected") {
-                theme.elements[ThemeEntryID_SELECTED] = app->LoadElement(value);
-            } else if (key == "selected_overlay") {
-                theme.elements[ThemeEntryID_SELECTED_OVERLAY] = app->LoadElement(value);
-            } else if (key == "text") {
-                theme.elements[ThemeEntryID_TEXT] = app->LoadElementColour(value);
-            } else if (key == "text_selected") {
-                theme.elements[ThemeEntryID_TEXT_SELECTED] = app->LoadElementColour(value);
-            } else if (key == "icon_audio") {
-                theme.elements[ThemeEntryID_ICON_AUDIO] = app->LoadElement(value);
-            } else if (key == "icon_video") {
-                theme.elements[ThemeEntryID_ICON_VIDEO] = app->LoadElement(value);
-            } else if (key == "icon_image") {
-                theme.elements[ThemeEntryID_ICON_IMAGE] = app->LoadElement(value);
-            } else if (key == "icon_file") {
-                theme.elements[ThemeEntryID_ICON_FILE] = app->LoadElement(value);
-            } else if (key == "icon_folder") {
-                theme.elements[ThemeEntryID_ICON_FOLDER] = app->LoadElement(value);
-            } else if (key == "icon_zip") {
-                theme.elements[ThemeEntryID_ICON_ZIP] = app->LoadElement(value);
-            } else if (key == "icon_game") {
-                theme.elements[ThemeEntryID_ICON_GAME] = app->LoadElement(value);
-            } else if (key == "icon_nro") {
-                theme.elements[ThemeEntryID_ICON_NRO] = app->LoadElement(value);
+            } else {
+                for (auto& e : theme_entries) {
+                    if (!std::strcmp(Key, e.label)) {
+                        // log_write("\tfound: %s value: %s\n", Key, Value);
+                        theme.elements[e.id] = app->LoadElement(Value, e.type);
+                        break;
+                    }
+                }
             }
         }
 
@@ -1207,6 +1284,7 @@ App::App(const char* argv0) {
     appletHook(&m_appletHookCookie, appplet_hook_calback, this);
 
     hidInitializeTouchScreen();
+    hidInitializeGesture();
     padConfigureInput(8, HidNpadStyleSet_NpadStandard);
     // padInitializeDefault(&m_pad);
     padInitializeAny(&m_pad);

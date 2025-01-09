@@ -19,15 +19,9 @@ auto NotifEntry::Draw(NVGcontext* vg, Theme* theme, float y) -> bool {
 }
 
 auto NotifEntry::Draw(NVGcontext* vg, Theme* theme) -> void {
-    auto overlay_col = theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour;
-    auto selected_col = theme->elements[ThemeEntryID_SELECTED].colour;
-    auto text_col = theme->elements[ThemeEntryID_TEXT].colour;
+    auto text_col = theme->GetColour(ThemeEntryID_TEXT);
     float font_size = 18.f;
-    // overlay_col.a = 0.2f;
-    // selected_col.a = 0.2f;
-    // text_col.a = 0.2f;
 
-    // auto vg = App::GetVg();
     if (!m_bounds_measured) {
         m_bounds_measured = true;
         m_pos.w = 320.f;
@@ -49,7 +43,7 @@ auto NotifEntry::Draw(NVGcontext* vg, Theme* theme) -> void {
         }
     }
 
-    gfx::drawRectOutline(vg, 4.f, overlay_col, m_pos, selected_col);
+    gfx::drawRectOutline(vg, theme, 4.f, m_pos);
     gfx::drawText(vg, Vec2{m_pos.x + (m_pos.w / 2.f), m_pos.y + (m_pos.h / 2.f)}, font_size, text_col, m_text.c_str(), NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER);
 }
 

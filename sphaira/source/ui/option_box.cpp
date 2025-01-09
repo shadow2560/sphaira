@@ -12,10 +12,10 @@ OptionBoxEntry::OptionBoxEntry(const std::string& text, Vec4 pos)
 
 auto OptionBoxEntry::Draw(NVGcontext* vg, Theme* theme) -> void {
     if (m_selected) {
-        gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);
-        gfx::drawText(vg, m_text_pos, 26.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, m_text.c_str(), NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        gfx::drawRectOutline(vg, theme, 4.f, m_pos);
+        gfx::drawText(vg, m_text_pos, 26.f, theme->GetColour(ThemeEntryID_TEXT_SELECTED), m_text.c_str(), NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
     } else {
-        gfx::drawText(vg, m_text_pos, 26.f, theme->elements[ThemeEntryID_TEXT].colour, m_text.c_str(), NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        gfx::drawText(vg, m_text_pos, 26.f, theme->GetColour(ThemeEntryID_TEXT), m_text.c_str(), NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
     }
 }
 
@@ -94,14 +94,14 @@ auto OptionBox::Update(Controller* controller, TouchInfo* touch) -> void {
 auto OptionBox::Draw(NVGcontext* vg, Theme* theme) -> void {
     const float padding = 15;
     gfx::dimBackground(vg);
-    gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);
+    gfx::drawRect(vg, m_pos, theme->GetColour(ThemeEntryID_POPUP));
 
     nvgSave(vg);
     nvgTextLineHeight(vg, 1.5);
-    gfx::drawTextBox(vg, m_pos.x + padding, m_pos.y + 110.f, 26.f, m_pos.w - padding*2, theme->elements[ThemeEntryID_TEXT].colour, m_message.c_str(), NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+    gfx::drawTextBox(vg, m_pos.x + padding, m_pos.y + 110.f, 26.f, m_pos.w - padding*2, theme->GetColour(ThemeEntryID_TEXT), m_message.c_str(), NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
     nvgRestore(vg);
 
-    gfx::drawRect(vg, m_spacer_line, theme->elements[ThemeEntryID_TEXT].colour);
+    gfx::drawRect(vg, m_spacer_line, theme->GetColour(ThemeEntryID_LINE));
 
     for (auto&p: m_entries) {
         p.Draw(vg, theme);

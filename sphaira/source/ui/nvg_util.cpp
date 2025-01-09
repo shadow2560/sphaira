@@ -33,76 +33,41 @@ static constexpr std::array buttons = {
     std::pair{Button::R3, "\uE105"},
 };
 
-#define F(a) (a/255.f) // turn range 0-255 to 0.f-1.f range
-constexpr std::array COLOURS = {
-    std::pair<Colour, NVGcolor>{Colour::BLACK, { F(45.f), F(45.f), F(45.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::LIGHT_BLACK, { F(50.f), F(50.f), F(50.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::SILVER, { F(128.f), F(128.f), F(128.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::DARK_GREY, { F(70.f), F(70.f), F(70.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::GREY, { F(77.f), F(77.f), F(77.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::WHITE, { F(251.f), F(251.f), F(251.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::CYAN, { F(0.f), F(255.f), F(200.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::TEAL, { F(143.f), F(253.f), F(252.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::BLUE, { F(36.f), F(141.f), F(199.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::LIGHT_BLUE, { F(26.f), F(188.f), F(252.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::YELLOW, { F(255.f), F(177.f), F(66.f), F(255.f) }},
-    std::pair<Colour, NVGcolor>{Colour::RED, { F(250.f), F(90.f), F(58.f), F(255.f) }}
-};
-#undef F
-
 // NEW ---------------------
-inline void drawRectIntenal(NVGcontext* vg, const Vec4& vec, const NVGcolor& c, bool rounded) {
+void drawRectIntenal(NVGcontext* vg, const Vec4& v, const NVGcolor& c, bool rounded) {
     nvgBeginPath(vg);
     if (rounded) {
-        nvgRoundedRect(vg, vec.x, vec.y, vec.w, vec.h, 15);
+        nvgRoundedRect(vg, v.x, v.y, v.w, v.h, 15);
     } else {
-        nvgRect(vg, vec.x, vec.y, vec.w, vec.h);
+        nvgRect(vg, v.x, v.y, v.w, v.h);
     }
     nvgFillColor(vg, c);
     nvgFill(vg);
 }
 
-inline void drawRectIntenal(NVGcontext* vg, const Vec4& vec, const NVGpaint& p, bool rounded) {
+void drawRectIntenal(NVGcontext* vg, const Vec4& v, const NVGpaint& p, bool rounded) {
     nvgBeginPath(vg);
     if (rounded) {
-        nvgRoundedRect(vg, vec.x, vec.y, vec.w, vec.h, 15);
+        nvgRoundedRect(vg, v.x, v.y, v.w, v.h, 15);
     } else {
-        nvgRect(vg, vec.x, vec.y, vec.w, vec.h);
+        nvgRect(vg, v.x, v.y, v.w, v.h);
     }
     nvgFillPaint(vg, p);
     nvgFill(vg);
 }
 
-inline void drawRectOutlineInternal(NVGcontext* vg, float size, const NVGcolor& out_col, Vec4 vec, const NVGcolor& c) {
+void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, const Vec4& v) {
     float gradientX, gradientY, color;
     getHighlightAnimation(&gradientX, &gradientY, &color);
 
-#if 0
-    // NVGcolor pulsationColor = nvgRGBAf((color * out_col.r) + (1 - color) * out_col.r,
-    //         (color * out_col.g) + (1 - color) * out_col.g,
-    //         (color * out_col.b) + (1 - color) * out_col.b,
-    //         out_col.a);
-    NVGcolor pulsationColor = nvgRGBAf((color * out_col.r) + (1 - color) * out_col.r,
-            (color * out_col.g) + (1 - color) * out_col.g,
-            (color * out_col.b) + (1 - color) * out_col.b,
-            out_col.a);
-
-    drawRectIntenal(vg, {vec.x-size,vec.y-size,vec.w+(size*2.f),vec.h+(size * 2.f)}, pulsationColor, false);
-    drawRectIntenal(vg, vec, c, false);
-#else
     const auto strokeWidth = 5.0;
-    auto v2 = vec;
+    auto v2 = v;
     v2.x -= strokeWidth / 2.0;
     v2.y -= strokeWidth / 2.0;
     v2.w += strokeWidth;
     v2.h += strokeWidth;
     const auto corner_radius = 0.5;
 
-    // nvgSave(vg);
-    // nvgResetScissor(vg);
-
-    // const auto stroke_width = 5.0f;
-    // const auto shadow_corner_radius = 6.0f;
     const auto shadow_width = 2.0f;
     const auto shadow_offset = 10.0f;
     const auto shadow_feather = 10.0f;
@@ -123,8 +88,8 @@ inline void drawRectOutlineInternal(NVGcontext* vg, float size, const NVGcolor& 
     nvgFillPaint(vg, shadowPaint);
     nvgFill(vg);
 
-    const auto color1 = nvgRGB(25, 138, 198);
-    const auto color2 = nvgRGB(137, 241, 242);
+    const auto color1 = theme->GetColour(ThemeEntryID_HIGHLIGHT_1);
+    const auto color2 = theme->GetColour(ThemeEntryID_HIGHLIGHT_2);
     const auto borderColor = nvgRGBAf(color2.r, color2.g, color2.b, 0.5);
     const auto transparent = nvgRGBA(0, 0, 0, 0);
 
@@ -160,70 +125,38 @@ inline void drawRectOutlineInternal(NVGcontext* vg, float size, const NVGcolor& 
     nvgStrokeWidth(vg, strokeWidth);
     nvgRoundedRect(vg, v2.x, v2.y, v2.w, v2.h, corner_radius);
     nvgStroke(vg);
-
-    drawRectIntenal(vg, {vec.x-size,vec.y-size,vec.w+(size*2.f),vec.h+(size * 2.f)}, pulsationColor, false);
-    drawRectIntenal(vg, vec, c, true);
-    nvgBeginPath(vg);
-    nvgRoundedRect(vg, vec.x, vec.y, vec.w, vec.h, corner_radius);
-    nvgFillColor(vg, c);
-    nvgFill(vg);
-
-    // nvgRestore(vg);
-#endif
 }
 
-inline void drawRectOutlineInternal(NVGcontext* vg, float size, const NVGcolor& out_col, Vec4 vec, const NVGpaint& p) {
-    float gradientX, gradientY, color;
-    getHighlightAnimation(&gradientX, &gradientY, &color);
-
-    NVGcolor pulsationColor = nvgRGBAf((color * out_col.r) + (1 - color) * out_col.r,
-            (color * out_col.g) + (1 - color) * out_col.g,
-            (color * out_col.b) + (1 - color) * out_col.b,
-            out_col.a);
-
-    drawRectIntenal(vg, {vec.x-size,vec.y-size,vec.w+(size*2.f),vec.h+(size * 2.f)}, pulsationColor, false);
-    drawRectIntenal(vg, vec, p, false);
-}
-
-inline void drawTriangleInternal(NVGcontext* vg, float aX, float aY, float bX, float bY, float cX, float cY, const NVGcolor& c) {
+void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, const Vec4& v, const NVGcolor& c) {
+    const auto corner_radius = 0.5;
+    drawRectOutlineInternal(vg, theme, size, v);
     nvgBeginPath(vg);
-    nvgMoveTo(vg, aX, aY);
-    nvgLineTo(vg, bX, bY);
-    nvgLineTo(vg, cX, cY);
+    nvgRoundedRect(vg, v.x, v.y, v.w, v.h, corner_radius);
     nvgFillColor(vg, c);
     nvgFill(vg);
 }
 
-inline void drawTriangleInternal(NVGcontext* vg, float aX, float aY, float bX, float bY, float cX, float cY, const NVGpaint& p) {
+void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, const Vec4& v, const NVGpaint& p) {
+    const auto corner_radius = 0.5;
+    drawRectOutlineInternal(vg, theme, size, v);
     nvgBeginPath(vg);
-    nvgMoveTo(vg, aX, aY);
-    nvgLineTo(vg, bX, bY);
-    nvgLineTo(vg, cX, cY);
+    nvgRoundedRect(vg, v.x, v.y, v.w, v.h, corner_radius);
     nvgFillPaint(vg, p);
     nvgFill(vg);
 }
 
-inline void drawTextIntenal(NVGcontext* vg, Vec2 vec, float size, const char* str, const char* end, int align, const NVGcolor& c) {
+void drawTextIntenal(NVGcontext* vg, const Vec2& v, float size, const char* str, const char* end, int align, const NVGcolor& c) {
     nvgBeginPath(vg);
     nvgFontSize(vg, size);
     nvgTextAlign(vg, align);
     nvgFillColor(vg, c);
-    nvgText(vg, vec.x, vec.y, str, end);
+    nvgText(vg, v.x, v.y, str, end);
 }
 
 } // namespace
 
 const char* getButton(const Button want) {
     for (auto& [key, val] : buttons) {
-        if (key == want) {
-            return val;
-        }
-    }
-    std::unreachable();
-}
-
-NVGcolor getColour(Colour want) {
-    for (auto& [key, val] : COLOURS) {
         if (key == want) {
             return val;
         }
@@ -240,7 +173,7 @@ void drawTextArgs(NVGcontext* vg, float x, float y, float size, int align, const
     drawText(vg, x, y, size, buffer, nullptr, align, c);
 }
 
-static void drawImageInternal(NVGcontext* vg, Vec4 v, int texture, int rounded = 0) {
+static void drawImageInternal(NVGcontext* vg, const Vec4& v, int texture, int rounded = 0) {
     const auto paint = nvgImagePattern(vg, v.x, v.y, v.w, v.h, 0, texture, 1.f);
     // drawRect(vg, x, y, w, h, paint);
     nvgBeginPath(vg);
@@ -254,7 +187,7 @@ static void drawImageInternal(NVGcontext* vg, Vec4 v, int texture, int rounded =
     nvgFill(vg);
 }
 
-void drawImage(NVGcontext* vg, Vec4 v, int texture) {
+void drawImage(NVGcontext* vg, const Vec4& v, int texture) {
     const auto paint = nvgImagePattern(vg, v.x, v.y, v.w, v.h, 0, texture, 1.f);
     drawRect(vg, v, paint, false);
 }
@@ -263,7 +196,7 @@ void drawImage(NVGcontext* vg, float x, float y, float w, float h, int texture) 
     drawImage(vg, Vec4(x, y, w, h), texture);
 }
 
-void drawImageRounded(NVGcontext* vg, Vec4 v, int texture) {
+void drawImageRounded(NVGcontext* vg, const Vec4& v, int texture) {
     const auto paint = nvgImagePattern(vg, v.x, v.y, v.w, v.h, 0, texture, 1.f);
     nvgBeginPath(vg);
     nvgRoundedRect(vg, v.x, v.y, v.w, v.h, 15);
@@ -275,20 +208,12 @@ void drawImageRounded(NVGcontext* vg, float x, float y, float w, float h, int te
     drawImageRounded(vg, Vec4(x, y, w, h), texture);
 }
 
-void drawTextBox(NVGcontext* vg, float x, float y, float size, float bound, NVGcolor& c, const char* str, int align, const char* end) {
+void drawTextBox(NVGcontext* vg, float x, float y, float size, float bound, const NVGcolor& c, const char* str, int align, const char* end) {
     nvgBeginPath(vg);
     nvgFontSize(vg, size);
     nvgTextAlign(vg, align);
     nvgFillColor(vg, c);
     nvgTextBox(vg, x, y, bound, str, end);
-}
-
-void drawTextBox(NVGcontext* vg, float x, float y, float size, float bound, NVGcolor&& c, const char* str, int align, const char* end) {
-    drawTextBox(vg, x, y, size, bound, c, str, align, end);
-}
-
-void drawTextBox(NVGcontext* vg, float x, float y, float size, float bound, Colour c, const char* str, int align, const char* end) {
-    drawTextBox(vg, x, y, size, bound, getColour(c), str, align, end);
 }
 
 void textBounds(NVGcontext* vg, float x, float y, float *bounds, const char* str, ...) {
@@ -303,134 +228,34 @@ void textBounds(NVGcontext* vg, float x, float y, float *bounds, const char* str
 // NEW-----------
 
 void dimBackground(NVGcontext* vg) {
-    // drawRectIntenal(vg, {0.f,0.f,1280.f,720.f}, nvgRGBA(30,30,30,180));
-    // drawRectIntenal(vg, {0.f,0.f,1920.f,1080.f}, nvgRGBA(20, 20, 20, 225), false);
-    drawRectIntenal(vg, {0.f,0.f,1920.f,1080.f}, nvgRGBA(0, 0, 0, 230), false);
-}
-
-void drawRect(NVGcontext* vg, float x, float y, float w, float h, Colour c, bool rounded) {
-    drawRectIntenal(vg, {x,y,w,h}, getColour(c), rounded);
-}
-
-void drawRect(NVGcontext* vg, Vec4 vec, Colour c, bool rounded) {
-    drawRectIntenal(vg, vec, getColour(c), rounded);
+    drawRectIntenal(vg, {0.f,0.f,SCREEN_WIDTH,SCREEN_HEIGHT}, nvgRGBA(0, 0, 0, 180), false);
 }
 
 void drawRect(NVGcontext* vg, float x, float y, float w, float h, const NVGcolor& c, bool rounded) {
     drawRectIntenal(vg, {x,y,w,h}, c, rounded);
 }
 
-void drawRect(NVGcontext* vg, float x, float y, float w, float h, const NVGcolor&& c, bool rounded) {
-    drawRectIntenal(vg, {x,y,w,h}, c, rounded);
-}
-
-void drawRect(NVGcontext* vg, Vec4 vec, const NVGcolor& c, bool rounded) {
-    drawRectIntenal(vg, vec, c, rounded);
-}
-
-void drawRect(NVGcontext* vg, Vec4 vec, const NVGcolor&& c, bool rounded) {
-    drawRectIntenal(vg, vec, c, rounded);
+void drawRect(NVGcontext* vg, const Vec4& v, const NVGcolor& c, bool rounded) {
+    drawRectIntenal(vg, v, c, rounded);
 }
 
 void drawRect(NVGcontext* vg, float x, float y, float w, float h, const NVGpaint& p, bool rounded) {
     drawRectIntenal(vg, {x,y,w,h}, p, rounded);
 }
 
-void drawRect(NVGcontext* vg, float x, float y, float w, float h, const NVGpaint&& p, bool rounded) {
-    drawRectIntenal(vg, {x,y,w,h}, p, rounded);
+void drawRect(NVGcontext* vg, const Vec4& v, const NVGpaint& p, bool rounded) {
+    drawRectIntenal(vg, v, p, rounded);
 }
 
-void drawRect(NVGcontext* vg, Vec4 vec, const NVGpaint& p, bool rounded) {
-    drawRectIntenal(vg, vec, p, rounded);
+void drawRectOutline(NVGcontext* vg, const Theme* theme, float size, float x, float y, float w, float h) {
+    drawRectOutlineInternal(vg, theme, size, {x,y,w,h}, theme->GetColour(ThemeEntryID_SELECTED_BACKGROUND));
 }
 
-void drawRect(NVGcontext* vg, Vec4 vec, const NVGpaint&& p, bool rounded) {
-    drawRectIntenal(vg, vec, p, rounded);
-}
-
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, float x, float y, float w, float h, Colour c) {
-    drawRectOutlineInternal(vg, size, out_col, {x,y,w,h}, getColour(c));
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, Vec4 vec, Colour c) {
-    drawRectOutlineInternal(vg, size, out_col, vec, getColour(c));
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, float x, float y, float w, float h, const NVGcolor& c) {
-    drawRectOutlineInternal(vg, size, out_col, {x,y,w,h}, c);
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, float x, float y, float w, float h, const NVGcolor&& c) {
-    drawRectOutlineInternal(vg, size, out_col, {x,y,w,h}, c);
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, Vec4 vec, const NVGcolor& c) {
-    drawRectOutlineInternal(vg, size, out_col, vec, c);
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, Vec4 vec, const NVGcolor&& c) {
-    drawRectOutlineInternal(vg, size, out_col, vec, c);
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, float x, float y, float w, float h, const NVGpaint& p) {
-    drawRectOutlineInternal(vg, size, out_col, {x,y,w,h}, p);
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, float x, float y, float w, float h, const NVGpaint&& p) {
-    drawRectOutlineInternal(vg, size, out_col, {x,y,w,h}, p);
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, Vec4 vec, const NVGpaint& p) {
-    drawRectOutlineInternal(vg, size, out_col, vec, p);
-}
-
-void drawRectOutline(NVGcontext* vg, float size, const NVGcolor& out_col, Vec4 vec, const NVGpaint&& p) {
-    drawRectOutlineInternal(vg, size, out_col, vec, p);
-}
-
-
-void drawTriangle(NVGcontext* vg, float aX, float aY, float bX, float bY, float cX, float cY, Colour c) {
-    drawTriangleInternal(vg, aX, aY, bX, bY, cX, cY, getColour(c));
-}
-
-void drawTriangle(NVGcontext* vg, float aX, float aY, float bX, float bY, float cX, float cY, const NVGcolor& c) {
-    drawTriangleInternal(vg, aX, aY, bX, bY, cX, cY, c);
-}
-
-void drawTriangle(NVGcontext* vg, float aX, float aY, float bX, float bY, float cX, float cY, const NVGcolor&& c) {
-    drawTriangleInternal(vg, aX, aY, bX, bY, cX, cY, c);
-}
-
-void drawTriangle(NVGcontext* vg, float aX, float aY, float bX, float bY, float cX, float cY, const NVGpaint& p) {
-    drawTriangleInternal(vg, aX, aY, bX, bY, cX, cY, p);
-}
-
-void drawTriangle(NVGcontext* vg, float aX, float aY, float bX, float bY, float cX, float cY, const NVGpaint&& p) {
-    drawTriangleInternal(vg, aX, aY, bX, bY, cX, cY, p);
-}
-
-void drawText(NVGcontext* vg, float x, float y, float size, const char* str, const char* end, int align, Colour c) {
-    drawTextIntenal(vg, {x,y}, size, str, end, align, getColour(c));
-}
-
-void drawText(NVGcontext* vg, float x, float y, float size, Colour c, const char* str, int align, const char* end) {
-    drawTextIntenal(vg, {x,y}, size, str, end, align, getColour(c));
-}
-
-void drawText(NVGcontext* vg, Vec2 vec, float size, const char* str, const char* end, int align, Colour c) {
-    drawTextIntenal(vg, vec, size, str, end, align, getColour(c));
-}
-
-void drawText(NVGcontext* vg, Vec2 vec, float size, Colour c, const char* str, int align, const char* end) {
-    drawTextIntenal(vg, vec, size, str, end, align, getColour(c));
+void drawRectOutline(NVGcontext* vg, const Theme* theme, float size, const Vec4& v) {
+    drawRectOutlineInternal(vg, theme, size, v, theme->GetColour(ThemeEntryID_SELECTED_BACKGROUND));
 }
 
 void drawText(NVGcontext* vg, float x, float y, float size, const char* str, const char* end, int align, const NVGcolor& c) {
-    drawTextIntenal(vg, {x,y}, size, str, end, align, c);
-}
-
-void drawText(NVGcontext* vg, float x, float y, float size, const char* str, const char* end, int align, const NVGcolor&& c) {
     drawTextIntenal(vg, {x,y}, size, str, end, align, c);
 }
 
@@ -438,36 +263,15 @@ void drawText(NVGcontext* vg, float x, float y, float size, const NVGcolor& c, c
     drawTextIntenal(vg, {x,y}, size, str, end, align, c);
 }
 
-void drawText(NVGcontext* vg, float x, float y, float size, const NVGcolor&& c, const char* str, int align, const char* end) {
-    drawTextIntenal(vg, {x,y}, size, str, end, align, c);
+void drawText(NVGcontext* vg, const Vec2& v, float size, const char* str, const char* end, int align, const NVGcolor& c) {
+    drawTextIntenal(vg, v, size, str, end, align, c);
 }
 
-void drawText(NVGcontext* vg, Vec2 vec, float size, const char* str, const char* end, int align, const NVGcolor& c) {
-    drawTextIntenal(vg, vec, size, str, end, align, c);
+void drawText(NVGcontext* vg, const Vec2& v, float size, const NVGcolor& c, const char* str, int align, const char* end) {
+    drawTextIntenal(vg, v, size, str, end, align, c);
 }
 
-void drawText(NVGcontext* vg, Vec2 vec, float size, const char* str, const char* end, int align, const NVGcolor&& c) {
-    drawTextIntenal(vg, vec, size, str, end, align, c);
-}
-
-void drawText(NVGcontext* vg, Vec2 vec, float size, const NVGcolor& c, const char* str, int align, const char* end) {
-    drawTextIntenal(vg, vec, size, str, end, align, c);
-}
-
-void drawText(NVGcontext* vg, Vec2 vec, float size, const NVGcolor&& c, const char* str, int align, const char* end) {
-    drawTextIntenal(vg, vec, size, str, end, align, c);
-}
-
-void drawTextArgs(NVGcontext* vg, float x, float y, float size, int align, Colour c, const char* str, ...) {
-    std::va_list v;
-    va_start(v, str);
-    char buffer[0x100];
-    std::vsnprintf(buffer, sizeof(buffer), str, v);
-    va_end(v);
-    drawTextIntenal(vg, {x, y}, size, buffer, nullptr, align, getColour(c));
-}
-
-void drawScrollbar(NVGcontext* vg, Theme* theme, float x, float y, float h, u32 index_off, u32 count, u32 max_per_page) {
+void drawScrollbar(NVGcontext* vg, const Theme* theme, float x, float y, float h, u32 index_off, u32 count, u32 max_per_page) {
     const s64 SCROLL = index_off;
     const s64 max_entry_display = max_per_page;
     const s64 entry_total = count;
@@ -478,35 +282,34 @@ void drawScrollbar(NVGcontext* vg, Theme* theme, float x, float y, float h, u32 
     if (entry_total > max_entry_display) {
         const float sb_h = 1.f / (float)entry_total * h;
         const float sb_y = SCROLL;
-        gfx::drawRect(vg, x, y, scc2, h, theme->elements[ThemeEntryID_GRID].colour, false);
-        gfx::drawRect(vg, x + scw, y + scw + sb_h * sb_y, scc2 - scw * 2, sb_h * float(max_entry_display) - scw * 2, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, false);
+        gfx::drawRect(vg, x, y, scc2, h, theme->GetColour(ThemeEntryID_SCROLLBAR_BACKGROUND), false);
+        gfx::drawRect(vg, x + scw, y + scw + sb_h * sb_y, scc2 - scw * 2, sb_h * float(max_entry_display) - scw * 2, theme->GetColour(ThemeEntryID_SCROLLBAR), false);
     }
 }
 
-void drawScrollbar(NVGcontext* vg, Theme* theme, u32 index_off, u32 count, u32 max_per_page) {
-    // drawScrollbar(vg, SCREEN_WIDTH - 50, 100, 500, index_off, count, max_per_page);
+void drawScrollbar(NVGcontext* vg, const Theme* theme, u32 index_off, u32 count, u32 max_per_page) {
     drawScrollbar(vg, theme, SCREEN_WIDTH - 50, 100, SCREEN_HEIGHT-200, index_off, count, max_per_page);
 }
 
-void drawScrollbar2(NVGcontext* vg, Theme* theme, float x, float y, float h, s64 index_off, s64 count, s64 row, s64 page) {
+void drawScrollbar2(NVGcontext* vg, const Theme* theme, float x, float y, float h, s64 index_off, s64 count, s64 row, s64 page) {
     // round up
     if (count % row) {
         count = count + (row - count % row);
     }
 
-    const float scc2 = 8.0;
+    const float scc2 = 6.0;
     const float scw = 2.0;
 
     // only draw scrollbar if needed
     if (count > page) {
         const float sb_h = 1.f / (float)count * h;
         const float sb_y = index_off;
-        gfx::drawRect(vg, x, y, scc2, h, theme->elements[ThemeEntryID_GRID].colour, false);
-        gfx::drawRect(vg, x + scw, y + scw + sb_h * sb_y, scc2 - scw * 2, sb_h * float(page) - scw * 2, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, false);
+        gfx::drawRect(vg, x, y, scc2, h, theme->GetColour(ThemeEntryID_SCROLLBAR_BACKGROUND), false);
+        gfx::drawRect(vg, x + scw, y + scw + sb_h * sb_y, scc2 - scw * 2, sb_h * float(page) - scw * 2, theme->GetColour(ThemeEntryID_SCROLLBAR), false);
     }
 }
 
-void drawScrollbar2(NVGcontext* vg, Theme* theme, s64 index_off, s64 count, s64 row, s64 page) {
+void drawScrollbar2(NVGcontext* vg, const Theme* theme, s64 index_off, s64 count, s64 row, s64 page) {
     drawScrollbar2(vg, theme, SCREEN_WIDTH - 50, 100, SCREEN_HEIGHT-200, index_off, count, row, page);
 }
 

@@ -386,7 +386,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
-    const auto& text_col = theme->elements[ThemeEntryID_TEXT].colour;
+    const auto& text_col = theme->GetColour(ThemeEntryID_TEXT);
 
     if (m_entries.empty()) {
         gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, text_col, "Empty..."_i18n.c_str());
@@ -402,20 +402,19 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         auto text_id = ThemeEntryID_TEXT;
         if (m_index == i) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
-            if (i == m_index) {
-                gfx::drawRect(vg, x, y, w, 1.f, text_col);
+            if (i != m_entries.size() - 1) {
+                gfx::drawRect(vg, x, y + h, w, 1.f, theme->GetColour(ThemeEntryID_LINE_SEPERATOR));
             }
-            gfx::drawRect(vg, x, y + h, w, 1.f, text_col);
         }
 
         nvgSave(vg);
         nvgIntersectScissor(vg, x + text_xoffset, y, w-(x+text_xoffset+50), h);
-            gfx::drawTextArgs(vg, x + text_xoffset, y + (h / 2.f), 20.f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, "%s By %s", e.repo.c_str(), e.owner.c_str());
+            gfx::drawTextArgs(vg, x + text_xoffset, y + (h / 2.f), 20.f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id), "%s By %s", e.repo.c_str(), e.owner.c_str());
         nvgRestore(vg);
 
-        gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f), 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, "version: %s", e.tag.c_str());
+        gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f), 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id), "version: %s", e.tag.c_str());
     });
 }
 

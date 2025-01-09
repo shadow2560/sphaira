@@ -10,7 +10,7 @@ auto uiButton::Draw(NVGcontext* vg, Theme* theme) -> void {
     // gfx::drawRect(vg, m_pos, gfx::Colour::RED);
 
     nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-    nvgFillColor(vg, theme->elements[ThemeEntryID_TEXT].colour);
+    nvgFillColor(vg, theme->GetColour(ThemeEntryID_TEXT));
     nvgFontSize(vg, 20);
     nvgText(vg, m_hint_pos.x, m_hint_pos.y, m_action.m_hint.c_str(), nullptr);
     nvgFontSize(vg, 26);
