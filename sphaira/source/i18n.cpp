@@ -77,6 +77,7 @@ bool init(long index) {
         case 10: setLanguage = SetLanguage_PT; break; // "Portuguese"
         case 11: setLanguage = SetLanguage_RU; break; // "Russian"
         case 12: lang_name = "se"; break; // "Swedish"
+        case 13: lang_name = "vi"; break; // "Vietnamese"
     }
 
     switch (setLanguage) {
