@@ -84,7 +84,7 @@ PopupList::PopupList(std::string title, Items items, Callback cb, s64 index)
     );
 
     m_pos.w = 1280.f;
-    const float a = std::min(380.f, (60.f * static_cast<float>(m_items.size())));
+    const float a = std::min(370.f, (60.f * static_cast<float>(m_items.size())));
     m_pos.h = 80.f + 140.f + a;
     m_pos.y = 720.f - m_pos.h;
     m_line_top = m_pos.y + 70.f;

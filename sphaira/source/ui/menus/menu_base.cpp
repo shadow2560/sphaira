@@ -58,8 +58,8 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
 
     #undef draw
 
-    gfx::drawRect(vg, 30.f, 86.f, 1220.f, 1.f, theme->GetColour(ThemeEntryID_TEXT));
-    gfx::drawRect(vg, 30.f, 646.0f, 1220.f, 1.f, theme->GetColour(ThemeEntryID_TEXT));
+    gfx::drawRect(vg, 30.f, 86.f, 1220.f, 1.f, theme->GetColour(ThemeEntryID_LINE));
+    gfx::drawRect(vg, 30.f, 646.0f, 1220.f, 1.f, theme->GetColour(ThemeEntryID_LINE));
 
     nvgFontSize(vg, 28);
     gfx::textBounds(vg, 0, 0, bounds, m_title.c_str());
