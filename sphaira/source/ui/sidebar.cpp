@@ -53,8 +53,24 @@ SidebarEntryBase::SidebarEntryBase(std::string&& title)
 }
 
 auto SidebarEntryBase::GetHeight(NVGcontext* vg, float fontSize, float lineHeight, float maxWidth) const -> float {
-    std::vector<std::string> lines = WrapText(vg, m_title, fontSize, maxWidth);
-    float totalHeight = lines.size() * lineHeight;
+    std::vector<std::string> textLines = WrapText(vg, m_title, fontSize, maxWidth);
+
+    float valueWidth = 0.f;
+    std::vector<std::string> valueLines;
+
+    if (GetType() == Type::Bool) {
+        auto entry = static_cast<const SidebarEntryBool*>(this);
+        const char* valueText = entry->GetOption() ? entry->GetTrueStr().c_str() : entry->GetFalseStr().c_str();
+        valueLines = WrapText(vg, valueText, fontSize, maxWidth);
+    } else if (GetType() == Type::Array) {
+        auto entry = static_cast<const SidebarEntryArray*>(this);
+        const auto& valueText = entry->GetCurrentItem();
+        valueLines = WrapText(vg, valueText.c_str(), fontSize, maxWidth);
+    }
+
+    float textHeight = textLines.size() * lineHeight;
+    float valueHeight = valueLines.size() * lineHeight;
+    float totalHeight = std::max(textHeight, valueHeight);
     constexpr float margin = 5.f;
     return std::max(totalHeight + margin * 2, m_pos.h);
 }
@@ -62,42 +78,51 @@ auto SidebarEntryBase::GetHeight(NVGcontext* vg, float fontSize, float lineHeigh
 auto SidebarEntryBase::Draw(NVGcontext* vg, Theme* theme) -> void {
     float fontSize = 20.f;
     float lineHeight = 24.f;
-    NVGcolor valueColor = theme->elements[ThemeEntryID_TEXT].colour; // Couleur par défaut
+    NVGcolor valueColor = theme->elements[ThemeEntryID_TEXT].colour;
 
     float totalWidth = m_pos.w;
 
     float valueWidth = 0.f;
+    std::vector<std::string> valueLines;
     if (GetType() == Type::Bool) {
         auto entry = static_cast<const SidebarEntryBool*>(this);
         const char* valueText = entry->GetOption() ? entry->GetTrueStr().c_str() : entry->GetFalseStr().c_str();
-        valueWidth = GetTextWidth(vg, valueText, fontSize);
         valueColor = entry->GetOption()
             ? theme->elements[ThemeEntryID_TEXT_SELECTED].colour
             : theme->elements[ThemeEntryID_TEXT].colour;
+        valueLines = WrapText(vg, valueText, fontSize, totalWidth * 0.4f);
+        valueWidth = GetTextWidth(vg, valueText, fontSize);
     } else if (GetType() == Type::Array) {
         auto entry = static_cast<const SidebarEntryArray*>(this);
         const auto& valueText = entry->GetCurrentItem();
+        valueColor = theme->elements[ThemeEntryID_TEXT_SELECTED].colour;
+        valueLines = WrapText(vg, valueText, fontSize, totalWidth * 0.4f);
         valueWidth = GetTextWidth(vg, valueText.c_str(), fontSize);
     }
 
-    float maxWidth = totalWidth - valueWidth - 100.f;
+    float maxWidth = totalWidth - valueWidth - 70.f;
+
+    std::vector<std::string> textLines = WrapText(vg, m_title, fontSize, maxWidth);
+
+    float textHeight = textLines.size() * lineHeight;
+    float valueHeight = valueLines.size() * lineHeight;
+    float totalHeight = std::max(textHeight, valueHeight);
 
     // draw spacers or highlight box if in focus (selected)
     if (HasFocus()) {
-        float actualHeight = GetHeight(vg, fontSize, lineHeight, maxWidth);
+        // float actualHeight = GetHeight(vg, fontSize, lineHeight, maxWidth);
 
         Vec4 selectionBox = m_pos;
-        selectionBox.h = actualHeight;
+                selectionBox.h = totalHeight;
 
         gfx::drawRect(vg, selectionBox, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour);
         gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, selectionBox, theme->elements[ThemeEntryID_SELECTED].colour);
     }
-    std::vector<std::string> lines = WrapText(vg, m_title, fontSize, maxWidth);
 
-    float totalHeight = lines.size() * lineHeight;
-    float textStartY = m_pos.y + (GetHeight(vg, fontSize, lineHeight, maxWidth) - totalHeight) / 2;
+    float textStartY = m_pos.y + (totalHeight - textHeight) / 2;
+    float valueStartY = m_pos.y + (totalHeight - valueHeight) / 2;
 
-    for (const auto& line : lines) {
+    for (const auto& line : textLines) {
         gfx::drawText(
             vg,
             Vec2{m_pos.x + 15.f, textStartY},
@@ -109,28 +134,16 @@ auto SidebarEntryBase::Draw(NVGcontext* vg, Theme* theme) -> void {
         textStartY += lineHeight;
     }
 
-    if (GetType() == Type::Bool) {
-        auto entry = static_cast<const SidebarEntryBool*>(this);
-        const char* valueText = entry->GetOption() ? entry->GetTrueStr().c_str() : entry->GetFalseStr().c_str();
+    for (const auto& line : valueLines) {
         gfx::drawText(
             vg,
-            Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + m_pos.h / 2},
+            Vec2{m_pos.x + m_pos.w - 15.f, valueStartY},
             fontSize,
-                        valueColor,
-            valueText,
-            NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE
+            valueColor,
+            line.c_str(),
+            NVG_ALIGN_RIGHT | NVG_ALIGN_TOP
         );
-    } else if (GetType() == Type::Array) {
-        auto entry = static_cast<const SidebarEntryArray*>(this);
-        const auto& valueText = entry->GetCurrentItem();
-        gfx::drawText(
-            vg,
-            Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + m_pos.h / 2},
-            fontSize,
-            theme->elements[ThemeEntryID_TEXT_SELECTED].colour,
-            valueText.c_str(),
-            NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE
-        );
+        valueStartY += lineHeight;
     }
 }
 
