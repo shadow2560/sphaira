@@ -8,8 +8,20 @@ namespace sphaira::ui {
 
 class SidebarEntryBase : public Widget {
 public:
+    enum class Type {
+        Base,
+        Bool,
+        Array
+    };
+
     SidebarEntryBase(std::string&& title);
+    virtual ~SidebarEntryBase() = default;
+
+    virtual auto GetType() const -> Type {
+        return Type::Base;
+    }
     virtual auto Draw(NVGcontext* vg, Theme* theme) -> void override;
+    virtual auto GetHeight(NVGcontext* vg, float fontSize, float lineHeight, float maxWidth) const -> float;
 
 protected:
     std::string m_title;
@@ -22,6 +34,14 @@ public:
 public:
     SidebarEntryBool(std::string title, bool option, Callback cb, std::string true_str = "On", std::string false_str = "Off");
     SidebarEntryBool(std::string title, bool& option, std::string true_str = "On", std::string false_str = "Off");
+
+    auto GetType() const -> Type override {
+        return Type::Bool;
+    }
+
+    auto GetOption() const -> bool;
+    auto GetTrueStr() const -> const std::string&;
+    auto GetFalseStr() const -> const std::string&;
 
 private:
     auto Draw(NVGcontext* vg, Theme* theme) -> void override;
@@ -51,12 +71,17 @@ public:
     using ListCallback = std::function<void()>;
     using Callback = std::function<void(s64& index)>;
 
+    auto GetType() const -> Type override {
+        return Type::Array;
+    }
+
 public:
     explicit SidebarEntryArray(std::string title, Items items, Callback cb, s64 index = 0);
     SidebarEntryArray(std::string title, Items items, Callback cb, std::string index);
     SidebarEntryArray(std::string title, Items items, std::string& index);
 
     auto Draw(NVGcontext* vg, Theme* theme) -> void override;
+    auto GetCurrentItem() const -> const std::string&;
 
 private:
     Items m_items;

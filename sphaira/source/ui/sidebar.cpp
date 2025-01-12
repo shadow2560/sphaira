@@ -14,6 +14,37 @@ auto DistanceBetweenY(Vec4 va, Vec4 vb) -> Vec4 {
     };
 }
 
+static int GetTextWidth(NVGcontext* vg, const std::string& text, float fontSize) {
+    nvgFontSize(vg, fontSize);
+    return nvgTextBounds(vg, 0, 0, text.c_str(), nullptr, nullptr);
+}
+
+static std::vector<std::string> WrapText(NVGcontext* vg, const std::string& text, float fontSize, float maxWidth) {
+    std::vector<std::string> lines;
+    std::string currentLine;
+    float currentWidth = 0;
+
+    for (char c : text) {
+        std::string nextChar(1, c);
+        float charWidth = GetTextWidth(vg, nextChar, fontSize);
+
+        if (currentWidth + charWidth > maxWidth) {
+            lines.push_back(currentLine);
+            currentLine.clear();
+            currentWidth = 0;
+        }
+
+        currentLine += c;
+        currentWidth += charWidth;
+    }
+
+    if (!currentLine.empty()) {
+        lines.push_back(currentLine);
+    }
+
+    return lines;
+}
+
 } // namespace
 
 SidebarEntryBase::SidebarEntryBase(std::string&& title)
@@ -21,17 +52,85 @@ SidebarEntryBase::SidebarEntryBase(std::string&& title)
 
 }
 
+auto SidebarEntryBase::GetHeight(NVGcontext* vg, float fontSize, float lineHeight, float maxWidth) const -> float {
+    std::vector<std::string> lines = WrapText(vg, m_title, fontSize, maxWidth);
+    float totalHeight = lines.size() * lineHeight;
+    constexpr float margin = 5.f;
+    return std::max(totalHeight + margin * 2, m_pos.h);
+}
+
 auto SidebarEntryBase::Draw(NVGcontext* vg, Theme* theme) -> void {
+    float fontSize = 20.f;
+    float lineHeight = 24.f;
+    NVGcolor valueColor = theme->elements[ThemeEntryID_TEXT].colour; // Couleur par défaut
+
+    float totalWidth = m_pos.w;
+
+    float valueWidth = 0.f;
+    if (GetType() == Type::Bool) {
+        auto entry = static_cast<const SidebarEntryBool*>(this);
+        const char* valueText = entry->GetOption() ? entry->GetTrueStr().c_str() : entry->GetFalseStr().c_str();
+        valueWidth = GetTextWidth(vg, valueText, fontSize);
+        valueColor = entry->GetOption()
+            ? theme->elements[ThemeEntryID_TEXT_SELECTED].colour
+            : theme->elements[ThemeEntryID_TEXT].colour;
+    } else if (GetType() == Type::Array) {
+        auto entry = static_cast<const SidebarEntryArray*>(this);
+        const auto& valueText = entry->GetCurrentItem();
+        valueWidth = GetTextWidth(vg, valueText.c_str(), fontSize);
+    }
+
+    float maxWidth = totalWidth - valueWidth - 100.f;
+
     // draw spacers or highlight box if in focus (selected)
     if (HasFocus()) {
-        gfx::drawRect(vg, m_pos, nvgRGB(50,50,50));
-        gfx::drawRect(vg, m_pos, nvgRGB(0,0,0));
-        gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);
-        // gfx::drawRect(vg, m_pos.x - 4.f, m_pos.y - 4.f, m_pos.w + 8.f, m_pos.h + 8.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour);
-        // gfx::drawRect(vg, m_pos.x, m_pos.y, m_pos.w, m_pos.h, theme->elements[ThemeEntryID_SELECTED].colour);
-    } else {
-        gfx::drawRect(vg, m_pos.x, m_pos.y, m_pos.w, 1.f, nvgRGB(81, 81, 81)); // spacer
-        gfx::drawRect(vg, m_pos.x, m_pos.y + m_pos.h, m_pos.w, 1.f, nvgRGB(81, 81, 81)); // spacer
+        float actualHeight = GetHeight(vg, fontSize, lineHeight, maxWidth);
+
+        Vec4 selectionBox = m_pos;
+        selectionBox.h = actualHeight;
+
+        gfx::drawRect(vg, selectionBox, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour);
+        gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, selectionBox, theme->elements[ThemeEntryID_SELECTED].colour);
+    }
+    std::vector<std::string> lines = WrapText(vg, m_title, fontSize, maxWidth);
+
+    float totalHeight = lines.size() * lineHeight;
+    float textStartY = m_pos.y + (GetHeight(vg, fontSize, lineHeight, maxWidth) - totalHeight) / 2;
+
+    for (const auto& line : lines) {
+        gfx::drawText(
+            vg,
+            Vec2{m_pos.x + 15.f, textStartY},
+            fontSize,
+            theme->elements[HasFocus() ? ThemeEntryID_TEXT : ThemeEntryID_TEXT].colour,
+            line.c_str(),
+            NVG_ALIGN_LEFT | NVG_ALIGN_TOP
+        );
+        textStartY += lineHeight;
+    }
+
+    if (GetType() == Type::Bool) {
+        auto entry = static_cast<const SidebarEntryBool*>(this);
+        const char* valueText = entry->GetOption() ? entry->GetTrueStr().c_str() : entry->GetFalseStr().c_str();
+        gfx::drawText(
+            vg,
+            Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + m_pos.h / 2},
+            fontSize,
+                        valueColor,
+            valueText,
+            NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE
+        );
+    } else if (GetType() == Type::Array) {
+        auto entry = static_cast<const SidebarEntryArray*>(this);
+        const auto& valueText = entry->GetCurrentItem();
+        gfx::drawText(
+            vg,
+            Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + m_pos.h / 2},
+            fontSize,
+            theme->elements[ThemeEntryID_TEXT_SELECTED].colour,
+            valueText.c_str(),
+            NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE
+        );
     }
 }
 
@@ -59,18 +158,46 @@ SidebarEntryBool::SidebarEntryBool(std::string title, bool& option, std::string 
 auto SidebarEntryBool::Draw(NVGcontext* vg, Theme* theme) -> void {
     SidebarEntryBase::Draw(vg, theme);
 
+/*
     // if (HasFocus()) {
     //     gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     // } else {
     // }
 
-    gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    const char* valueText = m_option ? m_true_str.c_str() : m_false_str.c_str();
+    float fontSize = 20.f;
+    float valueWidth = GetTextWidth(vg, valueText, fontSize);
+    float maxWidth = m_pos.w - valueWidth - 30.f;
+    float lineHeight = 24.f;
 
-    if (m_option == true) {
-        gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, m_true_str.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-    } else { // text info
-        gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT].colour, m_false_str.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-    }
+    NVGcolor valueColor = m_option
+        ? theme->elements[ThemeEntryID_TEXT_SELECTED].colour
+        : theme->elements[ThemeEntryID_TEXT].colour;
+
+    float totalHeight = GetHeight(vg, fontSize, lineHeight, maxWidth);
+    float valueY = m_pos.y + (totalHeight - m_pos.h) / 2 + m_pos.h / 2;
+
+    gfx::drawText(
+        vg,
+        Vec2{m_pos.x + m_pos.w - 15.f, valueY},
+        fontSize,
+        valueColor,
+        valueText,
+        NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE
+    );
+*/
+}
+
+auto SidebarEntryBool::GetOption() const -> bool {
+    return m_option;
+}
+
+auto SidebarEntryBool::GetTrueStr() const -> const std::string& {
+    return m_true_str;
+}
+
+auto SidebarEntryBool::GetFalseStr() const -> const std::string& {
+    return m_false_str;
 }
 
 SidebarEntryCallback::SidebarEntryCallback(std::string title, Callback cb, bool pop_on_click)
@@ -88,12 +215,6 @@ SidebarEntryCallback::SidebarEntryCallback(std::string title, Callback cb, bool 
 
 auto SidebarEntryCallback::Draw(NVGcontext* vg, Theme* theme) -> void {
     SidebarEntryBase::Draw(vg, theme);
-
-    // if (HasFocus()) {
-    //     gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    // } else {
-        gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    // }
 }
 
 SidebarEntryArray::SidebarEntryArray(std::string title, Items items, std::string& index)
@@ -153,12 +274,31 @@ SidebarEntryArray::SidebarEntryArray(std::string title, Items items, Callback cb
 auto SidebarEntryArray::Draw(NVGcontext* vg, Theme* theme) -> void {
     SidebarEntryBase::Draw(vg, theme);
 
+/*
     const auto& text_entry = m_items[m_index];
     // const auto& colour = HasFocus() ? theme->elements[ThemeEntryID_TEXT_SELECTED].colour : theme->elements[ThemeEntryID_TEXT].colour;
     const auto& colour = theme->elements[ThemeEntryID_TEXT].colour;
 
-    gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, text_entry.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+    float fontSize = 20.f;
+    float valueWidth = GetTextWidth(vg, text_entry.c_str(), fontSize);
+    float lineHeight = 24.f;
+    float maxWidth = m_pos.w - valueWidth - 30.f;
+
+    float totalHeight = GetHeight(vg, fontSize, lineHeight, maxWidth);
+    float valueY = m_pos.y + (totalHeight - m_pos.h) / 2 + m_pos.h / 2;
+
+    gfx::drawText(
+        vg,
+        Vec2{m_pos.x + m_pos.w - 15.f, valueY},
+        fontSize,
+        theme->elements[ThemeEntryID_TEXT_SELECTED].colour, text_entry.c_str(),
+        NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE
+    );
+*/
+}
+
+auto SidebarEntryArray::GetCurrentItem() const -> const std::string& {
+    return m_items[m_index];
 }
 
 Sidebar::Sidebar(std::string title, Side side, Items&& items)
@@ -232,11 +372,15 @@ auto Sidebar::Draw(NVGcontext* vg, Theme* theme) -> void {
 
     Widget::Draw(vg, theme);
 
-    m_list->Draw(vg, theme, m_items.size(), [this](auto* vg, auto* theme, auto v, auto i) {
-        const auto& [x, y, w, h] = v;
-        m_items[i]->SetY(y);
-        m_items[i]->Draw(vg, theme);
+    nvgSave(vg);
+    nvgScissor(vg, m_base_pos.x, m_top_bar.y + 1.f, m_base_pos.w, m_bottom_bar.y - m_top_bar.y - 1.f);
+
+    m_list->Draw(vg, theme, m_items.size(), [&](NVGcontext* vg, Theme* theme, const Vec4& rect, s64 index) {
+        m_items[index]->SetPos(rect);
+        m_items[index]->Draw(vg, theme);
     });
+
+    nvgRestore(vg);
 }
 
 auto Sidebar::OnFocusGained() noexcept -> void {
