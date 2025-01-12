@@ -90,19 +90,19 @@ auto SidebarEntryBase::Draw(NVGcontext* vg, Theme* theme) -> void {
         valueColor = entry->GetOption()
             ? theme->elements[ThemeEntryID_TEXT_SELECTED].colour
             : theme->elements[ThemeEntryID_TEXT].colour;
-        valueLines = WrapText(vg, valueText, fontSize, totalWidth * 0.4f);
+        valueLines = WrapText(vg, valueText, fontSize, totalWidth * 0.4f - 70.f);
         valueWidth = GetTextWidth(vg, valueText, fontSize);
     } else if (GetType() == Type::Array) {
         auto entry = static_cast<const SidebarEntryArray*>(this);
         const auto& valueText = entry->GetCurrentItem();
         valueColor = theme->elements[ThemeEntryID_TEXT_SELECTED].colour;
-        valueLines = WrapText(vg, valueText, fontSize, totalWidth * 0.4f);
+        valueLines = WrapText(vg, valueText, fontSize, totalWidth * 0.4f - 70.f);
         valueWidth = GetTextWidth(vg, valueText.c_str(), fontSize);
     }
 
-    float maxWidth = totalWidth - valueWidth - 70.f;
+    float maxTextWidth = totalWidth - valueWidth - 70.f;
 
-    std::vector<std::string> textLines = WrapText(vg, m_title, fontSize, maxWidth);
+    std::vector<std::string> textLines = WrapText(vg, m_title, fontSize, maxTextWidth);
 
     float textHeight = textLines.size() * lineHeight;
     float valueHeight = valueLines.size() * lineHeight;
