@@ -542,7 +542,6 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
         }})
     );
 
-    
     const Vec4 v{75, 110, 350, 250};
     const Vec2 pad{10, 10};
     m_list = std::make_unique<List>(3, 6, m_pos, v, pad);
@@ -582,7 +581,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
     if (m_pages.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Empty!"_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty!"_i18n.c_str());
         return;
     }
 
@@ -590,15 +589,15 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
     switch (page.m_ready) {
         case PageLoadState::None:
-            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Not Ready..."_i18n.c_str());
+            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Not Ready..."_i18n.c_str());
             return;
         case PageLoadState::Loading:
-            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Loading"_i18n.c_str());
+            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Loading"_i18n.c_str());
             return;
         case PageLoadState::Done:
             break;
         case PageLoadState::Error:
-            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Error loading page!"_i18n.c_str());
+            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Error loading page!"_i18n.c_str());
             return;
     }
 
@@ -613,7 +612,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         auto text_id = ThemeEntryID_TEXT;
         if (pos == m_index) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
             DrawElement(x, y, w, h, ThemeEntryID_GRID);
         }
@@ -684,8 +683,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         nvgSave(vg);
         nvgIntersectScissor(vg, x, y, w - 30.f, h); // clip
         {
-            gfx::drawTextArgs(vg, x + xoff, y + 180 + 20, 18, NVG_ALIGN_LEFT, theme->elements[text_id].colour, "%s", e.details.name.c_str());
-            gfx::drawTextArgs(vg, x + xoff, y + 180 + 55, 18, NVG_ALIGN_LEFT, theme->elements[text_id].colour, "%s", e.creator.display_name.c_str());
+            gfx::drawTextArgs(vg, x + xoff, y + 180 + 20, 18, NVG_ALIGN_LEFT, theme->GetColour(text_id), "%s", e.details.name.c_str());
+            gfx::drawTextArgs(vg, x + xoff, y + 180 + 55, 18, NVG_ALIGN_LEFT, theme->GetColour(text_id), "%s", e.creator.display_name.c_str());
         }
         nvgRestore(vg);
     });

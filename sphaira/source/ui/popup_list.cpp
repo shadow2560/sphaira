@@ -22,8 +22,8 @@ PopupList::PopupList(std::string title, Items items, std::string& index_ref)
     const auto it = std::find(m_items.cbegin(), m_items.cend(), index_ref);
     if (it != m_items.cend()) {
         m_index = std::distance(m_items.cbegin(), it);
-        if (m_index >= 7) {
-            // m_list->SetYoff((m_index - 6) * m_list->GetMaxY());
+        if (m_index >= 6) {
+            m_list->SetYoff((m_index - 5) * m_list->GetMaxY());
         }
     }
 
@@ -50,8 +50,8 @@ PopupList::PopupList(std::string title, Items items, Callback cb, std::string in
     const auto it = std::find(m_items.cbegin(), m_items.cend(), index);
     if (it != m_items.cend()) {
         SetIndex(std::distance(m_items.cbegin(), it));
-        if (m_index >= 7) {
-            // m_list->SetYoff((m_index - 6) * m_list->GetMaxY());
+        if (m_index >= 6) {
+            m_list->SetYoff((m_index - 5) * m_list->GetMaxY());
         }
     }
 }
@@ -84,7 +84,7 @@ PopupList::PopupList(std::string title, Items items, Callback cb, s64 index)
     );
 
     m_pos.w = 1280.f;
-    const float a = std::min(405.f, (60.f * static_cast<float>(m_items.size())));
+    const float a = std::min(370.f, (60.f * static_cast<float>(m_items.size())));
     m_pos.h = 80.f + 140.f + a;
     m_pos.y = 720.f - m_pos.h;
     m_line_top = m_pos.y + 70.f;
@@ -93,11 +93,11 @@ PopupList::PopupList(std::string title, Items items, Callback cb, s64 index)
     Vec4 v{m_block};
     v.y = m_line_top + 1.f + 42.f;
     const Vec4 pos{0, m_line_top, 1280.f, m_line_bottom - m_line_top};
-    m_list = std::make_unique<List>(1, 7, pos, v);
+    m_list = std::make_unique<List>(1, 6, pos, v);
     m_list->SetScrollBarPos(1250, m_line_top + 20, m_line_bottom - m_line_top - 40);
 
-    if (m_index >= 7) {
-        m_list->SetYoff((m_index - 6) * m_list->GetMaxY());
+    if (m_index >= 6) {
+        m_list->SetYoff((m_index - 5) * m_list->GetMaxY());
     }
 }
 
@@ -111,21 +111,21 @@ auto PopupList::Update(Controller* controller, TouchInfo* touch) -> void {
 
 auto PopupList::Draw(NVGcontext* vg, Theme* theme) -> void {
     gfx::dimBackground(vg);
-    gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);
-    gfx::drawText(vg, m_pos + m_title_pos, 24.f, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
-    gfx::drawRect(vg, 30.f, m_line_top, m_line_width, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
-    gfx::drawRect(vg, 30.f, m_line_bottom, m_line_width, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
+    gfx::drawRect(vg, m_pos, theme->GetColour(ThemeEntryID_POPUP));
+    gfx::drawText(vg, m_pos + m_title_pos, 24.f, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str());
+    gfx::drawRect(vg, 30.f, m_line_top, m_line_width, 1.f, theme->GetColour(ThemeEntryID_LINE));
+    gfx::drawRect(vg, 30.f, m_line_bottom, m_line_width, 1.f, theme->GetColour(ThemeEntryID_LINE));
 
     m_list->Draw(vg, theme, m_items.size(), [this](auto* vg, auto* theme, auto v, auto i) {
         const auto& [x, y, w, h] = v;
         if (m_index == i) {
-            gfx::drawRect(vg, x - 4.f, y - 4.f, w + 8.f, h + 8.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour);
-            gfx::drawRect(vg, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
-            gfx::drawText(vg, x + m_text_xoffset, y + (h / 2.f), 20.f, m_items[i].c_str(), NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, v);
+            gfx::drawText(vg, x + m_text_xoffset, y + (h / 2.f), 20.f, m_items[i].c_str(), NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_SELECTED));
         } else {
-            gfx::drawRect(vg, x, y, w, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
-            gfx::drawRect(vg, x, y + h, w, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
-            gfx::drawText(vg, x + m_text_xoffset, y + (h / 2.f), 20.f, m_items[i].c_str(), NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[ThemeEntryID_TEXT].colour);
+            if (i != m_items.size() - 1) {
+                gfx::drawRect(vg, x, y + h, w, 1.f, theme->GetColour(ThemeEntryID_LINE_SEPARATOR));
+            }
+            gfx::drawText(vg, x + m_text_xoffset, y + (h / 2.f), 20.f, m_items[i].c_str(), NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT));
         }
     });
 

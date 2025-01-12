@@ -24,14 +24,7 @@ SidebarEntryBase::SidebarEntryBase(std::string&& title)
 auto SidebarEntryBase::Draw(NVGcontext* vg, Theme* theme) -> void {
     // draw spacers or highlight box if in focus (selected)
     if (HasFocus()) {
-        gfx::drawRect(vg, m_pos, nvgRGB(50,50,50));
-        gfx::drawRect(vg, m_pos, nvgRGB(0,0,0));
-        gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);
-        // gfx::drawRect(vg, m_pos.x - 4.f, m_pos.y - 4.f, m_pos.w + 8.f, m_pos.h + 8.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour);
-        // gfx::drawRect(vg, m_pos.x, m_pos.y, m_pos.w, m_pos.h, theme->elements[ThemeEntryID_SELECTED].colour);
-    } else {
-        gfx::drawRect(vg, m_pos.x, m_pos.y, m_pos.w, 1.f, nvgRGB(81, 81, 81)); // spacer
-        gfx::drawRect(vg, m_pos.x, m_pos.y + m_pos.h, m_pos.w, 1.f, nvgRGB(81, 81, 81)); // spacer
+        gfx::drawRectOutline(vg, theme, 4.f, m_pos);
     }
 }
 
@@ -60,16 +53,16 @@ auto SidebarEntryBool::Draw(NVGcontext* vg, Theme* theme) -> void {
     SidebarEntryBase::Draw(vg, theme);
 
     // if (HasFocus()) {
-    //     gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    //     gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->GetColour(ThemeEntryID_TEXT_SELECTED), m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     // } else {
     // }
 
-    gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 
     if (m_option == true) {
-        gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, m_true_str.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+        gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->GetColour(ThemeEntryID_TEXT_SELECTED), m_true_str.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
     } else { // text info
-        gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT].colour, m_false_str.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+        gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->GetColour(ThemeEntryID_TEXT), m_false_str.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
     }
 }
 
@@ -90,9 +83,9 @@ auto SidebarEntryCallback::Draw(NVGcontext* vg, Theme* theme) -> void {
     SidebarEntryBase::Draw(vg, theme);
 
     // if (HasFocus()) {
-    //     gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    //     gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->GetColour(ThemeEntryID_TEXT_SELECTED), m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     // } else {
-        gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+        gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     // }
 }
 
@@ -154,11 +147,11 @@ auto SidebarEntryArray::Draw(NVGcontext* vg, Theme* theme) -> void {
     SidebarEntryBase::Draw(vg, theme);
 
     const auto& text_entry = m_items[m_index];
-    // const auto& colour = HasFocus() ? theme->elements[ThemeEntryID_TEXT_SELECTED].colour : theme->elements[ThemeEntryID_TEXT].colour;
-    const auto& colour = theme->elements[ThemeEntryID_TEXT].colour;
+    // const auto& colour = HasFocus() ? theme->GetColour(ThemeEntryID_TEXT_SELECTED) : theme->GetColour(ThemeEntryID_TEXT);
+    const auto& colour = theme->GetColour(ThemeEntryID_TEXT);
 
     gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, text_entry.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+    gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->GetColour(ThemeEntryID_TEXT_SELECTED), text_entry.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 }
 
 Sidebar::Sidebar(std::string title, Side side, Items&& items)
@@ -222,18 +215,23 @@ auto Sidebar::Update(Controller* controller, TouchInfo* touch) -> void {
 }
 
 auto Sidebar::Draw(NVGcontext* vg, Theme* theme) -> void {
-    gfx::drawRect(vg, m_pos, nvgRGBA(0, 0, 0, 220));
-    gfx::drawText(vg, m_title_pos, m_title_size, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
+    gfx::drawRect(vg, m_pos, theme->GetColour(ThemeEntryID_SIDEBAR));
+    gfx::drawText(vg, m_title_pos, m_title_size, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str());
     if (!m_sub.empty()) {
-        gfx::drawTextArgs(vg, m_pos.x + m_pos.w - 30.f, m_title_pos.y + 10.f, 18, NVG_ALIGN_TOP | NVG_ALIGN_RIGHT, theme->elements[ThemeEntryID_TEXT].colour, m_sub.c_str());
+        gfx::drawTextArgs(vg, m_pos.x + m_pos.w - 30.f, m_title_pos.y + 10.f, 18, NVG_ALIGN_TOP | NVG_ALIGN_RIGHT, theme->GetColour(ThemeEntryID_TEXT), m_sub.c_str());
     }
-    gfx::drawRect(vg, m_top_bar, theme->elements[ThemeEntryID_TEXT].colour);
-    gfx::drawRect(vg, m_bottom_bar, theme->elements[ThemeEntryID_TEXT].colour);
+    gfx::drawRect(vg, m_top_bar, theme->GetColour(ThemeEntryID_LINE));
+    gfx::drawRect(vg, m_bottom_bar, theme->GetColour(ThemeEntryID_LINE));
 
     Widget::Draw(vg, theme);
 
     m_list->Draw(vg, theme, m_items.size(), [this](auto* vg, auto* theme, auto v, auto i) {
         const auto& [x, y, w, h] = v;
+
+        if (i != m_items.size() - 1) {
+            gfx::drawRect(vg, x, y + h, w, 1.f, theme->GetColour(ThemeEntryID_LINE_SEPARATOR));
+        }
+
         m_items[i]->SetY(y);
         m_items[i]->Draw(vg, theme);
     });

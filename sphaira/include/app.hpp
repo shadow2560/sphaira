@@ -105,7 +105,7 @@ public:
     // void DrawElement(float x, float y, float w, float h, ui::ThemeEntryID id);
     auto LoadElementImage(std::string_view value) -> ElementEntry;
     auto LoadElementColour(std::string_view value) -> ElementEntry;
-    auto LoadElement(std::string_view data) -> ElementEntry;
+    auto LoadElement(std::string_view data, ElementType type) -> ElementEntry;
 
     void LoadTheme(const ThemeMeta& meta);
     void CloseTheme();

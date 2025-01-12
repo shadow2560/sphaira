@@ -1,6 +1,7 @@
 #include "ui/menus/main_menu.hpp"
 #include "ui/error_box.hpp"
 #include "ui/option_box.hpp"
+#include "ui/bubbles.hpp"
 
 #include "app.hpp"
 #include "log.hpp"
@@ -32,6 +33,45 @@ extern "C" {
 
 namespace sphaira {
 namespace {
+
+struct ThemeData {
+    fs::FsPath music_path{"/config/sphaira/themes/default_music.bfstm"};
+    std::string elements[ThemeEntryID_MAX]{};
+};
+
+struct ThemeIdPair {
+    const char* label;
+    ThemeEntryID id;
+    ElementType type{ElementType::None};
+};
+
+constexpr ThemeIdPair THEME_ENTRIES[] = {
+    { "background", ThemeEntryID_BACKGROUND },
+    { "grid", ThemeEntryID_GRID },
+    { "text", ThemeEntryID_TEXT, ElementType::Colour },
+    { "text_info", ThemeEntryID_TEXT_INFO, ElementType::Colour },
+    { "text_selected", ThemeEntryID_TEXT_SELECTED, ElementType::Colour },
+    { "selected_background", ThemeEntryID_SELECTED_BACKGROUND, ElementType::Colour },
+    { "error", ThemeEntryID_ERROR, ElementType::Colour },
+    { "popup", ThemeEntryID_POPUP, ElementType::Colour },
+    { "line", ThemeEntryID_LINE, ElementType::Colour },
+    { "line_separator", ThemeEntryID_LINE_SEPARATOR, ElementType::Colour },
+    { "sidebar", ThemeEntryID_SIDEBAR, ElementType::Colour },
+    { "scrollbar", ThemeEntryID_SCROLLBAR, ElementType::Colour },
+    { "scrollbar_background", ThemeEntryID_SCROLLBAR_BACKGROUND, ElementType::Colour },
+    { "progressbar", ThemeEntryID_PROGRESSBAR, ElementType::Colour },
+    { "progressbar_background", ThemeEntryID_PROGRESSBAR_BACKGROUND, ElementType::Colour },
+    { "highlight_1", ThemeEntryID_HIGHLIGHT_1, ElementType::Colour },
+    { "highlight_2", ThemeEntryID_HIGHLIGHT_2, ElementType::Colour },
+    { "icon_colour", ThemeEntryID_ICON_COLOUR, ElementType::Colour },
+    { "icon_audio", ThemeEntryID_ICON_AUDIO, ElementType::Texture },
+    { "icon_video", ThemeEntryID_ICON_VIDEO, ElementType::Texture },
+    { "icon_image", ThemeEntryID_ICON_IMAGE, ElementType::Texture },
+    { "icon_file", ThemeEntryID_ICON_FILE, ElementType::Texture },
+    { "icon_folder", ThemeEntryID_ICON_FOLDER, ElementType::Texture },
+    { "icon_zip", ThemeEntryID_ICON_ZIP, ElementType::Texture },
+    { "icon_nro", ThemeEntryID_ICON_NRO, ElementType::Texture },
+};
 
 constinit App* g_app{};
 
@@ -234,6 +274,62 @@ auto LoadThemeMeta(const fs::FsPath& path, ThemeMeta& meta) -> bool {
     log_write("loaded meta from: %s\n", path.s);
     meta.ini_path = path;
     return true;
+}
+
+void LoadThemeInternal(ThemeMeta meta, ThemeData& theme_data, int inherit_level = 0) {
+    constexpr auto inherit_level_max = 5;
+
+    // all themes will inherit from black theme by default.
+    if (meta.inherit.empty() && !inherit_level) {
+        meta.inherit = "romfs:/themes/base_black_theme.ini";
+    }
+
+    // check if the theme inherits from another, if so, load it.
+    // block inheriting from itself.
+    if (inherit_level < inherit_level_max && !meta.inherit.empty() && strcasecmp(meta.inherit, "none") && meta.inherit != meta.ini_path) {
+        log_write("inherit is not empty: %s\n", meta.inherit.s);
+        if (R_SUCCEEDED(romfsInit())) {
+            ThemeMeta inherit_meta;
+            const auto has_meta = LoadThemeMeta(meta.inherit, inherit_meta);
+            romfsExit();
+
+            // base themes do not have a meta
+            if (!has_meta) {
+                inherit_meta.ini_path = meta.inherit;
+            }
+
+            LoadThemeInternal(inherit_meta, theme_data, inherit_level + 1);
+        }
+    }
+
+    static constexpr auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
+        auto theme_data = static_cast<ThemeData*>(UserData);
+
+        if (!std::strcmp(Section, "theme")) {
+            if (!std::strcmp(Key, "music")) {
+                theme_data->music_path = Value;
+            } else {
+                for (auto& e : THEME_ENTRIES) {
+                    if (!std::strcmp(Key, e.label)) {
+                        theme_data->elements[e.id] = Value;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return 1;
+    };
+
+    if (R_SUCCEEDED(romfsInit())) {
+        ON_SCOPE_EXIT(romfsExit());
+
+        if (!ini_browse(cb, &theme_data, meta.ini_path)) {
+            log_write("failed to open ini: %s\n", meta.ini_path.s);
+        } else {
+            log_write("opened ini: %s\n", meta.ini_path);
+        }
+    }
 }
 
 void haze_callback(const HazeCallbackData *data) {
@@ -747,6 +843,48 @@ void App::Poll() {
     hidGetTouchScreenStates(&state, 1);
     m_touch_info.is_clicked = false;
 
+// todo: replace old touch code with gestures from below
+#if 0
+    static HidGestureState prev_gestures[17]{};
+    HidGestureState gestures[17]{};
+    const auto gesture_count = hidGetGestureStates(gestures, std::size(gestures));
+    for (int i = (int)gesture_count - 1; i >= 0; i--) {
+        bool found = false;
+        for (int j = 0; j < gesture_count; j++) {
+            if (gestures[i].type == prev_gestures[j].type && gestures[i].sampling_number == prev_gestures[j].sampling_number) {
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            continue;
+        }
+
+        auto gesture = gestures[i];
+        if (gesture_count && gesture.type == HidGestureType_Swipe) {
+            log_write("[SWIPE] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Tap) {
+            log_write("[TAP] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Press) {
+            log_write("[PRESS] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Cancel) {
+            log_write("[CANCEL] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Complete) {
+            log_write("[COMPLETE] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Pan) {
+            log_write("[PAN] got gesture sampling_number: %d context_number: %d x: %d y: %d dx: %d dy: %d vx: %.2f vy: %.2f count: %d\n", gesture.sampling_number, gesture.context_number, gesture.x, gesture.y, gesture.delta_x, gesture.delta_y, gesture.velocity_x, gesture.velocity_y, gesture.point_count);
+        }
+    }
+
+    memcpy(prev_gestures, gestures, sizeof(gestures));
+#endif
+
     if (state.count == 1 && !m_touch_info.is_touching) {
         m_touch_info.initial = m_touch_info.cur = state.touches[0];
         m_touch_info.is_touching = true;
@@ -839,6 +977,7 @@ void App::Draw() {
     }
 
     m_notif_manager.Draw(vg, &m_theme);
+    ui::bubble::Draw(vg, &m_theme);
 
     nvgResetTransform(vg);
     nvgEndFrame(this->vg);
@@ -860,7 +999,13 @@ void DrawElement(const Vec4& v, ThemeEntryID id) {
         case ElementType::None: {
         } break;
         case ElementType::Texture: {
-            const auto paint = nvgImagePattern(g_app->vg, v.x, v.y, v.w, v.h, 0, e.texture, 1.f);
+            auto paint = nvgImagePattern(g_app->vg, v.x, v.y, v.w, v.h, 0, e.texture, 1.f);
+            // override the icon colours if set
+            if (id > ThemeEntryID_ICON_COLOUR && id < ThemeEntryID_MAX) {
+                if (g_app->m_theme.elements[ThemeEntryID_ICON_COLOUR].type != ElementType::None) {
+                    paint.innerColor = g_app->m_theme.GetColour(ThemeEntryID_ICON_COLOUR);
+                }
+            }
             ui::gfx::drawRect(g_app->vg, v, paint);
         } break;
         case ElementType::Colour: {
@@ -885,41 +1030,49 @@ auto App::LoadElementColour(std::string_view value) -> ElementEntry {
 
     if (value.starts_with("0x")) {
         value = value.substr(2);
-    } else if (value.starts_with('#')) {
-        value = value.substr(1);
+    } else {
+        return {};
     }
 
-    const u32 c = std::strtol(value.data(), nullptr, 16);
-    if (c) {
-        entry.colour = nvgRGBA((c >> 24) & 0xFF, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
-        entry.type = ElementType::Colour;
+    char* end;
+    u32 c = std::strtoul(value.data(), &end, 16);
+    if (!c && value.data() == end) {
+        return {};
     }
 
+    // force alpha bit if not already set.
+    if (value.length() <= 6) {
+        c <<= 8;
+        c |= 0xFF;
+    }
+
+    entry.colour = nvgRGBA((c >> 24) & 0xFF, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
+    entry.type = ElementType::Colour;
     return entry;
 }
 
-auto App::LoadElement(std::string_view value) -> ElementEntry {
+auto App::LoadElement(std::string_view value, ElementType type) -> ElementEntry {
     if (value.size() <= 1) {
         return {};
     }
 
-    if (auto e = LoadElementImage(value); e.type != ElementType::None) {
-        return e;
+    if (type == ElementType::None || type == ElementType::Colour) {
+        // most assets are colours, so prioritise this first
+        if (auto e = LoadElementColour(value); e.type != ElementType::None) {
+            return e;
+        }
     }
 
-    if (auto e = LoadElementColour(value); e.type != ElementType::None) {
-        return e;
+    if (type == ElementType::None || type == ElementType::Texture) {
+        if (auto e = LoadElementImage(value); e.type != ElementType::None) {
+            return e;
+        }
     }
 
     return {};
 }
 
 void App::CloseTheme() {
-    m_theme.meta.name.clear();
-    m_theme.meta.author.clear();
-    m_theme.meta.version.clear();
-    m_theme.meta.ini_path.clear();
-
     if (m_sound_ids[SoundEffect_Music]) {
         plsrPlayerFree(m_sound_ids[SoundEffect_Music]);
         m_sound_ids[SoundEffect_Music] = nullptr;
@@ -930,88 +1083,34 @@ void App::CloseTheme() {
         if (e.type == ElementType::Texture) {
             nvgDeleteImage(vg, e.texture);
         }
-        e.type = ElementType::None;
     }
+
+    m_theme = {};
 }
 
 void App::LoadTheme(const ThemeMeta& meta) {
     // reset theme
     CloseTheme();
 
-    // check if the theme inherits from another, if so, load it.
-    // block inheriting from itself.
-    if (!meta.inherit.empty() && meta.inherit != meta.ini_path) {
-        log_write("inherit is not empty: %s\n", meta.inherit.s);
-        if (R_SUCCEEDED(romfsInit())) {
-            ThemeMeta inherit_meta;
-            const auto has_meta = LoadThemeMeta(meta.inherit, inherit_meta);
-            romfsExit();
-
-            // base themes do not have a meta
-            if (!has_meta) {
-                inherit_meta.ini_path = meta.inherit;
-            }
-
-            LoadTheme(inherit_meta);
-        }
-    }
-
+    ThemeData theme_data{};
+    LoadThemeInternal(meta, theme_data);
     m_theme.meta = meta;
-
-    const auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
-        auto app = static_cast<App*>(UserData);
-        auto& theme = app->m_theme;
-        std::string_view section{Section};
-        std::string_view key{Key};
-        std::string_view value{Value};
-
-        if (section == "theme") {
-            if (key == "background") {
-                theme.elements[ThemeEntryID_BACKGROUND] = app->LoadElement(value);
-            } else if (key == "music") {
-                if (R_SUCCEEDED(plsrBFSTMOpen(Value, &theme.music))) {
-                    if (R_SUCCEEDED(plsrPlayerLoadStream(&theme.music, &app->m_sound_ids[SoundEffect_Music]))) {
-                        app->PlaySoundEffect(SoundEffect_Music);
-                    }
-                }
-            } else if (key == "grid") {
-                theme.elements[ThemeEntryID_GRID] = app->LoadElement(value);
-            } else if (key == "selected") {
-                theme.elements[ThemeEntryID_SELECTED] = app->LoadElement(value);
-            } else if (key == "selected_overlay") {
-                theme.elements[ThemeEntryID_SELECTED_OVERLAY] = app->LoadElement(value);
-            } else if (key == "text") {
-                theme.elements[ThemeEntryID_TEXT] = app->LoadElementColour(value);
-            } else if (key == "text_selected") {
-                theme.elements[ThemeEntryID_TEXT_SELECTED] = app->LoadElementColour(value);
-            } else if (key == "icon_audio") {
-                theme.elements[ThemeEntryID_ICON_AUDIO] = app->LoadElement(value);
-            } else if (key == "icon_video") {
-                theme.elements[ThemeEntryID_ICON_VIDEO] = app->LoadElement(value);
-            } else if (key == "icon_image") {
-                theme.elements[ThemeEntryID_ICON_IMAGE] = app->LoadElement(value);
-            } else if (key == "icon_file") {
-                theme.elements[ThemeEntryID_ICON_FILE] = app->LoadElement(value);
-            } else if (key == "icon_folder") {
-                theme.elements[ThemeEntryID_ICON_FOLDER] = app->LoadElement(value);
-            } else if (key == "icon_zip") {
-                theme.elements[ThemeEntryID_ICON_ZIP] = app->LoadElement(value);
-            } else if (key == "icon_game") {
-                theme.elements[ThemeEntryID_ICON_GAME] = app->LoadElement(value);
-            } else if (key == "icon_nro") {
-                theme.elements[ThemeEntryID_ICON_NRO] = app->LoadElement(value);
-            }
-        }
-
-        return 1;
-    };
 
     if (R_SUCCEEDED(romfsInit())) {
         ON_SCOPE_EXIT(romfsExit());
-        if (!ini_browse(cb, this, meta.ini_path)) {
-            log_write("failed to open ini: %s\n", meta.ini_path.s);
-        } else {
-            log_write("opened ini: %s\n", meta.ini_path);
+
+        // load all assets / colours.
+        for (auto& e : THEME_ENTRIES) {
+            m_theme.elements[e.id] = LoadElement(theme_data.elements[e.id], e.type);
+        }
+
+        // load music
+        if (!theme_data.music_path.empty()) {
+            if (R_SUCCEEDED(plsrBFSTMOpen(theme_data.music_path, &m_theme.music))) {
+                if (R_SUCCEEDED(plsrPlayerLoadStream(&m_theme.music, &m_sound_ids[SoundEffect_Music]))) {
+                    PlaySoundEffect(SoundEffect_Music);
+                }
+            }
         }
     }
 }
@@ -1207,6 +1306,7 @@ App::App(const char* argv0) {
     appletHook(&m_appletHookCookie, appplet_hook_calback, this);
 
     hidInitializeTouchScreen();
+    hidInitializeGesture();
     padConfigureInput(8, HidNpadStyleSet_NpadStandard);
     // padInitializeDefault(&m_pad);
     padInitializeAny(&m_pad);
@@ -1253,6 +1353,9 @@ App::App(const char* argv0) {
         }
     }
 
+    // soon (tm)
+    // ui::bubble::Init();
+
     App::Push(std::make_shared<ui::menu::main::MainMenu>());
     log_write("finished app constructor\n");
 }
@@ -1275,6 +1378,8 @@ App::~App() {
 
     i18n::exit();
     curl::Exit();
+
+    ui::bubble::Exit();
 
     // this has to be called before any cleanup to ensure the lifetime of
     // nvg is still active as some widgets may need to free images.
