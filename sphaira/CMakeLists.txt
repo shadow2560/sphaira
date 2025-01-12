@@ -57,6 +57,7 @@ add_executable(sphaira
     source/ui/sidebar.cpp
     source/ui/widget.cpp
     source/ui/list.cpp
+    source/ui/bubbles.cpp
 
     source/app.cpp
     source/download.cpp

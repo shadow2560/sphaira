@@ -1,6 +1,7 @@
 #include "ui/menus/main_menu.hpp"
 #include "ui/error_box.hpp"
 #include "ui/option_box.hpp"
+#include "ui/bubbles.hpp"
 
 #include "app.hpp"
 #include "log.hpp"
@@ -975,6 +976,7 @@ void App::Draw() {
     }
 
     m_notif_manager.Draw(vg, &m_theme);
+    ui::bubble::Draw(vg, &m_theme);
 
     nvgResetTransform(vg);
     nvgEndFrame(this->vg);
@@ -1350,6 +1352,9 @@ App::App(const char* argv0) {
         }
     }
 
+    // soon (tm)
+    // ui::bubble::Init();
+
     App::Push(std::make_shared<ui::menu::main::MainMenu>());
     log_write("finished app constructor\n");
 }
@@ -1372,6 +1377,8 @@ App::~App() {
 
     i18n::exit();
     curl::Exit();
+
+    ui::bubble::Exit();
 
     // this has to be called before any cleanup to ensure the lifetime of
     // nvg is still active as some widgets may need to free images.
