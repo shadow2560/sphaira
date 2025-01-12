@@ -89,7 +89,7 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
                 file_path = fs::AppendPath("/", file_path);
             }
 
-            if (!strcasecmp(strrchr(file_path.s, '/'), "/sphaira.nro")) {
+            if (std::strstr(file_path, "sphaira.nro")) {
                 file_path = App::GetExePath();
             }
 
@@ -279,11 +279,8 @@ MainMenu::MainMenu() {
                                 m_update_state = UpdateState::None;
                                 App::Notify("Updated to "_i18n + m_update_version);
                                 App::Push(std::make_shared<OptionBox>(
-                                    "Restart Sphaira?"_i18n,
-                                    "Back"_i18n, "Restart"_i18n, 1, [this](auto op_index){
-                                        if (op_index && *op_index) {
-                                            App::ExitRestart();
-                                        }
+                                    "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
+                                        App::ExitRestart();
                                     }
                                 ));
                             } else {
