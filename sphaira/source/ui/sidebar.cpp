@@ -7,6 +7,14 @@
 namespace sphaira::ui {
 namespace {
 
+auto GetTextScrollSpeed() -> float {
+    switch (App::GetTextScrollSpeed()) {
+        case 0: return 0.5;
+        default: case 1: return 1.0;
+        case 2: return 1.5;
+    }
+}
+
 auto DistanceBetweenY(Vec4 va, Vec4 vb) -> Vec4 {
     return Vec4{
         va.x, va.y,
@@ -147,11 +155,59 @@ auto SidebarEntryArray::Draw(NVGcontext* vg, Theme* theme) -> void {
     SidebarEntryBase::Draw(vg, theme);
 
     const auto& text_entry = m_items[m_index];
-    // const auto& colour = HasFocus() ? theme->GetColour(ThemeEntryID_TEXT_SELECTED) : theme->GetColour(ThemeEntryID_TEXT);
-    const auto& colour = theme->GetColour(ThemeEntryID_TEXT);
 
-    gfx::drawText(vg, Vec2{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, colour, m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    gfx::drawText(vg, Vec2{m_pos.x + m_pos.w - 15.f, m_pos.y + (m_pos.h / 2.f)}, 20.f, theme->GetColour(ThemeEntryID_TEXT_SELECTED), text_entry.c_str(), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+    // scrolling text
+    // todo: move below in a flexible class and use it for all text drawing.
+    float bounds[4];
+    nvgFontSize(vg, 20);
+    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    nvgTextBounds(vg, 0, 0, m_title.c_str(), nullptr, bounds);
+    const float start_x = bounds[2] + 50;
+    const float max_off = m_pos.w - start_x - 15.f;
+
+    auto value_str = m_items[m_index];
+    nvgTextBounds(vg, 0, 0, value_str.c_str(), nullptr, bounds);
+
+    if (HasFocus()) {
+        const auto scroll_amount = GetTextScrollSpeed();
+        if (bounds[2] > max_off) {
+            value_str += "        ";
+            nvgTextBounds(vg, 0, 0, value_str.c_str(), nullptr, bounds);
+
+            if (!m_text_yoff) {
+                m_tick++;
+                if (m_tick >= 90) {
+                    m_tick = 0;
+                    m_text_yoff += scroll_amount;
+                }
+            } else if (bounds[2] > m_text_yoff) {
+                m_text_yoff += std::min(scroll_amount, bounds[2] - m_text_yoff);
+            } else {
+                m_text_yoff = 0;
+            }
+
+            value_str += text_entry;
+        }
+    }
+
+    const Vec2 key_text_pos{m_pos.x + 15.f, m_pos.y + (m_pos.h / 2.f)};
+    gfx::drawText(vg, key_text_pos, 20.f, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+
+    nvgSave(vg);
+    const float xpos = m_pos.x + m_pos.w - 15.f - std::min(max_off, bounds[2]);
+    nvgIntersectScissor(vg, xpos, GetY(), max_off, GetH());
+    const Vec2 value_text_pos{xpos - m_text_yoff, m_pos.y + (m_pos.h / 2.f)};
+    gfx::drawText(vg, value_text_pos, 20.f, theme->GetColour(ThemeEntryID_TEXT_SELECTED), value_str.c_str(), NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    nvgRestore(vg);
+}
+
+auto SidebarEntryArray::OnFocusGained() noexcept -> void {
+    Widget::OnFocusGained();
+}
+
+auto SidebarEntryArray::OnFocusLost() noexcept -> void {
+    Widget::OnFocusLost();
+    m_text_yoff = 0;
 }
 
 Sidebar::Sidebar(std::string title, Side side, Items&& items)

@@ -585,6 +585,10 @@ auto App::GetLanguage() -> long {
     return g_app->m_language.Get();
 }
 
+auto App::GetTextScrollSpeed() -> long {
+    return g_app->m_text_scroll_speed.Get();
+}
+
 void App::SetNxlinkEnable(bool enable) {
     if (App::GetNxlinkEnable() != enable) {
         g_app->m_nxlink_enabled.Set(enable);
@@ -765,6 +769,10 @@ void App::SetLanguage(long index) {
             }
         ));
     }
+}
+
+void App::SetTextScrollSpeed(long index) {
+    g_app->m_text_scroll_speed.Set(index);
 }
 
 auto App::Install(OwoConfig& config) -> Result {

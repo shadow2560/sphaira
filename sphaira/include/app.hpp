@@ -80,6 +80,7 @@ public:
     static auto GetThemeShuffleEnable() -> bool;
     static auto GetThemeMusicEnable() -> bool;
     static auto GetLanguage() -> long;
+    static auto GetTextScrollSpeed() -> long;
 
     static void SetMtpEnable(bool enable);
     static void SetFtpEnable(bool enable);
@@ -92,6 +93,7 @@ public:
     static void SetThemeShuffleEnable(bool enable);
     static void SetThemeMusicEnable(bool enable);
     static void SetLanguage(long index);
+    static void SetTextScrollSpeed(long index);
 
     static auto Install(OwoConfig& config) -> Result;
     static auto Install(ui::ProgressBox* pbox, OwoConfig& config) -> Result;
@@ -161,6 +163,8 @@ public:
     option::OptionBool m_theme_shuffle{INI_SECTION, "theme_shuffle", false};
     option::OptionBool m_theme_music{INI_SECTION, "theme_music", true};
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto
+    // todo: move this into it's own menu
+    option::OptionLong m_text_scroll_speed{"accessibility", "text_scroll_speed", 1}; // normal
 
     PLSR_BFSAR m_qlaunch_bfsar{};
     PLSR_PlayerSoundId m_sound_ids[SoundEffect_MAX]{};

@@ -329,6 +329,11 @@ MainMenu::MainMenu() {
                 install_items.push_back("System memory"_i18n);
                 install_items.push_back("microSD card"_i18n);
 
+                SidebarEntryArray::Items text_scroll_speed_items;
+                text_scroll_speed_items.push_back("Slow"_i18n);
+                text_scroll_speed_items.push_back("Normal"_i18n);
+                text_scroll_speed_items.push_back("Fast"_i18n);
+
                 options->Add(std::make_shared<SidebarEntryBool>("Logging"_i18n, App::GetLogEnable(), [this](bool& enable){
                     App::SetLogEnable(enable);
                 }, "Enabled"_i18n, "Disabled"_i18n));
@@ -348,6 +353,10 @@ MainMenu::MainMenu() {
                 options->Add(std::make_shared<SidebarEntryBool>("Show install warning"_i18n, App::GetInstallPrompt(), [this](bool& enable){
                     App::SetInstallPrompt(enable);
                 }, "Enabled"_i18n, "Disabled"_i18n));
+
+                options->Add(std::make_shared<SidebarEntryArray>("Text scroll speed"_i18n, text_scroll_speed_items, [this](s64& index_out){
+                    App::SetTextScrollSpeed(index_out);
+                }, (s64)App::GetTextScrollSpeed()));
             }));
         }})
     );

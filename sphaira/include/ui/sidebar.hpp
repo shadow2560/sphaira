@@ -57,12 +57,16 @@ public:
     SidebarEntryArray(std::string title, Items items, std::string& index);
 
     auto Draw(NVGcontext* vg, Theme* theme) -> void override;
+    auto OnFocusGained() noexcept -> void override;
+    auto OnFocusLost() noexcept -> void override;
 
 private:
     Items m_items;
     ListCallback m_list_callback;
     Callback m_callback;
     s64 m_index;
+    s64 m_tick{};
+    float m_text_yoff{};
 };
 
 template <typename T>
