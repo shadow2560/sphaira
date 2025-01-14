@@ -52,9 +52,7 @@ ProgressBox::ProgressBox(const std::string& title, ProgressBoxCallback callback,
 }
 
 ProgressBox::~ProgressBox() {
-    mutexLock(&m_mutex);
-    m_exit_requested = true;
-    mutexUnlock(&m_mutex);
+    m_stop_source.request_stop();
 
     if (R_FAILED(threadWaitForExit(&m_thread))) {
         log_write("failed to join thread\n");
@@ -125,16 +123,11 @@ auto ProgressBox::UpdateTransfer(s64 offset, s64 size)  -> ProgressBox& {
 }
 
 void ProgressBox::RequestExit() {
-    mutexLock(&m_mutex);
-    m_exit_requested = true;
-    mutexUnlock(&m_mutex);
+    m_stop_source.request_stop();
 }
 
 auto ProgressBox::ShouldExit() -> bool {
-    mutexLock(&m_mutex);
-    const auto exit_requested = m_exit_requested;
-    mutexUnlock(&m_mutex);
-    return exit_requested;
+    return m_stop_source.stop_requested();
 }
 
 auto ProgressBox::CopyFile(const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {

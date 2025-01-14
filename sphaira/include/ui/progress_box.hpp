@@ -57,7 +57,6 @@ private:
     std::string m_transfer{};
     s64 m_size{};
     s64 m_offset{};
-    bool m_exit_requested{};
 };
 
 // this is a helper function that does many things.
