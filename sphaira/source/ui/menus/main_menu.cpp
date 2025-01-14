@@ -150,6 +150,7 @@ MainMenu::MainMenu() {
         curl::Url{GITHUB_URL},
         curl::Path{CACHE_PATH},
         curl::Flags{curl::Flag_Cache},
+        curl::StopToken{this->GetToken()},
         curl::Header{
             { "Accept", "application/vnd.github+json" },
         },

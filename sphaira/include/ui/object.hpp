@@ -1,13 +1,16 @@
 #pragma once
 
 #include "types.hpp"
+#include <stop_token>
 
 namespace sphaira::ui {
 
 class Object {
 public:
     Object() = default;
-    virtual ~Object() = default;
+    virtual ~Object() {
+        m_stop_source.request_stop();
+    }
 
     virtual auto Draw(NVGcontext* vg, Theme* theme) -> void = 0;
 
@@ -71,8 +74,14 @@ public:
         m_hidden = value;
     }
 
+    auto GetToken() const {
+        return m_stop_source.get_token();
+    }
+
 protected:
     Vec4 m_pos{};
+    // used for lifetime management across threads.
+    std::stop_source m_stop_source{};
     bool m_hidden{false};
 };
 

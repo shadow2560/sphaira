@@ -6,6 +6,7 @@
 #include <functional>
 #include <unordered_map>
 #include <algorithm>
+#include <stop_token>
 #include <switch.h>
 
 namespace sphaira::curl {
@@ -29,6 +30,7 @@ struct ApiResult;
 using Path = fs::FsPath;
 using OnComplete = std::function<void(ApiResult& result)>;
 using OnProgress = std::function<bool(u32 dltotal, u32 dlnow, u32 ultotal, u32 ulnow)>;
+using StopToken = std::stop_token;
 
 struct Url {
     Url() = default;
@@ -71,6 +73,7 @@ struct ApiResult {
 struct DownloadEventData {
     OnComplete callback;
     ApiResult result;
+    StopToken stoken;
 };
 
 auto Init() -> bool;
@@ -114,6 +117,7 @@ struct Api {
     auto ToMemory(Ts&&... ts) {
         static_assert(std::disjunction_v<std::is_same<Url, Ts>...>, "Url must be specified");
         static_assert(!std::disjunction_v<std::is_same<Path, Ts>...>, "Path must not valid for memory");
+        static_assert(!std::disjunction_v<std::is_same<OnComplete, Ts>...>, "OnComplete must not be specified");
         Api::set_option(std::forward<Ts>(ts)...);
         return curl::ToMemory(*this);
     }
@@ -122,6 +126,7 @@ struct Api {
     auto ToFile(Ts&&... ts) {
         static_assert(std::disjunction_v<std::is_same<Url, Ts>...>, "Url must be specified");
         static_assert(std::disjunction_v<std::is_same<Path, Ts>...>, "Path must be specified");
+        static_assert(!std::disjunction_v<std::is_same<OnComplete, Ts>...>, "OnComplete must not be specified");
         Api::set_option(std::forward<Ts>(ts)...);
         return curl::ToFile(*this);
     }
@@ -131,6 +136,7 @@ struct Api {
         static_assert(std::disjunction_v<std::is_same<Url, Ts>...>, "Url must be specified");
         static_assert(std::disjunction_v<std::is_same<OnComplete, Ts>...>, "OnComplete must be specified");
         static_assert(!std::disjunction_v<std::is_same<Path, Ts>...>, "Path must not valid for memory");
+        static_assert(std::disjunction_v<std::is_same<StopToken, Ts>...>, "StopToken must be specified");
         Api::set_option(std::forward<Ts>(ts)...);
         return curl::ToMemoryAsync(*this);
     }
@@ -140,18 +146,38 @@ struct Api {
         static_assert(std::disjunction_v<std::is_same<Url, Ts>...>, "Url must be specified");
         static_assert(std::disjunction_v<std::is_same<Path, Ts>...>, "Path must be specified");
         static_assert(std::disjunction_v<std::is_same<OnComplete, Ts>...>, "OnComplete must be specified");
+        static_assert(std::disjunction_v<std::is_same<StopToken, Ts>...>, "StopToken must be specified");
         Api::set_option(std::forward<Ts>(ts)...);
         return curl::ToFileAsync(*this);
     }
 
-    Url m_url;
-    Fields m_fields{};
-    Header m_header{};
-    Flags m_flags{};
-    Path m_path{};
-    OnComplete m_on_complete = nullptr;
-    OnProgress m_on_progress = nullptr;
-    Priority m_prio = Priority::High;
+    auto& GetUrl() const {
+        return m_url.m_str;
+    }
+    auto& GetFields() const {
+        return m_fields.m_str;
+    }
+    auto& GetHeader() const {
+        return m_header;
+    }
+    auto& GetFlags() const {
+        return m_flags.m_flags;
+    }
+    auto& GetPath() const {
+        return m_path;
+    }
+    auto& GetOnComplete() const {
+        return m_on_complete;
+    }
+    auto& GetOnProgress() const {
+        return m_on_progress;
+    }
+    auto& GetPriority() const {
+        return m_prio;
+    }
+    auto& GetToken() const {
+        return m_stoken;
+    }
 
 private:
     void SetOption(Url&& v) {
@@ -178,6 +204,9 @@ private:
     void SetOption(Priority&& v) {
         m_prio = v;
     }
+    void SetOption(StopToken&& v) {
+        m_stoken = v;
+    }
 
     template <typename T>
     void set_option(T&& t) {
@@ -189,6 +218,18 @@ private:
         set_option(std::forward<T>(t));
         set_option(std::forward<Ts>(ts)...);
     }
+
+private:
+    Url m_url;
+    Fields m_fields{};
+    Header m_header{};
+    Flags m_flags{};
+    Path m_path{};
+    OnComplete m_on_complete{nullptr};
+    OnProgress m_on_progress{nullptr};
+    Priority m_prio{Priority::High};
+    std::stop_source m_stop_source{};
+    StopToken m_stoken{m_stop_source.get_token()};
 };
 
 } // namespace sphaira::curl

@@ -647,6 +647,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                             curl::Url{url},
                             curl::Path{path},
                             curl::Flags{curl::Flag_Cache},
+                            curl::StopToken{this->GetToken()},
                             curl::OnComplete{[this, &image](auto& result) {
                                 if (result.success) {
                                     image.state = ImageDownloadState::Done;
@@ -733,6 +734,7 @@ void Menu::PackListDownload() {
         curl::Url{packList_url},
         curl::Path{packlist_path},
         curl::Flags{curl::Flag_Cache},
+        curl::StopToken{this->GetToken()},
         curl::OnComplete{[this, page_index](auto& result){
             log_write("got themezer data\n");
             if (!result.success) {

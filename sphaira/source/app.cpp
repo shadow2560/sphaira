@@ -421,7 +421,9 @@ void App::Loop() {
                     }
                 } else if constexpr(std::is_same_v<T, curl::DownloadEventData>) {
                     log_write("[DownloadEventData] got event\n");
-                    arg.callback(arg.result);
+                    if (arg.callback && !arg.stoken.stop_requested()) {
+                        arg.callback(arg.result);
+                    }
                 } else {
                     static_assert(false, "non-exhaustive visitor!");
                 }

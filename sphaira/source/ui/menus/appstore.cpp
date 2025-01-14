@@ -663,6 +663,7 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
                         curl::Url{URL_POST_FEEDBACK},
                         curl::Path{file},
                         curl::Fields{post},
+                        curl::StopToken{this->GetToken()},
                         curl::OnComplete{[](auto& result){
                             if (result.success) {
                                 log_write("got feedback!\n");
@@ -697,6 +698,7 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
         curl::Url{url},
         curl::Path{path},
         curl::Flags{curl::Flag_Cache},
+        curl::StopToken{this->GetToken()},
         curl::OnComplete{[this, path](auto& result){
             if (result.success) {
                 if (result.code == 304) {
@@ -990,6 +992,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
         curl::Url{URL_JSON},
         curl::Path{REPO_PATH},
         curl::Flags{curl::Flag_Cache},
+        curl::StopToken{this->GetToken()},
         curl::OnComplete{[this](auto& result){
             if (result.success) {
                 m_repo_download_state = ImageDownloadState::Done;
@@ -1071,6 +1074,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                         curl::Url{url},
                         curl::Path{path},
                         curl::Flags{curl::Flag_Cache},
+                        curl::StopToken{this->GetToken()},
                         curl::OnComplete{[this, &image](auto& result) {
                             if (result.success) {
                                 image.state = ImageDownloadState::Done;
