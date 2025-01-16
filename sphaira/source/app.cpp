@@ -631,13 +631,11 @@ void App::SetReplaceHbmenuEnable(bool enable) {
         g_app->m_replace_hbmenu.Set(enable);
         if (!enable) {
             // check we have already replaced hbmenu with sphaira
-            NacpStruct hbmenu_nacp;
-            if (R_FAILED(nro_get_nacp("/hbmenu.nro", hbmenu_nacp))) {
-                return;
-            }
-
-            if (std::strcmp(hbmenu_nacp.lang[0].name, "sphaira")) {
-                return;
+            NacpStruct hbmenu_nacp{};
+            if (R_SUCCEEDED(nro_get_nacp("/hbmenu.nro", hbmenu_nacp))) {
+                if (std::strcmp(hbmenu_nacp.lang[0].name, "sphaira")) {
+                    return;
+                }
             }
 
             // ask user if they want to restore hbmenu
