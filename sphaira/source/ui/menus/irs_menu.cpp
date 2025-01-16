@@ -258,8 +258,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 const auto scale = std::min(scale_x, scale_y);
                 w = m_irs_width * scale;
                 h = m_irs_height * scale;
-                cx = (m_pos.x + m_pos.w / 2.0) - w / 2.0;
-                cy = (m_pos.y + m_pos.h / 2.0) - h / 2.0;
+                cx = (m_pos.x + m_pos.w / 2.F) - w / 2.F;
+                cy = (m_pos.y + m_pos.h / 2.F) - h / 2.F;
                 angle = 0;
             }   break;
             case Rotation_90: {
@@ -268,8 +268,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 const auto scale = std::min(scale_x, scale_y);
                 w = m_irs_width * scale;
                 h = m_irs_height * scale;
-                cx = (m_pos.x + m_pos.w / 2.0) + h / 2.0;
-                cy = (m_pos.y + m_pos.h / 2.0) - w / 2.0;
+                cx = (m_pos.x + m_pos.w / 2.F) + h / 2.F;
+                cy = (m_pos.y + m_pos.h / 2.F) - w / 2.F;
                 angle = 90;
             }   break;
             case Rotation_180: {
@@ -278,8 +278,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 const auto scale = std::min(scale_x, scale_y);
                 w = m_irs_width * scale;
                 h = m_irs_height * scale;
-                cx = (m_pos.x + m_pos.w / 2.0) + w / 2.0;
-                cy = (m_pos.y + m_pos.h / 2.0) + h / 2.0;
+                cx = (m_pos.x + m_pos.w / 2.F) + w / 2.F;
+                cy = (m_pos.y + m_pos.h / 2.F) + h / 2.F;
                 angle = 180;
             }   break;
             case Rotation_270: {
@@ -288,8 +288,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 const auto scale = std::min(scale_x, scale_y);
                 w = m_irs_width * scale;
                 h = m_irs_height * scale;
-                cx = (m_pos.x + m_pos.w / 2.0) - h / 2.0;
-                cy = (m_pos.y + m_pos.h / 2.0) + w / 2.0;
+                cx = (m_pos.x + m_pos.w / 2.F) - h / 2.F;
+                cy = (m_pos.y + m_pos.h / 2.F) + w / 2.F;
                 angle = 270;
             }   break;
         }
@@ -382,7 +382,7 @@ void Menu::LoadDefaultConfig() {
     irsGetClusteringProcessorDefaultConfig(&m_clustering_config);
     irsGetIrLedProcessorDefaultConfig(&m_led_config);
 
-    m_tera_config;
+    m_tera_config = {};
     m_adaptive_config = {};
     m_hand_config = {};
 

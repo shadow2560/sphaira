@@ -81,12 +81,54 @@ target_compile_definitions(sphaira PRIVATE
     -DAPP_VERSION_HASH="${sphaira_VERSION_HASH}"
 )
 
+target_compile_options(sphaira PRIVATE
+    -Wall
+    -Wextra
+
+    # unsure if it's a good idea to enable these by default as
+    # it may cause breakage upon compiler updates.
+    # -Werror
+    # -Wfatal-errors
+
+    # disabled as nx uses s64 for size and offset, however stl uses size_t instead, thus
+    # there being a lot of warnings.
+    -Wno-sign-compare
+    # disabled as many overriden methods don't use the params.
+    -Wno-unused-parameter
+    # pedantic warning, missing fields are set to 0.
+    -Wno-missing-field-initializers
+    # disabled as it warns for strcat 2 paths together, but it will never
+    # overflow due to fs enforcing a max path len anyway.
+    -Wno-format-truncation
+
+    # the below are taken from my gba emulator, they've served me well ;)
+    -Wformat-overflow=2
+    -Wundef
+    -Wmissing-include-dirs
+    -fstrict-aliasing
+    -Wstrict-overflow=2
+    -Walloca
+    -Wduplicated-cond
+    -Wwrite-strings
+    -Wdate-time
+    -Wlogical-op
+    -Wpacked
+    -Wcast-qual
+    -Wcast-align
+    -Wimplicit-fallthrough=5
+    -Wsuggest-final-types
+    -Wuninitialized
+    -fimplicit-constexpr
+    -Wmissing-requires
+)
+
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
 
 FetchContent_Declare(ftpsrv
     GIT_REPOSITORY https://github.com/ITotalJustice/ftpsrv.git
     GIT_TAG 1.2.1
+    SOURCE_SUBDIR NONE
 )
 
 FetchContent_Declare(libhaze
@@ -101,7 +143,7 @@ FetchContent_Declare(libpulsar
 
 FetchContent_Declare(nanovg
     GIT_REPOSITORY https://github.com/ITotalJustice/nanovg-deko3d.git
-    GIT_TAG 1902b38
+    GIT_TAG 845c9fc
 )
 
 FetchContent_Declare(stb
@@ -136,8 +178,6 @@ set(NANOVG_NO_GIF ON)
 set(NANOVG_NO_HDR ON)
 set(NANOVG_NO_PIC ON)
 set(NANOVG_NO_PNM ON)
-set(NANOVG_STBI_STATIC OFF)
-set(NANOVG_STBTT_STATIC ON)
 
 set(YYJSON_DISABLE_READER OFF)
 set(YYJSON_DISABLE_WRITER OFF)
@@ -148,7 +188,7 @@ set(YYJSON_DISABLE_UTF8_VALIDATION ON)
 set(YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS OFF)
 
 FetchContent_MakeAvailable(
-    # ftpsrv
+    ftpsrv
     libhaze
     libpulsar
     nanovg
@@ -156,11 +196,6 @@ FetchContent_MakeAvailable(
     minIni
     yyjson
 )
-
-FetchContent_GetProperties(ftpsrv)
-if (NOT ftpsrv_POPULATED)
-    FetchContent_Populate(ftpsrv)
-endif()
 
 set(FTPSRV_LIB_BUILD TRUE)
 set(FTPSRV_LIB_SOCK_UNISTD TRUE)
@@ -178,6 +213,7 @@ set(FTPSRV_LIB_CUSTOM_DEFINES
     USE_VFS_SAVE=$<BOOL:TRUE>
     USE_VFS_STORAGE=$<BOOL:TRUE>
     USE_VFS_GC=$<BOOL:${USE_VFS_GC}>
+    USE_VFS_USBHSFS=$<BOOL:FALSE>
     VFS_NX_BUFFER_IO=$<BOOL:TRUE>
 )
 

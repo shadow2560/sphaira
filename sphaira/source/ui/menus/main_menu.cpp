@@ -54,7 +54,7 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
     if (!pbox->ShouldExit()) {
         auto zfile = unzOpen64(zip_out);
         if (!zfile) {
-            log_write("failed to open zip: %s\n", zip_out);
+            log_write("failed to open zip: %s\n", zip_out.s);
             return false;
         }
         ON_SCOPE_EXIT(unzClose(zfile));
@@ -96,25 +96,25 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
             Result rc;
             if (file_path[strlen(file_path) -1] == '/') {
                 if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
             } else {
                 Result rc;
                 if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
                 FsFile f;
                 if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Write, &f))) {
-                    log_write("failed to open file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
                 ON_SCOPE_EXIT(fsFileClose(&f));
 
                 if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                    log_write("failed to set file size: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to set file size: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
@@ -128,7 +128,7 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
                     }
 
                     if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                        log_write("failed to write file: %s 0x%04X\n", file_path, rc);
+                        log_write("failed to write file: %s 0x%04X\n", file_path.s, rc);
                         return false;
                     }
 

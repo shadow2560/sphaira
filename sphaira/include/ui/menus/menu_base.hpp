@@ -25,9 +25,9 @@ private:
     void UpdateVars();
 
 private:
-    std::string m_title;
-    std::string m_title_sub_heading;
-    std::string m_sub_heading;
+    std::string m_title{};
+    std::string m_title_sub_heading{};
+    std::string m_sub_heading{};
 
     struct tm m_tm{};
     TimeStamp m_poll_timestamp{};

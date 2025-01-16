@@ -31,7 +31,6 @@ ProgressBox::ProgressBox(const std::string& title, ProgressBoxCallback callback,
     m_pos.h = 430.f;
     m_pos.x = 255;
     m_pos.y = 145;
-    145 + 430; // 575, 200, 420
 
     m_pos.w = 770.f;
     m_pos.h = 295.f;
@@ -99,7 +98,7 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
 
     gfx::drawTextArgs(vg, center_x, m_pos.y + 60, 25, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), title.c_str());
     if (!transfer.empty()) {
-        gfx::drawTextArgs(vg, center_x, prog_bar.y - 15 - 20 * 1.5, 20, NVG_ALIGN_CENTER, theme->GetColour(ThemeEntryID_TEXT), "%s", transfer.c_str());
+        gfx::drawTextArgs(vg, center_x, prog_bar.y - 15 - 20 * 1.5F, 20, NVG_ALIGN_CENTER, theme->GetColour(ThemeEntryID_TEXT), "%s", transfer.c_str());
     }
 }
 

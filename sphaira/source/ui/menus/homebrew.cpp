@@ -20,7 +20,7 @@ namespace {
 auto GenerateStarPath(const fs::FsPath& nro_path) -> fs::FsPath {
     fs::FsPath out{};
     const auto dilem = std::strrchr(nro_path.s, '/');
-    std::snprintf(out, sizeof(out), "%.*s.%s.star", dilem - nro_path.s + 1, nro_path.s, dilem + 1);
+    std::snprintf(out, sizeof(out), "%.*s.%s.star", int(dilem - nro_path.s + 1), nro_path.s, dilem + 1);
     return out;
 }
 
@@ -237,8 +237,6 @@ void Menu::SetIndex(s64 index) {
         m_list->SetYoff(0);
     }
 
-    const auto& e = m_entries[m_index];
-
     if (IsStarEnabled()) {
         const auto star_path = GenerateStarPath(m_entries[m_index].path);
         if (fs::FsNativeSd().FileExists(star_path)) {
@@ -279,8 +277,8 @@ void Menu::ScanHomebrew() {
 
     struct IniUser {
         std::vector<NroEntry>& entires;
-        Hbini* ini;
-        std::string last_section;
+        Hbini* ini{};
+        std::string last_section{};
     } ini_user{ m_entries };
 
     ini_browse([](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
@@ -331,9 +329,9 @@ void Menu::Sort() {
         const auto name_cmp = [order](const NroEntry& lhs, const NroEntry& rhs) -> bool {
             auto r = strcasecmp(lhs.GetName(), rhs.GetName());
             if (!r) {
-                auto r = strcasecmp(lhs.GetAuthor(), rhs.GetAuthor());
+                r = strcasecmp(lhs.GetAuthor(), rhs.GetAuthor());
                 if (!r) {
-                    auto r = strcasecmp(lhs.path, rhs.path);
+                    r = strcasecmp(lhs.path, rhs.path);
                 }
             }
 
@@ -351,6 +349,7 @@ void Menu::Sort() {
                 } else if (!lhs.has_star.value() && rhs.has_star.value()) {
                     return false;
                 }
+                [[fallthrough]];
             case SortType_Updated: {
                 auto lhs_timestamp = lhs.hbini.timestamp;
                 auto rhs_timestamp = rhs.hbini.timestamp;
@@ -376,6 +375,7 @@ void Menu::Sort() {
                 } else if (!lhs.has_star.value() && rhs.has_star.value()) {
                     return false;
                 }
+                [[fallthrough]];
             case SortType_Size: {
                 if (lhs.size == rhs.size) {
                     return name_cmp(lhs, rhs);
@@ -392,6 +392,7 @@ void Menu::Sort() {
                 } else if (!lhs.has_star.value() && rhs.has_star.value()) {
                     return false;
                 }
+                [[fallthrough]];
             case SortType_Alphabetical: {
                 return name_cmp(lhs, rhs);
             } break;

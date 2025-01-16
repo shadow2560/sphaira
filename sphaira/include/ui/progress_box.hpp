@@ -42,9 +42,9 @@ struct ProgressBox final : Widget {
 
 public:
     struct ThreadData {
-        ProgressBox* pbox;
-        ProgressBoxCallback callback;
-        bool result;
+        ProgressBox* pbox{};
+        ProgressBoxCallback callback{};
+        bool result{};
     };
 
 private:

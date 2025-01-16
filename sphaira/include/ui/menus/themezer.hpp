@@ -42,79 +42,50 @@ enum class PageLoadState {
     Error,
 };
 
-// all commented out entries are those that we don't query for.
-// this saves time not only processing the json, but also the download
-// of said json.
-// by reducing the fields to only what we need, the size is 4-5x smaller.
-
 struct Creator {
-    std::string id;
-    std::string display_name;
+    std::string id{};
+    std::string display_name{};
 };
 
 struct Details {
-    std::string name;
-    // std::string description;
+    std::string name{};
 };
 
 struct Preview {
-    // std::string original;
-    std::string thumb;
-    LazyImage lazy_image;
+    std::string thumb{};
+    LazyImage lazy_image{};
 };
 
 struct DownloadPack {
-    std::string filename;
-    std::string url;
-    std::string mimetype;
+    std::string filename{};
+    std::string url{};
+    std::string mimetype{};
 };
 
 using DownloadTheme = DownloadPack;
 
 struct ThemeEntry {
-    std::string id;
-    // Creator creator;
-    // Details details;
-    // std::string last_updated;
-    // u64 dl_count;
-    // u64 like_count;
-    // std::vector<std::string> categories;
-    // std::string target;
-    Preview preview;
+    std::string id{};
+    Preview preview{};
 };
 
-// struct Pack {
-//     std::string id;
-//     Creator creator;
-//     Details details;
-//     std::string last_updated;
-//     std::vector<std::string> categories;
-//     u64 dl_count;
-//     u64 like_count;
-//     std::vector<ThemeEntry> themes;
-// };
-
 struct PackListEntry {
-    std::string id;
-    Creator creator;
-    Details details;
-    // std::string last_updated;
-    // std::vector<std::string> categories;
-    // u64 dl_count;
-    // u64 like_count;
-    std::vector<ThemeEntry> themes;
+    std::string id{};
+    Creator creator{};
+    Details details{};
+    std::vector<ThemeEntry> themes{};
 };
 
 struct Pagination {
-    u64 page;
-    u64 limit;
-    u64 page_count;
-    u64 item_count;
+    u64 page{};
+    u64 limit{};
+    u64 page_count{};
+    u64 item_count{};
 };
 
 struct PackList {
-    std::vector<PackListEntry> packList;
-    Pagination pagination;
+    std::vector<PackListEntry> packList{};
+    Pagination pagination{};
 };
 
 struct Config {
@@ -123,10 +94,10 @@ struct Config {
     u32 sort_index{};
     u32 order_index{};
     // search query, if empty, its not used
-    std::string query;
+    std::string query{};
     // this is actually an array of creator ids, but we don't support that feature
     // if empty, its not used
-    std::string creator;
+    std::string creator{};
     // defaults
     u32 page{1};
     u32 limit{18};
@@ -152,7 +123,7 @@ struct Config {
 struct Menu; // fwd
 
 struct PageEntry {
-    std::vector<PackListEntry> m_packList;
+    std::vector<PackListEntry> m_packList{};
     Pagination m_pagination{};
     PageLoadState m_ready{PageLoadState::None};
 };
@@ -172,9 +143,6 @@ struct Menu final : MenuBase {
         }
     }
 
-    // void SetSearch(const std::string& term);
-    // void SetAuthor();
-
     void InvalidateAllPages();
     void PackListDownload();
     void OnPackListDownload();
@@ -183,14 +151,14 @@ private:
     static constexpr inline const char* INI_SECTION = "themezer";
     static constexpr inline u32 MAX_ON_PAGE = 16; // same as website
 
-    std::vector<PageEntry> m_pages;
+    std::vector<PageEntry> m_pages{};
     s64 m_page_index{};
     s64 m_page_index_max{1};
 
     std::string m_search{};
 
     s64 m_index{}; // where i am in the array
-    std::unique_ptr<List> m_list;
+    std::unique_ptr<List> m_list{};
 
     // options
     option::OptionLong m_sort{INI_SECTION, "sort", 0};

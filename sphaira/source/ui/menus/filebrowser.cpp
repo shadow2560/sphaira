@@ -128,7 +128,7 @@ auto GetRomDatabaseFromPath(std::string_view path) -> int {
         if ((
             p.folder.length() == db_name.length() && !strncasecmp(p.folder.data(), db_name.data(), p.folder.length())) ||
             (p.database.length() == db_name.length() && !strncasecmp(p.database.data(), db_name.data(), p.database.length()))) {
-            log_write("found it :) %.*s\n", p.database.length(), p.database.data());
+            log_write("found it :) %.*s\n", (int)p.database.length(), p.database.data());
             return i;
         }
     }
@@ -144,7 +144,7 @@ auto GetRomDatabaseFromPath(std::string_view path) -> int {
             if ((
                 p.folder.length() == db_name2.length() && !strcasecmp(p.folder.data(), db_name2.data())) ||
                 (p.database.length() == db_name2.length() && !strcasecmp(p.database.data(), db_name2.data()))) {
-                log_write("found it :) %.*s\n", p.database.length(), p.database.data());
+                log_write("found it :) %.*s\n", (int)p.database.length(), p.database.data());
                 return i;
             }
         }
@@ -452,9 +452,8 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                         if (R_SUCCEEDED(rc)) {
                             Scan(m_path);
                         } else {
-                            char msg[FS_MAX_PATH];
-                            std::snprintf(msg, sizeof(msg), "Failed to rename file: %s", entry.name);
-                            App::Push(std::make_shared<ErrorBox>(rc, msg));
+                            const auto msg = std::string("Failed to rename file: ") + entry.name;
+                            App::Push(std::make_shared<ErrorBox>(rc, msg.c_str()));
                         }
                     }
                 }));
@@ -478,10 +477,10 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
                         m_fs->CreateDirectoryRecursivelyWithPath(full_path);
                         if (R_SUCCEEDED(m_fs->CreateFile(full_path, 0, 0))) {
-                            log_write("created file: %s\n", full_path);
+                            log_write("created file: %s\n", full_path.s);
                             Scan(m_path);
                         } else {
-                            log_write("failed to create file: %s\n", full_path);
+                            log_write("failed to create file: %s\n", full_path.s);
                         }
                     }
                 }));
@@ -499,10 +498,10 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                         }
 
                         if (R_SUCCEEDED(m_fs->CreateDirectoryRecursively(full_path))) {
-                            log_write("created dir: %s\n", full_path);
+                            log_write("created dir: %s\n", full_path.s);
                             Scan(m_path);
                         } else {
-                            log_write("failed to create dir: %s\n", full_path);
+                            log_write("failed to create dir: %s\n", full_path.s);
                         }
                     }
                 }));
@@ -777,7 +776,7 @@ void Menu::InstallForwarder() {
 }
 
 auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
-    log_write("new scan path: %s\n", new_path);
+    log_write("new scan path: %s\n", new_path.s);
     if (!is_walk_up && !m_path.empty() && !m_entries_current.empty()) {
         const LastFile f(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
         m_previous_highlighted_file.emplace_back(f);
@@ -868,7 +867,7 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
                 if (assoc_db == PATHS[db_idx].folder || assoc_db == PATHS[db_idx].database) {
                     for (const auto& assoc_ext : assoc.ext) {
                         if (assoc_ext == extension) {
-                            log_write("found ext: %s assoc_ext: %s assoc.ext: %s\n", assoc.path, assoc_ext.c_str(), extension.c_str());
+                            log_write("found ext: %s assoc_ext: %s assoc.ext: %s\n", assoc.path.s, assoc_ext.c_str(), extension.c_str());
                             out_entries.emplace_back(assoc);
                         }
                     }
@@ -886,7 +885,7 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
             if (assoc.database.empty()) {
                 for (const auto& assoc_ext : assoc.ext) {
                     if (assoc_ext == extension) {
-                        log_write("found ext: %s\n", assoc.path);
+                        log_write("found ext: %s\n", assoc.path.s);
                         out_entries.emplace_back(assoc);
                     }
                 }
@@ -1099,7 +1098,6 @@ void Menu::SetIndexFromLastFile(const LastFile& last_file) {
             }
         }
         SetIndex(index);
-        log_write("\nnew index: %zu %zu mod: %zu\n", m_index, index % 8);
     }
 }
 
@@ -1148,7 +1146,7 @@ void Menu::OnDeleteCallback() {
                 if (p.IsDir()) {
                     pbox->NewTransfer("Scanning "_i18n + full_path);
                     if (R_FAILED(get_collections(full_path, p.name, collections))) {
-                        log_write("failed to get dir collection: %s\n", full_path);
+                        log_write("failed to get dir collection: %s\n", full_path.s);
                         return false;
                     }
                 }
@@ -1166,10 +1164,10 @@ void Menu::OnDeleteCallback() {
                         const auto full_path = GetNewPath(c.path, p.name);
                         pbox->NewTransfer("Deleting "_i18n + full_path);
                         if (p.type == FsDirEntryType_Dir) {
-                            log_write("deleting dir: %s\n", full_path);
+                            log_write("deleting dir: %s\n", full_path.s);
                             m_fs->DeleteDirectory(full_path);
                         } else {
-                            log_write("deleting file: %s\n", full_path);
+                            log_write("deleting file: %s\n", full_path.s);
                             m_fs->DeleteFile(full_path);
                         }
                     }
@@ -1194,10 +1192,10 @@ void Menu::OnDeleteCallback() {
                 pbox->NewTransfer("Deleting "_i18n + full_path);
 
                 if (p.IsDir()) {
-                    log_write("deleting dir: %s\n", full_path);
+                    log_write("deleting dir: %s\n", full_path.s);
                     m_fs->DeleteDirectory(full_path);
                 } else {
-                    log_write("deleting file: %s\n", full_path);
+                    log_write("deleting file: %s\n", full_path.s);
                     m_fs->DeleteFile(full_path);
                 }
             }
@@ -1212,8 +1210,6 @@ void Menu::OnDeleteCallback() {
 }
 
 void Menu::OnPasteCallback() {
-    bool use_progress_box{true};
-
     // check if we only have 1 file / folder and is cut (rename)
     if (m_selected_files.size() == 1 && m_selected_type == SelectedType::Cut) {
         const auto& entry = m_selected_files[0];
@@ -1263,7 +1259,7 @@ void Menu::OnPasteCallback() {
                     if (p.IsDir()) {
                         pbox->NewTransfer("Scanning "_i18n + full_path);
                         if (R_FAILED(get_collections(full_path, p.name, collections))) {
-                            log_write("failed to get dir collection: %s\n", full_path);
+                            log_write("failed to get dir collection: %s\n", full_path.s);
                             return false;
                         }
                     }
@@ -1300,7 +1296,7 @@ void Menu::OnPasteCallback() {
                         const auto src_path = GetNewPath(c.path, p.name);
                         const auto dst_path = GetNewPath(base_dst_path, p.name);
 
-                        log_write("creating: %s to %s\n", src_path, dst_path);
+                        log_write("creating: %s to %s\n", src_path.s, dst_path.s);
                         pbox->NewTransfer("Creating "_i18n + dst_path);
                         m_fs->CreateDirectory(dst_path);
                     }
@@ -1315,7 +1311,7 @@ void Menu::OnPasteCallback() {
                         const auto dst_path = GetNewPath(base_dst_path, p.name);
 
                         pbox->NewTransfer("Copying "_i18n + src_path);
-                        log_write("copying: %s to %s\n", src_path, dst_path);
+                        log_write("copying: %s to %s\n", src_path.s, dst_path.s);
                         R_TRY_RESULT(pbox->CopyFile(src_path, dst_path), false);
                     }
                 }
@@ -1415,7 +1411,7 @@ auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name
     // get a list of all the files / dirs
     FsDirCollection collection;
     R_TRY(get_collection(path, parent_name, collection, true, true, false));
-    log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path, parent_name, collection.files.size(), collection.dirs.size());
+    log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path.s, parent_name.s, collection.files.size(), collection.dirs.size());
     out.emplace_back(collection);
 
     // for (size_t i = 0; i < collection.dirs.size(); i++) {
@@ -1423,7 +1419,7 @@ auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name
         // use heap as to not explode the stack
         const auto new_path = std::make_unique<fs::FsPath>(Menu::GetNewPath(path, p.name));
         const auto new_parent_name = std::make_unique<fs::FsPath>(Menu::GetNewPath(parent_name, p.name));
-        log_write("trying to get nested collection: %s parent_name: %s\n", *new_path, *new_parent_name);
+        log_write("trying to get nested collection: %s parent_name: %s\n", new_path->s, new_parent_name->s);
         R_TRY(get_collections(*new_path, *new_parent_name, out));
     }
 

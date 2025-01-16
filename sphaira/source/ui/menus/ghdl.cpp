@@ -119,7 +119,7 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
         log_write("found zip\n");
         auto zfile = unzOpen64(temp_file);
         if (!zfile) {
-            log_write("failed to open zip: %s\n", temp_file);
+            log_write("failed to open zip: %s\n", temp_file.s);
             return false;
         }
         ON_SCOPE_EXIT(unzClose(zfile));
@@ -155,29 +155,29 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
             Result rc;
             if (file_path[strlen(file_path) -1] == '/') {
                 if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
             } else {
                 if (R_FAILED(rc = fs.CreateDirectoryRecursivelyWithPath(file_path)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
                 if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
                 FsFile f;
                 if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Write, &f))) {
-                    log_write("failed to open file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
                 ON_SCOPE_EXIT(fsFileClose(&f));
 
                 if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                    log_write("failed to set file size: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to set file size: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 

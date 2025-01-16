@@ -32,12 +32,12 @@ private:
     static constexpr float m_text_xoffset{15.f};
     static constexpr float m_line_width{1220.f};
 
-    std::string m_title;
-    Items m_items;
-    Callback m_callback;
-    s64 m_index; // index in list array
+    std::string m_title{};
+    Items m_items{};
+    Callback m_callback{};
+    s64 m_index{}; // index in list array
 
-    std::unique_ptr<List> m_list;
+    std::unique_ptr<List> m_list{};
 
     float m_yoff{};
     float m_line_top{};

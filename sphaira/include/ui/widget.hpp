@@ -78,7 +78,7 @@ struct Widget : public Object {
 
     auto GetUiButtons() const -> uiButtons;
 
-    Actions m_actions;
+    Actions m_actions{};
     Vec2 m_button_pos{1220, 675};
     bool m_focus{false};
     bool m_pop{false};

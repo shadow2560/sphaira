@@ -10,7 +10,7 @@
 namespace sphaira::ui::gfx {
 namespace {
 
-static constexpr std::array buttons = {
+constexpr std::array buttons = {
     std::pair{Button::A, "\uE0E0"},
     std::pair{Button::B, "\uE0E1"},
     std::pair{Button::X, "\uE0E2"},
@@ -60,18 +60,18 @@ void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, con
     float gradientX, gradientY, color;
     getHighlightAnimation(&gradientX, &gradientY, &color);
 
-    const auto strokeWidth = 5.0;
+    const auto strokeWidth = 5.F;
     auto v2 = v;
-    v2.x -= strokeWidth / 2.0;
-    v2.y -= strokeWidth / 2.0;
+    v2.x -= strokeWidth / 2.F;
+    v2.y -= strokeWidth / 2.F;
     v2.w += strokeWidth;
     v2.h += strokeWidth;
-    const auto corner_radius = 0.5;
+    const auto corner_radius = 0.5F;
 
-    const auto shadow_width = 2.0f;
-    const auto shadow_offset = 10.0f;
-    const auto shadow_feather = 10.0f;
-    const auto shadow_opacity = 128.0f;
+    const auto shadow_width = 2.F;
+    const auto shadow_offset = 10.F;
+    const auto shadow_feather = 10.F;
+    const auto shadow_opacity = 128.F;
 
     // Shadow
     NVGpaint shadowPaint = nvgBoxGradient(vg,
@@ -136,15 +136,6 @@ void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, con
     nvgFill(vg);
 }
 
-void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, const Vec4& v, const NVGpaint& p) {
-    const auto corner_radius = 0.5;
-    drawRectOutlineInternal(vg, theme, size, v);
-    nvgBeginPath(vg);
-    nvgRoundedRect(vg, v.x, v.y, v.w, v.h, corner_radius);
-    nvgFillPaint(vg, p);
-    nvgFill(vg);
-}
-
 void drawTextIntenal(NVGcontext* vg, const Vec2& v, float size, const char* str, const char* end, int align, const NVGcolor& c) {
     nvgBeginPath(vg);
     nvgFontSize(vg, size);
@@ -171,20 +162,6 @@ void drawTextArgs(NVGcontext* vg, float x, float y, float size, int align, const
     std::vsnprintf(buffer, sizeof(buffer), str, v);
     va_end(v);
     drawText(vg, x, y, size, buffer, nullptr, align, c);
-}
-
-static void drawImageInternal(NVGcontext* vg, const Vec4& v, int texture, int rounded = 0) {
-    const auto paint = nvgImagePattern(vg, v.x, v.y, v.w, v.h, 0, texture, 1.f);
-    // drawRect(vg, x, y, w, h, paint);
-    nvgBeginPath(vg);
-    // nvgRect(vg, x, y, w, h);
-    if (rounded == 0) {
-        nvgRect(vg, v.x, v.y, v.w, v.h);
-    } else {
-        nvgRoundedRect(vg, v.x, v.y, v.w, v.h, rounded);
-    }
-    nvgFillPaint(vg, paint);
-    nvgFill(vg);
 }
 
 void drawImage(NVGcontext* vg, const Vec4& v, int texture) {

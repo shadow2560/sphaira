@@ -18,7 +18,7 @@
 #include <string>
 #include <cstring>
 #include <yyjson.h>
-#include <nanovg/stb_image.h>
+#include <stb_image.h>
 #include <minizip/unzip.h>
 #include <mbedtls/md5.h>
 #include <ranges>
@@ -65,31 +65,9 @@ auto BuildIconUrl(const Entry& e) -> std::string {
     return out;
 }
 
-#if 0
-auto BuildInfoUrl(const Entry& e) -> std::string {
-    char out[0x100];
-    std::snprintf(out, sizeof(out), "%s/packages/%s/info.json", URL_BASE, e.name.c_str());
-    return out;
-}
-#endif
-
 auto BuildBannerUrl(const Entry& e) -> std::string {
     char out[0x100];
     std::snprintf(out, sizeof(out), "%s/packages/%s/screen.png", URL_BASE, e.name.c_str());
-    return out;
-}
-
-#if 0
-auto BuildScreensUrl(const Entry& e, u8 num) -> std::string {
-    char out[0x100];
-    std::snprintf(out, sizeof(out), "%s/packages/%s/screen%u.png", URL_BASE, e.name.c_str(), num+1);
-    return out;
-}
-#endif
-
-auto BuildMainifestUrl(const Entry& e) -> std::string {
-    char out[0x100];
-    std::snprintf(out, sizeof(out), "%s/packages/%s/manifest.install", URL_BASE, e.name.c_str());
     return out;
 }
 
@@ -99,26 +77,15 @@ auto BuildZipUrl(const Entry& e) -> std::string {
     return out;
 }
 
-auto BuildFeedbackUrl(std::span<u32> ids) -> std::string {
-    std::string out{"https://wiiubru.com/feedback/messages?ids="};
-    for (u32 i = 0; i < ids.size(); i++) {
-        if (i != 0) {
-            out.push_back(',');
-        }
-        out += std::to_string(ids[i]);
-    }
-    return out;
-}
-
 auto BuildIconCachePath(const Entry& e) -> fs::FsPath {
     fs::FsPath out;
-    std::snprintf(out, sizeof(out), "%s/icons/%s.png", CACHE_PATH, e.name.c_str());
+    std::snprintf(out, sizeof(out), "%s/icons/%s.png", CACHE_PATH.s, e.name.c_str());
     return out;
 }
 
 auto BuildBannerCachePath(const Entry& e) -> fs::FsPath {
     fs::FsPath out;
-    std::snprintf(out, sizeof(out), "%s/banners/%s.png", CACHE_PATH, e.name.c_str());
+    std::snprintf(out, sizeof(out), "%s/banners/%s.png", CACHE_PATH.s, e.name.c_str());
     return out;
 }
 
@@ -302,7 +269,6 @@ auto AppDlToStr(u32 value) -> std::string {
 
 void ReadFromInfoJson(Entry& e) {
     const auto info_path = BuildInfoCachePath(e);
-    const auto manifest_path = BuildManifestCachePath(e);
 
     yyjson_read_err err;
     auto doc = yyjson_read_file(info_path, YYJSON_READ_NOFLAG, nullptr, &err);
@@ -340,9 +306,9 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
             const auto safe_buf = fs::AppendPath("/", e.path);
             // this will handle read only files, ie, hbmenu.nro
             if (R_FAILED(fs.DeleteFile(safe_buf))) {
-                log_write("failed to delete file: %s\n", safe_buf);
+                log_write("failed to delete file: %s\n", safe_buf.s);
             } else {
-                log_write("deleted file: %s\n", safe_buf);
+                log_write("deleted file: %s\n", safe_buf.s);
                 // todo: delete empty directories!
                 // fs::delete_directory(safe_buf);
             }
@@ -353,9 +319,9 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
     const auto dir = BuildPackageCachePath(entry);
     pbox->NewTransfer("Removing "_i18n + dir);
     if (R_FAILED(fs.DeleteDirectoryRecursively(dir))) {
-        log_write("failed to delete folder: %s\n", dir);
+        log_write("failed to delete folder: %s\n", dir.s);
     } else {
-        log_write("deleted: %s\n", dir);
+        log_write("deleted: %s\n", dir.s);
     }
     return true;
 }
@@ -458,7 +424,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
     if (!pbox->ShouldExit()) {
         auto zfile = unzOpen64(zip_out);
         if (!zfile) {
-            log_write("failed to open zip: %s\n", zip_out);
+            log_write("failed to open zip: %s\n", zip_out.s);
             return false;
         }
         ON_SCOPE_EXIT(unzClose(zfile));
@@ -501,7 +467,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
             pbox->NewTransfer(inzip);
 
             if (UNZ_END_OF_LIST_OF_FILE == unzLocateFile(zfile, inzip, 0)) {
-                log_write("failed to find %s\n", inzip);
+                log_write("failed to find %s\n", inzip.s);
                 return false;
             }
 
@@ -526,19 +492,19 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
 
             Result rc;
             if (R_FAILED(rc = fs.CreateFile(output, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                log_write("failed to create file: %s 0x%04X\n", output, rc);
+                log_write("failed to create file: %s 0x%04X\n", output.s, rc);
                 return false;
             }
 
             FsFile f;
             if (R_FAILED(rc = fs.OpenFile(output, FsOpenMode_Write, &f))) {
-                log_write("failed to open file: %s 0x%04X\n", output, rc);
+                log_write("failed to open file: %s 0x%04X\n", output.s, rc);
                 return false;
             }
             ON_SCOPE_EXIT(fsFileClose(&f));
 
             if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                log_write("failed to set file size: %s 0x%04X\n", output, rc);
+                log_write("failed to set file size: %s 0x%04X\n", output.s, rc);
                 return false;
             }
 
@@ -551,12 +517,12 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
 
                 const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                 if (bytes_read <= 0) {
-                    log_write("failed to read zip file: %s\n", inzip);
+                    log_write("failed to read zip file: %s\n", inzip.s);
                     return false;
                 }
 
                 if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                    log_write("failed to write file: %s 0x%04X\n", output, rc);
+                    log_write("failed to write file: %s 0x%04X\n", output.s, rc);
                     return false;
                 }
 
@@ -615,9 +581,9 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
                 const auto safe_buf = fs::AppendPath("/", old_entry.path);
                 // std::strcat(safe_buf, old_entry.path);
                 if (R_FAILED(fs.DeleteFile(safe_buf))) {
-                    log_write("failed to delete: %s\n", safe_buf);
+                    log_write("failed to delete: %s\n", safe_buf.s);
                 } else {
-                    log_write("deleted file: %s\n", safe_buf);
+                    log_write("deleted file: %s\n", safe_buf.s);
                 }
             }
         }
@@ -761,13 +727,9 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
     gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "app_dls: %s"_i18n.c_str(), AppDlToStr(m_entry.app_dls).c_str());
     text_start_y += text_inc_y;
 
-    // for (const auto& option : m_options) {
-    const auto& text_col = theme->GetColour(ThemeEntryID_TEXT);
-
     // todo: rewrite this mess and use list
     constexpr float mm = 0;//20;
     constexpr Vec4 block{968.f + mm, 110.f, 256.f - mm*2, 60.f};
-    constexpr float text_xoffset{15.f};
     const float x = block.x;
     float y = 1.f + text_start_y + (text_inc_y * 3) ;
     const float h = block.h;
@@ -781,7 +743,7 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
             gfx::drawRectOutline(vg, theme, 4.f, Vec4{x, y, w, h});
         }
 
-        gfx::drawTextArgs(vg, x + w / 2, y + h / 2, 22, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER, theme->GetColour(ThemeEntryID_TEXT), option.display_text.c_str());
+        gfx::drawTextArgs(vg, x + w / 2, y + h / 2, 22, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER, theme->GetColour(text_id), option.display_text.c_str());
         y -= block.h + 18;
     }
 

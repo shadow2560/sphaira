@@ -18,7 +18,7 @@ public:
 private:
 
 private:
-    std::string m_text;
+    std::string m_text{};
     Vec2 m_text_pos{};
     bool m_selected{false};
 };
@@ -48,13 +48,13 @@ private:
     void SetIndex(s64 index);
 
 private:
-    std::string m_message;
-    Callback m_callback;
+    std::string m_message{};
+    Callback m_callback{};
 
     Vec4 m_spacer_line{};
 
     s64 m_index{};
-    std::vector<OptionBoxEntry> m_entries;
+    std::vector<OptionBoxEntry> m_entries{};
 };
 
 } // namespace sphaira::ui

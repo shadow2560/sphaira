@@ -9,9 +9,9 @@ namespace sphaira::ui {
 ScrollableText::ScrollableText(const std::string& text, float x, float y, float y_clip, float w, float font_size)
 : m_font_size{font_size}
 , m_y_off_base{y}
-, m_y_off{y}
 , m_clip_y{y_clip}
 , m_end_w{w}
+, m_y_off{y}
 {
     SetActions(
         std::make_pair(Button::LS_DOWN, Action{[this](){

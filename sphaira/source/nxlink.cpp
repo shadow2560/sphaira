@@ -301,7 +301,7 @@ void loop(void* args) {
                 continue;
             }
 
-            log_write("got name: %s\n", name);
+            log_write("got name: %s\n", name.s);
 
             u32 filesize{};
             if (!recvall(connfd, &filesize, sizeof(filesize))) {

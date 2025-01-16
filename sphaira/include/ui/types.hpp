@@ -323,37 +323,36 @@ inline ActionType operator|(ActionType a, ActionType b) {
 }
 
 struct Action final {
+    using CallbackEmpty = std::function<void()>;
+    using CallbackWithBool = std::function<void(bool)>;
     using Callback = std::variant<
-        std::function<void()>,
-        std::function<void(bool)>
+        CallbackEmpty,
+        CallbackWithBool
     >;
 
-    Action(Callback cb) : m_type{ActionType::DOWN}, m_hint{""}, m_callback{cb}, m_hidden{true} {}
-    Action(std::string hint, Callback cb) : m_type{ActionType::DOWN}, m_hint{hint}, m_callback{cb} {}
-    Action(u8 type, Callback cb) : m_type{type}, m_hint{""}, m_callback{cb}, m_hidden{true} {}
-    Action(u8 type, std::string hint, Callback cb) : m_type{type}, m_hint{hint}, m_callback{cb} {}
+    Action(Callback cb) : Action{ActionType::DOWN, "", cb} {}
+    Action(std::string hint, Callback cb) : Action{ActionType::DOWN, hint, cb} {}
+    Action(u8 type, Callback cb) : Action{type, "", cb} {}
+    Action(u8 type, std::string hint, Callback cb) : m_type{type}, m_callback{cb}, m_hint{hint} {}
 
-    auto IsHidden() const noexcept { return m_hidden; }
+    auto IsHidden() const noexcept { return m_hint.empty(); }
 
     auto Invoke(bool down) const {
-        // todo: make this a visit
-        switch (m_callback.index()) {
-            case 0:
-                std::get<0>(m_callback)();
-                break;
-            case 1:
-                std::get<1>(m_callback)(down);
-                break;
-        }
-        // std::visit([down, this](auto& cb){
-        //     cb(down);
-        // }), m_callback;
+        std::visit([down](auto&& arg){
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr(std::is_same_v<T, CallbackEmpty>) {
+                arg();
+            } else if constexpr(std::is_same_v<T, CallbackWithBool>) {
+                arg(down);
+            } else {
+                static_assert(false, "non-exhaustive visitor!");
+            }
+        }, m_callback);
     }
 
-    u8 m_type;
-    std::string m_hint; // todo: make optional
-    Callback m_callback;
-    bool m_hidden{false}; // replace this optional text
+    u8 m_type{};
+    Callback m_callback{};
+    std::string m_hint{};
 };
 
 struct Controller {

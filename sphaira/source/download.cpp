@@ -462,12 +462,12 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
         fs.CreateDirectoryRecursivelyWithPath(tmp_buf);
 
         if (auto rc = fs.CreateFile(tmp_buf, 0, 0); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
-            log_write("failed to create file: %s\n", tmp_buf);
+            log_write("failed to create file: %s\n", tmp_buf.s);
             return {};
         }
 
         if (R_FAILED(fs.OpenFile(tmp_buf, FsOpenMode_Write|FsOpenMode_Append, &chunk.f))) {
-            log_write("failed to open file: %s\n", tmp_buf);
+            log_write("failed to open file: %s\n", tmp_buf.s);
             return {};
         }
 
@@ -553,7 +553,7 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
             if (http_code == 304) {
                 log_write("cached download: %s\n", e.GetUrl().c_str());
             } else {
-                log_write("un-cached download: %s code: %u\n", e.GetUrl().c_str(), http_code);
+                log_write("un-cached download: %s code: %lu\n", e.GetUrl().c_str(), http_code);
                 if (e.GetFlags() & Flag_Cache) {
                     g_cache.set(e.GetPath(), header_out);
                 }

@@ -50,9 +50,9 @@ struct Menu final : MenuBase {
 private:
     static constexpr inline const char* INI_SECTION = "homebrew";
 
-    std::vector<NroEntry> m_entries;
+    std::vector<NroEntry> m_entries{};
     s64 m_index{}; // where i am in the array
-    std::unique_ptr<List> m_list;
+    std::unique_ptr<List> m_list{};
 
     option::OptionLong m_sort{INI_SECTION, "sort", SortType::SortType_AlphabeticalStar};
     option::OptionLong m_order{INI_SECTION, "order", OrderType::OrderType_Descending};

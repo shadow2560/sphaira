@@ -274,7 +274,7 @@ auto Sidebar::Draw(NVGcontext* vg, Theme* theme) -> void {
     gfx::drawRect(vg, m_pos, theme->GetColour(ThemeEntryID_SIDEBAR));
     gfx::drawText(vg, m_title_pos, m_title_size, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str());
     if (!m_sub.empty()) {
-        gfx::drawTextArgs(vg, m_pos.x + m_pos.w - 30.f, m_title_pos.y + 10.f, 18, NVG_ALIGN_TOP | NVG_ALIGN_RIGHT, theme->GetColour(ThemeEntryID_TEXT), m_sub.c_str());
+        gfx::drawTextArgs(vg, m_pos.x + m_pos.w - 30.f, m_title_pos.y + 10.f, 16, NVG_ALIGN_TOP | NVG_ALIGN_RIGHT, theme->GetColour(ThemeEntryID_TEXT_INFO), m_sub.c_str());
     }
     gfx::drawRect(vg, m_top_bar, theme->GetColour(ThemeEntryID_LINE));
     gfx::drawRect(vg, m_bottom_bar, theme->GetColour(ThemeEntryID_LINE));
@@ -328,7 +328,7 @@ void Sidebar::SetupButtons() {
     RemoveActions();
 
     // add entry actions
-    for (const auto& [button, action] :  m_items[m_index]->GetActions()) {
+    for (const auto& [button, action] : m_items[m_index]->GetActions()) {
         SetAction(button, action);
     }
 

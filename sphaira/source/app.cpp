@@ -327,7 +327,7 @@ void LoadThemeInternal(ThemeMeta meta, ThemeData& theme_data, int inherit_level 
         if (!ini_browse(cb, &theme_data, meta.ini_path)) {
             log_write("failed to open ini: %s\n", meta.ini_path.s);
         } else {
-            log_write("opened ini: %s\n", meta.ini_path);
+            log_write("opened ini: %s\n", meta.ini_path.s);
         }
     }
 }
@@ -666,7 +666,7 @@ void App::SetReplaceHbmenuEnable(bool enable) {
                     if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
                         if (std::strcmp(sphaira_nacp.display_version, hbmenu_nacp.display_version) < 0) {
                             if (R_FAILED(rc = fs.copy_entire_file(sphaira_path, "/hbmenu.nro"))) {
-                                log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path, rc, R_MODULE(rc), R_DESCRIPTION(rc));
+                                log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path.s, rc, R_MODULE(rc), R_DESCRIPTION(rc));
                             } else {
                                 log_write("success with updating hbmenu!\n");
                             }
@@ -872,23 +872,26 @@ void App::Poll() {
         }
 
         auto gesture = gestures[i];
-        if (gesture_count && gesture.type == HidGestureType_Swipe) {
-            log_write("[SWIPE] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+        if (gesture_count && gesture.type == HidGestureType_Touch) {
+            log_write("[TOUCH] got gesture attr: %u direction: %u sampling_number: %zu context_number: %zu\n", gesture.attributes, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Swipe) {
+            log_write("[SWIPE] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
         }
         else if (gesture_count && gesture.type == HidGestureType_Tap) {
-            log_write("[TAP] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+            log_write("[TAP] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
         }
         else if (gesture_count && gesture.type == HidGestureType_Press) {
-            log_write("[PRESS] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+            log_write("[PRESS] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
         }
         else if (gesture_count && gesture.type == HidGestureType_Cancel) {
-            log_write("[CANCEL] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+            log_write("[CANCEL] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
         }
         else if (gesture_count && gesture.type == HidGestureType_Complete) {
-            log_write("[COMPLETE] got gesture type: %d direction: %d sampling_number: %d context_number: %d\n", gesture.type, gesture.direction, gesture.sampling_number, gesture.context_number);
+            log_write("[COMPLETE] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
         }
         else if (gesture_count && gesture.type == HidGestureType_Pan) {
-            log_write("[PAN] got gesture sampling_number: %d context_number: %d x: %d y: %d dx: %d dy: %d vx: %.2f vy: %.2f count: %d\n", gesture.sampling_number, gesture.context_number, gesture.x, gesture.y, gesture.delta_x, gesture.delta_y, gesture.velocity_x, gesture.velocity_y, gesture.point_count);
+            log_write("[PAN] got gesture direction: %u sampling_number: %zu context_number: %zu x: %d y: %d dx: %d dy: %d vx: %.2f vy: %.2f count: %d\n", gesture.direction, gesture.sampling_number, gesture.context_number, gesture.x, gesture.y, gesture.delta_x, gesture.delta_y, gesture.velocity_x, gesture.velocity_y, gesture.point_count);
         }
     }
 
@@ -1265,19 +1268,21 @@ App::App(const char* argv0) {
     if (R_SUCCEEDED(romfsMountDataStorageFromProgram(0x0100000000001000, "qlaunch"))) {
         ON_SCOPE_EXIT(romfsUnmount("qlaunch"));
         plsrPlayerInit();
-        plsrBFSAROpen("qlaunch:/sound/qlaunch.bfsar", &m_qlaunch_bfsar);
-        ON_SCOPE_EXIT(plsrBFSARClose(&m_qlaunch_bfsar));
+        PLSR_BFSAR qlaunch_bfsar;
+        if (R_SUCCEEDED(plsrBFSAROpen("qlaunch:/sound/qlaunch.bfsar", &qlaunch_bfsar))) {
+            ON_SCOPE_EXIT(plsrBFSARClose(&qlaunch_bfsar));
 
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconFocus", &m_sound_ids[SoundEffect_Focus]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconScroll", &m_sound_ids[SoundEffect_Scroll]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconLimit", &m_sound_ids[SoundEffect_Limit]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeStartupMenu_game", &m_sound_ids[SoundEffect_Startup]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconAdd", &m_sound_ids[SoundEffect_Install]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeInsertError", &m_sound_ids[SoundEffect_Error]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconFocus", &m_sound_ids[SoundEffect_Focus]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconScroll", &m_sound_ids[SoundEffect_Scroll]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconLimit", &m_sound_ids[SoundEffect_Limit]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeStartupMenu_game", &m_sound_ids[SoundEffect_Startup]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconAdd", &m_sound_ids[SoundEffect_Install]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeInsertError", &m_sound_ids[SoundEffect_Error]);
 
-        plsrPlayerSetVolume(m_sound_ids[SoundEffect_Limit], 2.0f);
-        plsrPlayerSetVolume(m_sound_ids[SoundEffect_Focus], 0.5f);
-        PlaySoundEffect(SoundEffect_Startup);
+            plsrPlayerSetVolume(m_sound_ids[SoundEffect_Limit], 2.0f);
+            plsrPlayerSetVolume(m_sound_ids[SoundEffect_Focus], 0.5f);
+            PlaySoundEffect(SoundEffect_Startup);
+        }
     } else {
         log_write("failed to mount romfs 0x0100000000001000\n");
     }
@@ -1335,7 +1340,7 @@ App::App(const char* argv0) {
             log_write("launching from sphaira created forwarder\n");
             m_is_launched_via_sphaira_forwader = true;
         } else {
-            log_write("launching from unknown forwader: %.*s size: %zu\n", loader_info_size, envGetLoaderInfo(), loader_info_size);
+            log_write("launching from unknown forwader: %.*s size: %zu\n", (int)loader_info_size, envGetLoaderInfo(), loader_info_size);
         }
     } else {
         log_write("not launching from forwarder\n");
@@ -1409,11 +1414,8 @@ App::~App() {
         }
     }
 
-	// Close the archive
-	plsrBFSARClose(&m_qlaunch_bfsar);
-
 	// De-initialize our player
-	plsrPlayerExit();
+    plsrPlayerExit();
 
     this->destroyFramebufferResources();
     nvgDeleteDk(this->vg);
@@ -1435,7 +1437,7 @@ App::~App() {
         }
 
         if (R_FAILED(rc = fs.copy_entire_file("/hbmenu.nro", GetExePath()))) {
-            log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", GetExePath(), rc, R_MODULE(rc), R_DESCRIPTION(rc));
+            log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", GetExePath().s, rc, R_MODULE(rc), R_DESCRIPTION(rc));
         } else {
             log_write("success with copying over root file!\n");
         }
@@ -1460,7 +1462,7 @@ App::~App() {
             if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
                 if (std::strcmp(hbmenu_nacp.display_version, sphaira_nacp.display_version) < 0) {
                     if (R_FAILED(rc = fs.copy_entire_file(GetExePath(), sphaira_path))) {
-                        log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path, rc, R_MODULE(rc), R_DESCRIPTION(rc));
+                        log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path.s, rc, R_MODULE(rc), R_DESCRIPTION(rc));
                     } else {
                         log_write("success with updating hbmenu!\n");
                     }

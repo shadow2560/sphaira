@@ -43,8 +43,8 @@ private:
     const s64 m_row;
     const s64 m_page;
 
-    Vec4 m_v;
-    Vec2 m_pad;
+    Vec4 m_v{};
+    Vec2 m_pad{};
 
     Vec4 m_scrollbar{};
 

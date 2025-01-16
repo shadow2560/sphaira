@@ -166,7 +166,6 @@ public:
     // todo: move this into it's own menu
     option::OptionLong m_text_scroll_speed{"accessibility", "text_scroll_speed", 1}; // normal
 
-    PLSR_BFSAR m_qlaunch_bfsar{};
     PLSR_PlayerSoundId m_sound_ids[SoundEffect_MAX]{};
 
 private: // from nanovg decko3d example by adubbz

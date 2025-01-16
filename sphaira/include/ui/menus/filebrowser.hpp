@@ -86,23 +86,23 @@ struct FileEntry : FsDirectoryEntry {
 
 struct FileAssocEntry {
     fs::FsPath path{}; // ini name
-    std::string name; // ini name
-    std::vector<std::string> ext; // list of ext
-    std::vector<std::string> database; // list of systems
+    std::string name{}; // ini name
+    std::vector<std::string> ext{}; // list of ext
+    std::vector<std::string> database{}; // list of systems
 };
 
 struct LastFile {
-    fs::FsPath name;
-    s64 index;
-    float offset;
-    s64 entries_count;
+    fs::FsPath name{};
+    s64 index{};
+    float offset{};
+    s64 entries_count{};
 };
 
 struct FsDirCollection {
-    fs::FsPath path;
-    fs::FsPath parent_name;
-    std::vector<FsDirectoryEntry> files;
-    std::vector<FsDirectoryEntry> dirs;
+    fs::FsPath path{};
+    fs::FsPath parent_name{};
+    std::vector<FsDirectoryEntry> files{};
+    std::vector<FsDirectoryEntry> dirs{};
 };
 
 using FsDirCollections = std::vector<FsDirCollection>;
@@ -231,32 +231,32 @@ private:
     static constexpr inline const char* INI_SECTION = "filebrowser";
 
     const std::vector<NroEntry>& m_nro_entries;
-    std::unique_ptr<fs::FsNative> m_fs;
-    FsType m_fs_type;
-    fs::FsPath m_path;
-    std::vector<FileEntry> m_entries;
-    std::vector<u32> m_entries_index; // files not including hidden
-    std::vector<u32> m_entries_index_hidden; // includes hidden files
-    std::vector<u32> m_entries_index_search; // files found via search
-    std::span<u32> m_entries_current;
+    std::unique_ptr<fs::FsNative> m_fs{};
+    FsType m_fs_type{};
+    fs::FsPath m_path{};
+    std::vector<FileEntry> m_entries{};
+    std::vector<u32> m_entries_index{}; // files not including hidden
+    std::vector<u32> m_entries_index_hidden{}; // includes hidden files
+    std::vector<u32> m_entries_index_search{}; // files found via search
+    std::span<u32> m_entries_current{};
 
-    std::unique_ptr<List> m_list;
-    std::optional<fs::FsPath> m_daybreak_path;
+    std::unique_ptr<List> m_list{};
+    std::optional<fs::FsPath> m_daybreak_path{};
 
     // search options
     // show files [X]
     // show folders [X]
     // recursive (slow) [ ]
 
-    std::vector<FileAssocEntry> m_assoc_entries;
-    std::vector<FileEntry> m_selected_files;
+    std::vector<FileAssocEntry> m_assoc_entries{};
+    std::vector<FileEntry> m_selected_files{};
 
     // this keeps track of the highlighted file before opening a folder
     // if the user presses B to go back to the previous dir
     // this vector is popped, then, that entry is checked if it still exists
     // if it does, the index becomes that file.
-    std::vector<LastFile> m_previous_highlighted_file;
-    fs::FsPath m_selected_path;
+    std::vector<LastFile> m_previous_highlighted_file{};
+    fs::FsPath m_selected_path{};
     s64 m_index{};
     s64 m_selected_count{};
     SelectedType m_selected_type{SelectedType::None};

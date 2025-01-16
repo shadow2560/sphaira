@@ -16,12 +16,12 @@ struct Menu final : MenuBase {
 
 private:
     const fs::FsPath m_path;
-    fs::FsNativeSd m_fs;
-    FsFile m_file;
+    fs::FsNativeSd m_fs{};
+    FsFile m_file{};
     s64 m_file_size{};
     s64 m_file_offset{};
 
-    std::unique_ptr<ScrollableText> m_scroll_text;
+    std::unique_ptr<ScrollableText> m_scroll_text{};
 
     s64 m_start{};
     s64 m_index{}; // where i am in the array
