@@ -45,6 +45,11 @@ struct ThemeIdPair {
     ElementType type{ElementType::None};
 };
 
+struct FrameBufferSize {
+    Vec2 size;
+    Vec2 scale;
+};
+
 constexpr ThemeIdPair THEME_ENTRIES[] = {
     { "background", ThemeEntryID_BACKGROUND },
     { "grid", ThemeEntryID_GRID },
@@ -221,6 +226,26 @@ void appplet_hook_calback(AppletHookType type, void *param) {
             assert(!"AppletHookType_Max hit");
             break;
     }
+}
+
+auto GetFrameBufferSize() -> FrameBufferSize {
+    FrameBufferSize fb{};
+
+    switch (appletGetOperationMode()) {
+        case AppletOperationMode_Handheld:
+            fb.size.x = 1280;
+            fb.size.y = 720;
+            break;
+
+        case AppletOperationMode_Console:
+            fb.size.x = 1920;
+            fb.size.y = 1080;
+            break;
+    }
+
+    fb.scale.x = fb.size.x / SCREEN_WIDTH;
+    fb.scale.y = fb.size.y / SCREEN_HEIGHT;
+    return fb;
 }
 
 // this will try to decompress the icon and then re-convert it to jpg
@@ -430,24 +455,12 @@ void App::Loop() {
             }, event.value());
         }
 
-        u32 w{},h{};
-        switch (appletGetOperationMode()) {
-            case AppletOperationMode_Handheld:
-                w = 1280;
-                h = 720;
-                break;
-
-            case AppletOperationMode_Console:
-                w = 1920;
-                h = 1080;
-                break;
-        }
-
-        if (w != s_width || h != s_height) {
-            s_width = w;
-            s_height = h;
-            m_scale.x = (float)s_width / SCREEN_WIDTH;
-            m_scale.y = (float)s_height / SCREEN_HEIGHT;
+        const auto fb = GetFrameBufferSize();
+        if (fb.size.x != s_width || fb.size.y != s_height) {
+            s_width = fb.size.x;
+            s_height = fb.size.y;
+            m_scale = fb.scale;
+            this->destroyFramebufferResources();
             this->createFramebufferResources();
             renderer->UpdateViewSize(s_width, s_height);
         }
@@ -1210,6 +1223,12 @@ App::App(const char* argv0) {
 
     curl::Init();
 
+    // get current size of the framebuffer
+    const auto fb = GetFrameBufferSize();
+    s_width = fb.size.x;
+    s_height = fb.size.y;
+    m_scale = fb.scale;
+
     // Create the deko3d device
     this->device = dk::DeviceMaker{}
         .setCbDebug(deko3d_error_cb)
@@ -1233,7 +1252,7 @@ App::App(const char* argv0) {
     // Create the framebuffer resources
     this->createFramebufferResources();
 
-    this->renderer.emplace(SCREEN_WIDTH, SCREEN_HEIGHT, this->device, this->queue, *this->pool_images, *this->pool_code, *this->pool_data);
+    this->renderer.emplace(s_width, s_height, this->device, this->queue, *this->pool_images, *this->pool_code, *this->pool_data);
     this->vg = nvgCreateDk(&*this->renderer, NVG_ANTIALIAS | NVG_STENCIL_STROKES);
 
     i18n::init(GetLanguage());
