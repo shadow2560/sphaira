@@ -1265,9 +1265,14 @@ App::App(const char* argv0) {
         }
     }
 
+    // only enable audio in non-applet mode due to audren fatal.
+    // see: https://github.com/ITotalJustice/sphaira/issues/92
+    if (IsApplication()) {
+        plsrPlayerInit();
+    }
+
     if (R_SUCCEEDED(romfsMountDataStorageFromProgram(0x0100000000001000, "qlaunch"))) {
         ON_SCOPE_EXIT(romfsUnmount("qlaunch"));
-        plsrPlayerInit();
         PLSR_BFSAR qlaunch_bfsar;
         if (R_SUCCEEDED(plsrBFSAROpen("qlaunch:/sound/qlaunch.bfsar", &qlaunch_bfsar))) {
             ON_SCOPE_EXIT(plsrBFSARClose(&qlaunch_bfsar));
