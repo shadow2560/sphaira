@@ -1282,9 +1282,11 @@ App::App(const char* argv0) {
         }
     }
 
-    // only enable audio in non-applet mode due to audren fatal.
+    // disable audio in applet mode with a suspended application due to audren fatal.
     // see: https://github.com/ITotalJustice/sphaira/issues/92
-    if (IsApplication()) {
+    if (IsAppletWithSuspendedApp()) {
+        App::Notify("Audio disabled due to suspended game"_i18n);
+    } else {
         plsrPlayerInit();
     }
 

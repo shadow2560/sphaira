@@ -119,6 +119,21 @@ public:
         return type == AppletType_Application || type == AppletType_SystemApplication;
     }
 
+    static auto IsApplet() -> bool {
+        return !IsApplication();
+    }
+
+    // returns true if launched in applet mode with a title suspended in the background.
+    static auto IsAppletWithSuspendedApp() -> bool {
+        R_UNLESS(IsApplet(), false);
+        R_TRY_RESULT(pmdmntInitialize(), false);
+        ON_SCOPE_EXIT(pmdmntExit());
+
+        u64 pid;
+        return R_SUCCEEDED(pmdmntGetApplicationProcessId(&pid));
+    }
+
+
 // private:
     static constexpr inline auto CONFIG_PATH = "/config/sphaira/config.ini";
     static constexpr inline auto PLAYLOG_PATH = "/config/sphaira/playlog.ini";
