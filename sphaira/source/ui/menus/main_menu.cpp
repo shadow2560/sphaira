@@ -427,7 +427,6 @@ void MainMenu::AddOnLRPress() {
             OnLRPress(m_filebrowser_menu, Button::L);
         }});
     }
-<<<<<<< HEAD
 
     if (m_current_menu != m_app_store_menu) {
         const auto label = m_current_menu == m_homebrew_menu ? "Store" : "Apps";
@@ -441,6 +440,8 @@ void MainMenu::ShowRestartDialog() {
     App::Push(std::make_shared<OptionBox>(
         "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
             App::ExitRestart();
+        }
+    ));
 }
 
 void MainMenu::UpdateWithExePath(std::string message, fs::FsPath sphaira_path, std::function<void()> on_complete) {
@@ -474,15 +475,6 @@ return;
         }
     }
     if (on_complete) on_complete();
-=======
-
-    if (m_current_menu != m_app_store_menu) {
-        const auto label = m_current_menu == m_homebrew_menu ? "Store" : "Apps";
-        SetAction(Button::R, Action{i18n::get(label), [this]{
-            OnLRPress(m_app_store_menu, Button::R);
-        }});
-    }
->>>>>>> master
 }
 
 } // namespace sphaira::ui::menu::main
