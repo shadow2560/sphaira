@@ -19,13 +19,12 @@ public:
     auto IsDone() const noexcept { return m_count == 0; }
 
 private:
-    void OnLayoutChange() override;
     void Draw(NVGcontext* vg, Theme* theme) override;
 
 private:
-    std::string m_text;
+    std::string m_text{};
     std::size_t m_count{180}; // count down to zero
-    Side m_side;
+    Side m_side{};
     bool m_bounds_measured{};
 };
 
@@ -34,7 +33,6 @@ public:
     NotifMananger() = default;
     ~NotifMananger() = default;
 
-    void OnLayoutChange() override;
     void Draw(NVGcontext* vg, Theme* theme) override;
 
     void Push(const NotifEntry& entry);
@@ -49,8 +47,8 @@ private:
     void Draw(NVGcontext* vg, Theme* theme, Entries& entries);
 
 private:
-    Entries m_entries_left;
-    Entries m_entries_right;
+    Entries m_entries_left{};
+    Entries m_entries_right{};
     Mutex m_mutex{};
 };
 

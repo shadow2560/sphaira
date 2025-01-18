@@ -135,7 +135,7 @@ Result CreateDirectoryRecursively(FsFileSystem* fs, const FsPath& _path, bool ig
         }
 
         if (R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
-            log_write("failed to create folder: %s\n", path);
+            log_write("failed to create folder: %s\n", path.s);
             return rc;
         }
 
@@ -167,7 +167,7 @@ Result CreateDirectoryRecursivelyWithPath(FsFileSystem* fs, const FsPath& _path,
         }
 
         if (R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
-            log_write("failed to create folder recursively: %s\n", path);
+            log_write("failed to create folder recursively: %s\n", path.s);
             return rc;
         }
 

@@ -2,6 +2,7 @@
 
 #include "ui/menus/menu_base.hpp"
 #include "ui/scrollable_text.hpp"
+#include "ui/list.hpp"
 #include "nro.hpp"
 #include "fs.hpp"
 #include <span>
@@ -41,26 +42,26 @@ enum class EntryStatus {
 };
 
 struct Entry {
-    std::string category; // todo: lable
-    std::string binary; // optional, only valid for .nro
-    std::string updated; // date of update
-    std::string name;
-    std::string license; // optional
-    std::string title; // same as name but with spaces
-    std::string url; // url of repo (optional?)
-    std::string description;
-    std::string author;
-    std::string changelog; // optional
-    u64 screens; // number of screenshots
-    u64 extracted; // extracted size in KiB
-    std::string version;
-    u64 filesize; // compressed size in KiB
-    std::string details;
-    u64 app_dls;
-    std::string md5; // md5 of the zip
+    std::string category{}; // todo: lable
+    std::string binary{}; // optional, only valid for .nro
+    std::string updated{}; // date of update
+    std::string name{};
+    std::string license{}; // optional
+    std::string title{}; // same as name but with spaces
+    std::string url{}; // url of repo (optional?)
+    std::string description{};
+    std::string author{};
+    std::string changelog{}; // optional
+    u64 screens{}; // number of screenshots
+    u64 extracted{}; // extracted size in KiB
+    std::string version{};
+    u64 filesize{}; // compressed size in KiB
+    std::string details{};
+    u64 app_dls{};
+    std::string md5{}; // md5 of the zip
 
-    LazyImage image;
-    u32 updated_num;
+    LazyImage image{};
+    u32 updated_num{};
     EntryStatus status{EntryStatus::Get};
 };
 
@@ -77,7 +78,7 @@ struct EntryMenu final : MenuBase {
     // void OnFocusGained() override;
 
     void ShowChangelogAction();
-    void SetIndex(std::size_t index);
+    void SetIndex(s64 index);
 
     void UpdateOptions();
 
@@ -97,14 +98,14 @@ private:
     const LazyImage& m_default_icon;
     Menu& m_menu;
 
-    std::size_t m_index{}; // where i am in the array
-    std::vector<Option> m_options;
-    LazyImage m_banner;
-    std::vector<LazyImage> m_screens;
+    s64 m_index{}; // where i am in the array
+    std::vector<Option> m_options{};
+    LazyImage m_banner{};
+    std::unique_ptr<List> m_list{};
 
-    std::shared_ptr<ScrollableText> m_details;
-    std::shared_ptr<ScrollableText> m_changelog;
-    std::shared_ptr<ScrollableText> m_detail_changelog;
+    std::shared_ptr<ScrollableText> m_details{};
+    std::shared_ptr<ScrollableText> m_changelog{};
+    std::shared_ptr<ScrollableText> m_detail_changelog{};
 
     bool m_show_changlog{};
 };
@@ -129,37 +130,8 @@ enum SortType {
 };
 
 enum OrderType {
-    OrderType_Decending,
+    OrderType_Descending,
     OrderType_Ascending,
-};
-
-struct FeedbackEntry {
-    u32 id;
-    u64 time;
-    std::string package; // name of package
-    std::string content; // the feedback message that was sent
-    std::string reply; // the reply, "" if no reply yet :)
-};
-
-struct FeedbackMenu final : MenuBase {
-    FeedbackMenu(const std::vector<Entry>& package_entries, LazyImage& default_image);
-    ~FeedbackMenu();
-
-    void Update(Controller* controller, TouchInfo* touch) override;
-    void Draw(NVGcontext* vg, Theme* theme) override;
-    void OnFocusGained() override;
-
-    void SetIndex(std::size_t index);
-    void ScanHomebrew();
-    void Sort();
-
-private:
-    const std::vector<Entry>& m_package_entries;
-    LazyImage& m_default_image;
-    std::vector<FeedbackEntry> m_entries;
-    std::size_t m_start{};
-    std::size_t m_index{}; // where i am in the array
-    ImageDownloadState m_repo_download_state{ImageDownloadState::None};
 };
 
 struct Menu final : MenuBase {
@@ -170,7 +142,7 @@ struct Menu final : MenuBase {
     void Draw(NVGcontext* vg, Theme* theme) override;
     void OnFocusGained() override;
 
-    void SetIndex(std::size_t index);
+    void SetIndex(s64 index);
     void ScanHomebrew();
     void Sort();
 
@@ -191,29 +163,29 @@ struct Menu final : MenuBase {
 
 private:
     const std::vector<NroEntry>& m_nro_entries;
-    std::vector<Entry> m_entries;
-    std::vector<EntryMini> m_entries_index[Filter_MAX];
-    std::vector<EntryMini> m_entries_index_author;
-    std::vector<EntryMini> m_entries_index_search;
-    std::span<EntryMini> m_entries_current;
+    std::vector<Entry> m_entries{};
+    std::vector<EntryMini> m_entries_index[Filter_MAX]{};
+    std::vector<EntryMini> m_entries_index_author{};
+    std::vector<EntryMini> m_entries_index_search{};
+    std::span<EntryMini> m_entries_current{};
 
     Filter m_filter{Filter::Filter_All};
     SortType m_sort{SortType::SortType_Updated};
-    OrderType m_order{OrderType::OrderType_Decending};
+    OrderType m_order{OrderType::OrderType_Descending};
 
-    std::size_t m_start{};
-    std::size_t m_index{}; // where i am in the array
-    LazyImage m_default_image;
-    LazyImage m_update;
-    LazyImage m_get;
-    LazyImage m_local;
-    LazyImage m_installed;
+    s64 m_index{}; // where i am in the array
+    LazyImage m_default_image{};
+    LazyImage m_update{};
+    LazyImage m_get{};
+    LazyImage m_local{};
+    LazyImage m_installed{};
     ImageDownloadState m_repo_download_state{ImageDownloadState::None};
+    std::unique_ptr<List> m_list{};
 
-    std::string m_search_term;
-    std::string m_author_term;
-    u64 m_entry_search_jump_back{};
-    u64 m_entry_author_jump_back{};
+    std::string m_search_term{};
+    std::string m_author_term{};
+    s64 m_entry_search_jump_back{};
+    s64 m_entry_author_jump_back{};
     bool m_is_search{};
     bool m_is_author{};
     bool m_dirty{}; // if set, does a sort

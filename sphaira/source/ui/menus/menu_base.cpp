@@ -41,7 +41,7 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
     #define draw(...) \
         gfx::textBounds(vg, 0, 0, bounds, __VA_ARGS__); \
         start_x -= bounds[2] - bounds[0]; \
-        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT].colour, __VA_ARGS__); \
+        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT), __VA_ARGS__); \
         start_x -= spacing;
 
     // draw("version %s", APP_VERSION);
@@ -58,17 +58,15 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
 
     #undef draw
 
-    gfx::drawRect(vg, 30.f, 86.f, 1220.f, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
-    gfx::drawRect(vg, 30.f, 646.0f, 1220.f, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
+    gfx::drawRect(vg, 30.f, 86.f, 1220.f, 1.f, theme->GetColour(ThemeEntryID_LINE));
+    gfx::drawRect(vg, 30.f, 646.0f, 1220.f, 1.f, theme->GetColour(ThemeEntryID_LINE));
 
     nvgFontSize(vg, 28);
     gfx::textBounds(vg, 0, 0, bounds, m_title.c_str());
-    gfx::drawTextArgs(vg, 80, start_y, 28.f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
-    gfx::drawTextArgs(vg, 80 + (bounds[2] - bounds[0]) + 10, start_y, 16, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT].colour, m_title_sub_heading.c_str());
+    gfx::drawTextArgs(vg, 80, start_y, 28.f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str());
+    gfx::drawTextArgs(vg, 80 + (bounds[2] - bounds[0]) + 10, start_y, 16, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT_INFO), m_title_sub_heading.c_str());
 
-    // gfx::drawTextArgs(vg, 80, 65, 28.f, NVG_ALIGN_LEFT, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
-    // gfx::drawTextArgs(vg, 80, 680.f, 18, NVG_ALIGN_LEFT, theme->elements[ThemeEntryID_TEXT].colour, "%s", m_sub_heading.c_str());
-    gfx::drawTextArgs(vg, 80, 685.f, 18, NVG_ALIGN_LEFT, theme->elements[ThemeEntryID_TEXT].colour, "%s", m_sub_heading.c_str());
+    gfx::drawTextArgs(vg, 80, 685.f, 18, NVG_ALIGN_LEFT, theme->GetColour(ThemeEntryID_TEXT), "%s", m_sub_heading.c_str());
 }
 
 void MenuBase::SetTitle(std::string title) {
@@ -101,63 +99,6 @@ void MenuBase::UpdateVars() {
     nifmGetCurrentIpAddress(&m_ip);
 
     m_poll_timestamp.Update();
-}
-
-auto MenuBase::ScrollHelperDown(u64& index, u64& start, u64 step, s64 row, s64 page, u64 size) -> bool {
-    const auto old_index = index;
-
-    if (!size) {
-        return false;
-    }
-
-    if (index + step < size) {
-        index += step;
-    } else {
-        index = size - 1;
-    }
-
-    if (index != old_index) {
-        App::PlaySoundEffect(SoundEffect_Scroll);
-        s64 delta = index - old_index;
-
-        if (index - start >= page) {
-            do {
-                start += row;
-                delta -= row;
-            } while (delta > 0 && start + page < size);
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
-auto MenuBase::ScrollHelperUp(u64& index, u64& start, s64 step, s64 row, s64 page, s64 size) -> bool {
-    const auto old_index = index;
-
-    if (!size) {
-        return false;
-    }
-
-    if (index >= step) {
-        index -= step;
-    } else {
-        index = 0;
-    }
-
-    if (index != old_index) {
-        App::PlaySoundEffect(SoundEffect_Scroll);
-        // if ()
-        while (index < start) {
-            // log_write("moved up\n");
-            start -= row;
-        }
-
-        return true;
-    }
-
-    return false;
 }
 
 } // namespace sphaira::ui::menu

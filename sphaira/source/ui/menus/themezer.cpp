@@ -13,7 +13,7 @@
 #include "i18n.hpp"
 
 #include <minIni.h>
-#include <nanovg/stb_image.h>
+#include <stb_image.h>
 #include <cstring>
 #include <minizip/unzip.h>
 #include <yyjson.h>
@@ -102,30 +102,8 @@ auto apiBuildUrlDownloadInternal(const std::string& id, bool is_pack) -> std::st
     // https://api.themezer.net/?query=query{downloadPack(id:"11"){filename,url,mimetype}}
 }
 
-auto apiBuildUrlDownloadTheme(const ThemeEntry& e) -> std::string {
-    return apiBuildUrlDownloadInternal(e.id, false);
-}
-
 auto apiBuildUrlDownloadPack(const PackListEntry& e) -> std::string {
     return apiBuildUrlDownloadInternal(e.id, true);
-}
-
-auto apiBuildFilePack(const PackListEntry& e) -> fs::FsPath {
-    fs::FsPath path;
-    std::snprintf(path, sizeof(path), "%s/%s By %s/", THEME_FOLDER, e.details.name.c_str(), e.creator.display_name.c_str());
-    return path;
-}
-
-#if 0
-auto apiBuildUrlPack(const PackListEntry& e) -> std::string {
-    char url[2048];
-    std::snprintf(url, sizeof(url), "https://api.themezer.net/?query=query($id:String!){pack(id:$id){id,creator{display_name},details{name,description},last_updated,categories,dl_count,like_count,themes{id,details{name},layout{id,details{name}},categories,target,preview{original,thumb},last_updated,dl_count,like_count}}}&variables={\"id\":\"%s\"}", e.id.c_str());
-    return url;
-}
-#endif
-
-auto apiBuildUrlThemeList(const Config& e) -> std::string {
-    return apiBuildUrlListInternal(e, false);
 }
 
 auto apiBuildUrlListPacks(const Config& e) -> std::string {
@@ -171,7 +149,6 @@ auto loadThemeImage(ThemeEntry& e) -> bool {
 
     if (!image.image) {
         log_write("failed to load image from file: %s\n", path.s);
-        log_write("failed to load image from file: %s\n", path);
         return false;
     } else {
         // log_write("loaded image from file: %s\n", path);
@@ -189,35 +166,18 @@ void from_json(yyjson_val* json, Creator& e) {
 void from_json(yyjson_val* json, Details& e) {
     JSON_OBJ_ITR(
         JSON_SET_STR(name);
-        // JSON_SET_STR(description);
     );
 }
 
 void from_json(yyjson_val* json, Preview& e) {
     JSON_OBJ_ITR(
-        // JSON_SET_STR(original);
         JSON_SET_STR(thumb);
-    );
-}
-
-void from_json(yyjson_val* json, DownloadPack& e) {
-    JSON_OBJ_ITR(
-        JSON_SET_STR(filename);
-        JSON_SET_STR(url);
-        JSON_SET_STR(mimetype);
     );
 }
 
 void from_json(yyjson_val* json, ThemeEntry& e) {
     JSON_OBJ_ITR(
         JSON_SET_STR(id);
-        // JSON_SET_OBJ(creator);
-        // JSON_SET_OBJ(details);
-        // JSON_SET_STR(last_updated);
-        // JSON_SET_UINT(dl_count);
-        // JSON_SET_UINT(like_count);
-        // JSON_SET_ARR_STR(categories);
-        // JSON_SET_STR(target);
         JSON_SET_OBJ(preview);
     );
 }
@@ -227,10 +187,6 @@ void from_json(yyjson_val* json, PackListEntry& e) {
         JSON_SET_STR(id);
         JSON_SET_OBJ(creator);
         JSON_SET_OBJ(details);
-        // JSON_SET_STR(last_updated);
-        // JSON_SET_ARR_STR(categories);
-        // JSON_SET_UINT(dl_count);
-        // JSON_SET_UINT(like_count);
         JSON_SET_ARR_OBJ(themes);
     );
 }
@@ -246,7 +202,6 @@ void from_json(yyjson_val* json, Pagination& e) {
 
 void from_json(const std::vector<u8>& data, DownloadPack& e) {
     JSON_INIT_VEC(data, "data");
-    // JSON_GET_OBJ("downloadTheme");
     JSON_GET_OBJ("downloadPack");
     JSON_OBJ_ITR(
         JSON_SET_STR(filename);
@@ -310,14 +265,14 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
 
     // create directories
     fs::FsPath dir_path;
-    std::snprintf(dir_path, sizeof(dir_path), "%s/%s - By %s", THEME_FOLDER, entry.details.name.c_str(), entry.creator.display_name.c_str());
+    std::snprintf(dir_path, sizeof(dir_path), "%s/%s - By %s", THEME_FOLDER.s, entry.details.name.c_str(), entry.creator.display_name.c_str());
     fs.CreateDirectoryRecursively(dir_path);
 
     // 3. extract the zip
     if (!pbox->ShouldExit()) {
         auto zfile = unzOpen64(zip_out);
         if (!zfile) {
-            log_write("failed to open zip: %s\n", zip_out);
+            log_write("failed to open zip: %s\n", zip_out.s);
             return false;
         }
         ON_SCOPE_EXIT(unzClose(zfile));
@@ -352,24 +307,24 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
 
             Result rc;
             if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                log_write("failed to create file: %s 0x%04X\n", file_path, rc);
+                log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
                 return false;
             }
 
             FsFile f;
             if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Write, &f))) {
-                log_write("failed to open file: %s 0x%04X\n", file_path, rc);
+                log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
                 return false;
             }
             ON_SCOPE_EXIT(fsFileClose(&f));
 
             if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                log_write("failed to set file size: %s 0x%04X\n", file_path, rc);
+                log_write("failed to set file size: %s 0x%04X\n", file_path.s, rc);
                 return false;
             }
 
             std::vector<char> buf(chunk_size);
-            u64 offset{};
+            s64 offset{};
             while (offset < info.uncompressed_size) {
                 if (pbox->ShouldExit()) {
                     return false;
@@ -382,7 +337,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
                 }
 
                 if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                    log_write("failed to write file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to write file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
@@ -429,25 +384,25 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
             const auto& page = m_pages[m_page_index];
-            if (ScrollHelperDown(m_index, m_start, 3, 3, 6, page.m_packList.size())) {
+            if (m_list->ScrollDown(m_index, 3, page.m_packList.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
             const auto& page = m_pages[m_page_index];
-            if (ScrollHelperUp(m_index, m_start, 3, 3, 6, page.m_packList.size())) {
+            if (m_list->ScrollUp(m_index, 3, page.m_packList.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::R2, Action{[this](){
             const auto& page = m_pages[m_page_index];
-            if (ScrollHelperDown(m_index, m_start, 6, 3, 6, page.m_packList.size())) {
+            if (m_list->ScrollDown(m_index, 6, page.m_packList.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::L2, Action{[this](){
             const auto& page = m_pages[m_page_index];
-            if (ScrollHelperUp(m_index, m_start, 6, 3, 6, page.m_packList.size())) {
+            if (m_list->ScrollUp(m_index, 6, page.m_packList.size())) {
                 SetIndex(m_index);
             }
         }}),
@@ -492,14 +447,14 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
                 InvalidateAllPages();
             }, "Enabled"_i18n, "Disabled"_i18n));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](std::size_t& index_out){
+            options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
                 if (m_sort.Get() != index_out) {
                     m_sort.Set(index_out);
                     InvalidateAllPages();
                 }
             }, m_sort.Get()));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](std::size_t& index_out){
+            options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
                 if (m_order.Get() != index_out) {
                     m_order.Set(index_out);
                     InvalidateAllPages();
@@ -542,6 +497,10 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
         }})
     );
 
+    const Vec4 v{75, 110, 350, 250};
+    const Vec2 pad{10, 10};
+    m_list = std::make_unique<List>(3, 6, m_pos, v, pad);
+
     m_page_index = 0;
     m_pages.resize(1);
     PackListDownload();
@@ -553,13 +512,31 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
+
+    if (m_pages.empty()) {
+        return;
+    }
+
+    const auto& page = m_pages[m_page_index];
+    if (page.m_ready != PageLoadState::Done) {
+        return;
+    }
+
+    m_list->OnUpdate(controller, touch, page.m_packList.size(), [this](auto i) {
+        if (m_index == i) {
+            FireAction(Button::A);
+        } else {
+            App::PlaySoundEffect(SoundEffect_Focus);
+            SetIndex(i);
+        }
+    });
 }
 
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
     if (m_pages.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Empty!"_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty!"_i18n.c_str());
         return;
     }
 
@@ -567,121 +544,105 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
     switch (page.m_ready) {
         case PageLoadState::None:
-            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Not Ready..."_i18n.c_str());
+            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Not Ready..."_i18n.c_str());
             return;
         case PageLoadState::Loading:
-            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Loading"_i18n.c_str());
+            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Loading"_i18n.c_str());
             return;
         case PageLoadState::Done:
             break;
         case PageLoadState::Error:
-            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Error loading page!"_i18n.c_str());
+            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Error loading page!"_i18n.c_str());
             return;
-    }
-
-    const u64 SCROLL = m_start;
-    const u64 max_entry_display = 9;
-    const u64 nro_total = page.m_packList.size();// m_entries_current.size();
-    const u64 cursor_pos = m_index;
-
-    // only draw scrollbar if needed
-    if (nro_total > max_entry_display) {
-        const auto scrollbar_size = 500.f;
-        const auto sb_h = 3.f / (float)(nro_total + 3) * scrollbar_size;
-        const auto sb_y = SCROLL / 3.f;
-        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, theme->elements[ThemeEntryID_GRID].colour);
-        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * 2) - 4, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
     }
 
     // max images per frame, in order to not hit io / gpu too hard.
     const int image_load_max = 2;
     int image_load_count = 0;
 
-    nvgSave(vg);
-    nvgScissor(vg, 30, 87, 1220 - 30, 646 - 87); // clip
+    m_list->Draw(vg, theme, page.m_packList.size(), [this, &page, &image_load_count](auto* vg, auto* theme, auto v, auto pos) {
+        const auto& [x, y, w, h] = v;
+        auto& e = page.m_packList[pos];
 
-    for (u64 i = 0, pos = SCROLL, y = 110, w = 350, h = 250; pos < nro_total && i < max_entry_display; y += h + 10) {
-        for (u64 j = 0, x = 75; j < 3 && pos < nro_total && i < max_entry_display; j++, i++, pos++, x += w + 10) {
-            const auto index = pos;
-            auto& e = page.m_packList[index];
-
-            auto text_id = ThemeEntryID_TEXT;
-            if (pos == cursor_pos) {
-                text_id = ThemeEntryID_TEXT_SELECTED;
-                gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
-            } else {
-                DrawElement(x, y, w, h, ThemeEntryID_GRID);
-            }
-
-            const float xoff = (350 - 320) / 2;
-            const float yoff = (350 - 320) / 2;
-
-            // lazy load image
-            if (e.themes.size()) {
-                auto& theme = e.themes[0];
-                auto& image = e.themes[0].preview.lazy_image;
-
-                // try and load cached image.
-                if (image_load_count < image_load_max && !image.image && !image.tried_cache) {
-                    image.tried_cache = true;
-                    image.cached = loadThemeImage(theme);
-                    if (image.cached) {
-                        image_load_count++;
-                    }
-                }
-
-                if (!image.image || image.cached) {
-                    switch (image.state) {
-                        case ImageDownloadState::None: {
-                            const auto path = apiBuildIconCache(theme);
-                            log_write("downloading theme!: %s\n", path);
-
-                            const auto url = theme.preview.thumb;
-                            log_write("downloading url: %s\n", url.c_str());
-                            image.state = ImageDownloadState::Progress;
-                            curl::Api().ToFileAsync(
-                                curl::Url{url},
-                                curl::Path{path},
-                                curl::Flags{curl::Flag_Cache},
-                                curl::OnComplete{[this, &image](auto& result) {
-                                    if (result.success) {
-                                        image.state = ImageDownloadState::Done;
-                                        // data hasn't changed
-                                        if (result.code == 304) {
-                                            image.cached = false;
-                                        }
-                                    } else {
-                                        image.state = ImageDownloadState::Failed;
-                                        log_write("failed to download image\n");
-                                    }
-                                }
-                            });
-                        }   break;
-                        case ImageDownloadState::Progress: {
-
-                        }   break;
-                        case ImageDownloadState::Done: {
-                            image.cached = false;
-                            if (!loadThemeImage(theme)) {
-                                image.state = ImageDownloadState::Failed;
-                            } else {
-                                image_load_count++;
-                            }
-                        }   break;
-                        case ImageDownloadState::Failed: {
-                        }   break;
-                    }
-                }
-
-                gfx::drawImageRounded(vg, x + xoff, y, 320, 180, image.image ? image.image : App::GetDefaultImage());
-            }
-
-            gfx::drawTextArgs(vg, x + xoff, y + 180 + 20, 18, NVG_ALIGN_LEFT, theme->elements[text_id].colour, "%s", e.details.name.c_str());
-            gfx::drawTextArgs(vg, x + xoff, y + 180 + 55, 18, NVG_ALIGN_LEFT, theme->elements[text_id].colour, "%s", e.creator.display_name.c_str());
+        auto text_id = ThemeEntryID_TEXT;
+        if (pos == m_index) {
+            text_id = ThemeEntryID_TEXT_SELECTED;
+            gfx::drawRectOutline(vg, theme, 4.f, v);
+        } else {
+            DrawElement(x, y, w, h, ThemeEntryID_GRID);
         }
-    }
 
-    nvgRestore(vg);
+        const float xoff = (350 - 320) / 2;
+
+        // lazy load image
+        if (e.themes.size()) {
+            auto& theme = e.themes[0];
+            auto& image = e.themes[0].preview.lazy_image;
+
+            // try and load cached image.
+            if (image_load_count < image_load_max && !image.image && !image.tried_cache) {
+                image.tried_cache = true;
+                image.cached = loadThemeImage(theme);
+                if (image.cached) {
+                    image_load_count++;
+                }
+            }
+
+            if (!image.image || image.cached) {
+                switch (image.state) {
+                    case ImageDownloadState::None: {
+                        const auto path = apiBuildIconCache(theme);
+                        log_write("downloading theme!: %s\n", path.s);
+
+                        const auto url = theme.preview.thumb;
+                        log_write("downloading url: %s\n", url.c_str());
+                        image.state = ImageDownloadState::Progress;
+                        curl::Api().ToFileAsync(
+                            curl::Url{url},
+                            curl::Path{path},
+                            curl::Flags{curl::Flag_Cache},
+                            curl::StopToken{this->GetToken()},
+                            curl::OnComplete{[this, &image](auto& result) {
+                                if (result.success) {
+                                    image.state = ImageDownloadState::Done;
+                                    // data hasn't changed
+                                    if (result.code == 304) {
+                                        image.cached = false;
+                                    }
+                                } else {
+                                    image.state = ImageDownloadState::Failed;
+                                    log_write("failed to download image\n");
+                                }
+                            }
+                        });
+                    }   break;
+                    case ImageDownloadState::Progress: {
+
+                    }   break;
+                    case ImageDownloadState::Done: {
+                        image.cached = false;
+                        if (!loadThemeImage(theme)) {
+                            image.state = ImageDownloadState::Failed;
+                        } else {
+                            image_load_count++;
+                        }
+                    }   break;
+                    case ImageDownloadState::Failed: {
+                    }   break;
+                }
+            }
+
+            gfx::drawImageRounded(vg, x + xoff, y, 320, 180, image.image ? image.image : App::GetDefaultImage());
+        }
+
+        nvgSave(vg);
+        nvgIntersectScissor(vg, x, y, w - 30.f, h); // clip
+        {
+            gfx::drawTextArgs(vg, x + xoff, y + 180 + 20, 18, NVG_ALIGN_LEFT, theme->GetColour(text_id), "%s", e.details.name.c_str());
+            gfx::drawTextArgs(vg, x + xoff, y + 180 + 55, 18, NVG_ALIGN_LEFT, theme->GetColour(text_id), "%s", e.creator.display_name.c_str());
+        }
+        nvgRestore(vg);
+    });
 }
 
 void Menu::OnFocusGained() {
@@ -704,7 +665,7 @@ void Menu::PackListDownload() {
     SetSubHeading(subheading);
 
     m_index = 0;
-    m_start = 0;
+    m_list->SetYoff(0);
 
     // already downloaded
     if (m_pages[m_page_index].m_ready != PageLoadState::None) {
@@ -727,6 +688,7 @@ void Menu::PackListDownload() {
         curl::Url{packList_url},
         curl::Path{packlist_path},
         curl::Flags{curl::Flag_Cache},
+        curl::StopToken{this->GetToken()},
         curl::OnComplete{[this, page_index](auto& result){
             log_write("got themezer data\n");
             if (!result.success) {
@@ -751,8 +713,8 @@ void Menu::PackListDownload() {
             std::snprintf(subheading, sizeof(subheading), "Page %zu / %zu"_i18n.c_str(), m_page_index+1, m_page_index_max);
             SetSubHeading(subheading);
 
-            log_write("a.pagination.page: %u\n", a.pagination.page);
-            log_write("a.pagination.page_count: %u\n", a.pagination.page_count);
+            log_write("a.pagination.page: %zu\n", a.pagination.page);
+            log_write("a.pagination.page_count: %zu\n", a.pagination.page_count);
         }
     });
 }

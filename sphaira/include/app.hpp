@@ -81,6 +81,7 @@ public:
     static auto GetThemeShuffleEnable() -> bool;
     static auto GetThemeMusicEnable() -> bool;
     static auto GetLanguage() -> long;
+    static auto GetTextScrollSpeed() -> long;
 
     static void SetMtpEnable(bool enable);
     static void SetFtpEnable(bool enable);
@@ -94,6 +95,7 @@ public:
     static void SetThemeShuffleEnable(bool enable);
     static void SetThemeMusicEnable(bool enable);
     static void SetLanguage(long index);
+    static void SetTextScrollSpeed(long index);
 
     static auto Install(OwoConfig& config) -> Result;
     static auto Install(ui::ProgressBox* pbox, OwoConfig& config) -> Result;
@@ -107,7 +109,7 @@ public:
     // void DrawElement(float x, float y, float w, float h, ui::ThemeEntryID id);
     auto LoadElementImage(std::string_view value) -> ElementEntry;
     auto LoadElementColour(std::string_view value) -> ElementEntry;
-    auto LoadElement(std::string_view data) -> ElementEntry;
+    auto LoadElement(std::string_view data, ElementType type) -> ElementEntry;
 
     void LoadTheme(const ThemeMeta& meta);
     void CloseTheme();
@@ -118,6 +120,21 @@ public:
         const auto type = appletGetAppletType();
         return type == AppletType_Application || type == AppletType_SystemApplication;
     }
+
+    static auto IsApplet() -> bool {
+        return !IsApplication();
+    }
+
+    // returns true if launched in applet mode with a title suspended in the background.
+    static auto IsAppletWithSuspendedApp() -> bool {
+        R_UNLESS(IsApplet(), false);
+        R_TRY_RESULT(pmdmntInitialize(), false);
+        ON_SCOPE_EXIT(pmdmntExit());
+
+        u64 pid;
+        return R_SUCCEEDED(pmdmntGetApplicationProcessId(&pid));
+    }
+
 
 // private:
     static constexpr inline auto CONFIG_PATH = "/config/sphaira/config.ini";
@@ -164,8 +181,9 @@ public:
     option::OptionBool m_theme_shuffle{INI_SECTION, "theme_shuffle", false};
     option::OptionBool m_theme_music{INI_SECTION, "theme_music", true};
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto
+    // todo: move this into it's own menu
+    option::OptionLong m_text_scroll_speed{"accessibility", "text_scroll_speed", 1}; // normal
 
-    PLSR_BFSAR m_qlaunch_bfsar{};
     PLSR_PlayerSoundId m_sound_ids[SoundEffect_MAX]{};
 
 private: // from nanovg decko3d example by adubbz

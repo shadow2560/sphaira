@@ -4,6 +4,8 @@ A homebrew menu for the switch.
 
 [See the gbatemp thread for more details / discussion](https://gbatemp.net/threads/sphaira-hbmenu-replacement.664523/).
 
+[We have now have a Discord server!](https://discord.gg/8vZBsrprEc). Please use the issues tab to report bugs, as it is much easier for me to track.
+
 ## showcase
 
 |                          |                          |

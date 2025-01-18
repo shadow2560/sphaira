@@ -25,7 +25,6 @@ namespace {
         log_write("curl_share_setopt(%s, %s) msg: %s\n", #opt, #v, curl_share_strerror(r)); \
     } \
 
-#define USE_THREAD_QUEUE 1
 constexpr auto API_AGENT = "ITotalJustice";
 constexpr u64 CHUNK_SIZE = 1024*1024;
 constexpr auto MAX_THREADS = 4;
@@ -38,7 +37,7 @@ Mutex g_mutex_share[CURL_LOCK_DATA_LAST]{};
 
 struct DataStruct {
     std::vector<u8> data;
-    u64 offset{};
+    s64 offset{};
     FsFile f{};
     s64 file_offset{};
 };
@@ -302,18 +301,19 @@ struct ThreadQueue {
     }
 
     auto Add(const Api& api) -> bool {
+        if (api.GetUrl().empty() || api.GetPath().empty() || !api.GetOnComplete()) {
+            return false;
+        }
+
         mutexLock(&m_mutex);
         ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
 
-        ThreadQueueEntry entry{};
-        entry.api = api;
-
-        switch (api.m_prio) {
+        switch (api.GetPriority()) {
             case Priority::Normal:
-                m_entries.emplace_back(entry);
+                m_entries.emplace_back(api);
                 break;
             case Priority::High:
-                m_entries.emplace_front(entry);
+                m_entries.emplace_front(api);
                 break;
         }
 
@@ -350,13 +350,13 @@ auto ProgressCallbackFunc1(void *clientp, curl_off_t dltotal, curl_off_t dlnow, 
 }
 
 auto ProgressCallbackFunc2(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) -> size_t {
-    if (!g_running) {
+    auto api = static_cast<Api*>(clientp);
+    if (!g_running || api->GetToken().stop_requested()) {
         return 1;
     }
 
     // log_write("pcall called %u %u %u %u\n", dltotal, dlnow, ultotal, ulnow);
-    auto callback = *static_cast<OnProgress*>(clientp);
-    if (!callback(dltotal, dlnow, ultotal, ulnow)) {
+    if (!api->GetOnProgress()(dltotal, dlnow, ultotal, ulnow)) {
         return 1;
     }
 
@@ -443,12 +443,17 @@ auto header_callback(char* b, size_t size, size_t nitems, void* userdata) -> siz
 }
 
 auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
+    // check if stop has been requested before starting download
+    if (e.GetToken().stop_requested()) {
+        return {};
+    }
+
     fs::FsPath tmp_buf;
-    const bool has_file = !e.m_path.empty() && e.m_path != "";
-    const bool has_post = !e.m_fields.m_str.empty() && e.m_fields.m_str != "";
+    const bool has_file = !e.GetPath().empty() && e.GetPath() != "";
+    const bool has_post = !e.GetFields().empty() && e.GetFields() != "";
 
     DataStruct chunk;
-    Header header_in = e.m_header;
+    Header header_in = e.GetHeader();
     Header header_out;
     fs::FsNativeSd fs;
 
@@ -457,17 +462,17 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
         fs.CreateDirectoryRecursivelyWithPath(tmp_buf);
 
         if (auto rc = fs.CreateFile(tmp_buf, 0, 0); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
-            log_write("failed to create file: %s\n", tmp_buf);
+            log_write("failed to create file: %s\n", tmp_buf.s);
             return {};
         }
 
         if (R_FAILED(fs.OpenFile(tmp_buf, FsOpenMode_Write|FsOpenMode_Append, &chunk.f))) {
-            log_write("failed to open file: %s\n", tmp_buf);
+            log_write("failed to open file: %s\n", tmp_buf.s);
             return {};
         }
 
-        if (e.m_flags.m_flags & Flag_Cache) {
-            g_cache.get(e.m_path, header_in);
+        if (e.GetFlags() & Flag_Cache) {
+            g_cache.get(e.GetPath(), header_in);
         }
     }
 
@@ -475,7 +480,7 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
     chunk.data.reserve(CHUNK_SIZE);
 
     curl_easy_reset(curl);
-    CURL_EASY_SETOPT_LOG(curl, CURLOPT_URL, e.m_url.m_str.c_str());
+    CURL_EASY_SETOPT_LOG(curl, CURLOPT_URL, e.GetUrl().c_str());
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_USERAGENT, "TotalJustice");
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_FOLLOWLOCATION, 1L);
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -487,8 +492,8 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_HEADERDATA, &header_out);
 
     if (has_post) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_POSTFIELDS, e.m_fields.m_str.c_str());
-        log_write("setting post field: %s\n", e.m_fields.m_str.c_str());
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_POSTFIELDS, e.GetFields().c_str());
+        log_write("setting post field: %s\n", e.GetFields().c_str());
     }
 
     struct curl_slist* list = NULL;
@@ -517,8 +522,8 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
     }
 
     // progress calls.
-    if (e.m_on_progress) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFODATA, &e.m_on_progress);
+    if (e.GetOnProgress()) {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFODATA, &e);
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc2);
     } else {
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc1);
@@ -546,16 +551,16 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
 
         if (res == CURLE_OK) {
             if (http_code == 304) {
-                log_write("cached download: %s\n", e.m_url.m_str.c_str());
+                log_write("cached download: %s\n", e.GetUrl().c_str());
             } else {
-                log_write("un-cached download: %s code: %u\n", e.m_url.m_str.c_str(), http_code);
-                if (e.m_flags.m_flags & Flag_Cache) {
-                    g_cache.set(e.m_path, header_out);
+                log_write("un-cached download: %s code: %lu\n", e.GetUrl().c_str(), http_code);
+                if (e.GetFlags() & Flag_Cache) {
+                    g_cache.set(e.GetPath(), header_out);
                 }
 
-                fs.DeleteFile(e.m_path);
-                fs.CreateDirectoryRecursivelyWithPath(e.m_path);
-                if (R_FAILED(fs.RenameFile(tmp_buf, e.m_path))) {
+                fs.DeleteFile(e.GetPath());
+                fs.CreateDirectoryRecursivelyWithPath(e.GetPath());
+                if (R_FAILED(fs.RenameFile(tmp_buf, e.GetPath()))) {
                     success = false;
                 }
             }
@@ -568,8 +573,8 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
         }
     }
 
-    log_write("Downloaded %s %s\n", e.m_url.m_str.c_str(), curl_easy_strerror(res));
-    return {success, http_code, header_out, chunk.data, e.m_path};
+    log_write("Downloaded %s %s\n", e.GetUrl().c_str(), curl_easy_strerror(res));
+    return {success, http_code, header_out, chunk.data, e.GetPath()};
 }
 
 auto DownloadInternal(const Api& e) -> ApiResult {
@@ -596,23 +601,18 @@ void ThreadEntry::ThreadFunc(void* p) {
         auto rc = waitSingle(waiterForUEvent(&data->m_uevent), UINT64_MAX);
         // log_write("woke up\n");
         if (!g_running) {
-            return;
+            break;
         }
+
         if (R_FAILED(rc)) {
             continue;
         }
 
-        #if 1
         const auto result = DownloadInternal(data->m_curl, data->m_api);
-        if (g_running) {
-            const DownloadEventData event_data{data->m_api.m_on_complete, result};
+        if (g_running && data->m_api.GetOnComplete() && !data->m_api.GetToken().stop_requested()) {
+            const DownloadEventData event_data{data->m_api.GetOnComplete(), result, data->m_api.GetToken()};
             evman::push(std::move(event_data), false);
-        } else {
-            break;
         }
-        #endif
-        // mutexLock(&data->m_mutex);
-        // ON_SCOPE_EXIT(mutexUnlock(&data->m_mutex));
 
         data->m_in_progress = false;
         // notify the queue that there's a space free
@@ -736,53 +736,25 @@ void Exit() {
 }
 
 auto ToMemory(const Api& e) -> ApiResult {
-    if (!e.m_path.empty()) {
+    if (!e.GetPath().empty()) {
         return {};
     }
     return DownloadInternal(e);
 }
 
 auto ToFile(const Api& e) -> ApiResult {
-    if (e.m_path.empty()) {
+    if (e.GetPath().empty()) {
         return {};
     }
     return DownloadInternal(e);
 }
 
 auto ToMemoryAsync(const Api& api) -> bool {
-    #if USE_THREAD_QUEUE
     return g_thread_queue.Add(api);
-    #else
-    // mutexLock(&g_thread_queue.m_mutex);
-    // ON_SCOPE_EXIT(mutexUnlock(&g_thread_queue.m_mutex));
-
-    for (auto& entry : g_threads) {
-        if (!entry.InProgress()) {
-            return entry.Setup(callback, url);
-        }
-    }
-
-    log_write("failed to start download, no avaliable threads\n");
-    return false;
-    #endif
 }
 
 auto ToFileAsync(const Api& e) -> bool {
-    #if USE_THREAD_QUEUE
     return g_thread_queue.Add(e);
-    #else
-    // mutexLock(&g_thread_queue.m_mutex);
-    // ON_SCOPE_EXIT(mutexUnlock(&g_thread_queue.m_mutex));
-
-    for (auto& entry : g_threads) {
-        if (!entry.InProgress()) {
-            return entry.Setup(callback, url, out);
-        }
-    }
-
-    log_write("failed to start download, no avaliable threads\n");
-    return false;
-    #endif
 }
 
 } // namespace sphaira::curl

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/menus/menu_base.hpp"
+#include "ui/list.hpp"
 #include "fs.hpp"
 #include "option.hpp"
 #include <vector>
@@ -9,35 +10,35 @@
 namespace sphaira::ui::menu::gh {
 
 struct AssetEntry {
-    std::string name;
-    std::string path;
-    std::string pre_install_message;
-    std::string post_install_message;
+    std::string name{};
+    std::string path{};
+    std::string pre_install_message{};
+    std::string post_install_message{};
 };
 
 struct Entry {
-    fs::FsPath json_path;
-    std::string url;
-    std::string owner;
-    std::string repo;
-    std::string tag;
-    std::string pre_install_message;
-    std::string post_install_message;
-    std::vector<AssetEntry> assets;
+    fs::FsPath json_path{};
+    std::string url{};
+    std::string owner{};
+    std::string repo{};
+    std::string tag{};
+    std::string pre_install_message{};
+    std::string post_install_message{};
+    std::vector<AssetEntry> assets{};
 };
 
 struct GhApiAsset {
-    std::string name;
-    std::string content_type;
-    u64 size;
-    u64 download_count;
-    std::string browser_download_url;
+    std::string name{};
+    std::string content_type{};
+    u64 size{};
+    u64 download_count{};
+    std::string browser_download_url{};
 };
 
 struct GhApiEntry {
-    std::string tag_name;
-    std::string name;
-    std::vector<GhApiAsset> assets;
+    std::string tag_name{};
+    std::string name{};
+    std::vector<GhApiAsset> assets{};
 };
 
 struct Menu final : MenuBase {
@@ -49,7 +50,7 @@ struct Menu final : MenuBase {
     void OnFocusGained() override;
 
 private:
-    void SetIndex(std::size_t index);
+    void SetIndex(s64 index);
     void Scan();
     void LoadEntriesFromPath(const fs::FsPath& path);
 
@@ -65,9 +66,9 @@ private:
     void UpdateSubheading();
 
 private:
-    std::vector<Entry> m_entries;
-    std::size_t m_index{};
-    std::size_t m_index_offset{};
+    std::vector<Entry> m_entries{};
+    s64 m_index{};
+    std::unique_ptr<List> m_list{};
 };
 
 } // namespace sphaira::ui::menu::gh

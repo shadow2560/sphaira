@@ -162,21 +162,55 @@ struct ElementEntry {
 };
 
 enum ThemeEntryID {
+    // colour of the background, can be an image.
     ThemeEntryID_BACKGROUND,
-
+    // colour of the grid background (homebrew, appstore), can be an image.
     ThemeEntryID_GRID,
-    ThemeEntryID_SELECTED,
-    ThemeEntryID_SELECTED_OVERLAY,
-    ThemeEntryID_TEXT,
-    ThemeEntryID_TEXT_SELECTED,
+    // background colour of a popup.
+    ThemeEntryID_POPUP,
+    // colour of the error text / button.
+    ThemeEntryID_ERROR,
 
+    // colour of all text.
+    ThemeEntryID_TEXT,
+    // colour of text info and subheaders.
+    ThemeEntryID_TEXT_INFO,
+    // colour of selected item text.
+    ThemeEntryID_TEXT_SELECTED,
+    // background colour of a selected item, can be an image (not recommended).
+    ThemeEntryID_SELECTED_BACKGROUND,
+
+    // colour of line separators in a list.
+    ThemeEntryID_LINE,
+    ThemeEntryID_LINE_SEPARATOR,
+
+    // colour of the sidebar backrgound.
+    ThemeEntryID_SIDEBAR,
+
+    // colour of the scrollbar (full portion).
+    ThemeEntryID_SCROLLBAR,
+    // colour of the scrollbar background (empty portion).
+    ThemeEntryID_SCROLLBAR_BACKGROUND,
+
+    // colour of the progressbar (full portion).
+    ThemeEntryID_PROGRESSBAR,
+    // colour of the progressbar background (empty portion).
+    ThemeEntryID_PROGRESSBAR_BACKGROUND,
+
+    // the colours of the pulsing effect, from 1 -> 2.
+    ThemeEntryID_HIGHLIGHT_1,
+    ThemeEntryID_HIGHLIGHT_2,
+
+    // changes the colours of the internal icons used below.
+    ThemeEntryID_ICON_COLOUR,
+
+    // images used in the filebrowser.
     ThemeEntryID_ICON_AUDIO,
     ThemeEntryID_ICON_VIDEO,
     ThemeEntryID_ICON_IMAGE,
     ThemeEntryID_ICON_FILE,
     ThemeEntryID_ICON_FOLDER,
     ThemeEntryID_ICON_ZIP,
-    ThemeEntryID_ICON_GAME,
     ThemeEntryID_ICON_NRO,
 
     ThemeEntryID_MAX,
@@ -186,49 +220,43 @@ struct ThemeMeta {
     std::string name;
     std::string author;
     std::string version;
-    std::string ini_path;
+    fs::FsPath inherit;
+    fs::FsPath ini_path;
 };
 
 struct Theme {
-    std::string name;
-    std::string author;
-    std::string version;
-    fs::FsPath path;
+    ThemeMeta meta;
     PLSR_BFSTM music;
     ElementEntry elements[ThemeEntryID_MAX];
 
-    // NVGcolor background; // bg
-    // NVGcolor lines; // grid lines
-    // NVGcolor spacer; // lines in popup box
-    // NVGcolor text; // text colour
-    // NVGcolor text_info; // description text
-    NVGcolor selected; // selected colours
-    // NVGcolor overlay; // popup overlay colour
-
-    // void DrawElement(float x, float y, float w, float h, ThemeEntryID id);
+    auto GetColour(ThemeEntryID id) const {
+        return elements[id].colour;
+    }
 };
 
-enum class TouchState {
-    Start, // set when touch has started
-    Touching, // set when touch is held longer than 1 frame
-    Stop, // set after touch is released
-    None, // set when there is no touch
-};
+// enum class TouchGesture {
+//     None,
+//     Tap,
+//     Scroll,
+// };
 
 struct TouchInfo {
-    s32 initial_x;
-    s32 initial_y;
+    HidTouchState initial;
+    HidTouchState cur;
 
-    s32 cur_x;
-    s32 cur_y;
+    auto in_range(const Vec4& v) const -> bool {
+        return cur.x >= v.x && cur.x <= v.x + v.w && cur.y >= v.y && cur.y <= v.y + v.h;
+    }
 
-    s32 prev_x;
-    s32 prev_y;
-
-    u32 finger_id;
+    auto in_range(s32 x, s32 y, s32 w, s32 h) const -> bool {
+        return in_range(Vec4(x, y, w, h));
+    }
 
     bool is_touching;
     bool is_tap;
+    bool is_scroll;
+    bool is_clicked;
+    bool is_end;
 };
 
 enum class Button : u64 {
@@ -295,37 +323,36 @@ inline ActionType operator|(ActionType a, ActionType b) {
 }
 
 struct Action final {
+    using CallbackEmpty = std::function<void()>;
+    using CallbackWithBool = std::function<void(bool)>;
     using Callback = std::variant<
-        std::function<void()>,
-        std::function<void(bool)>
+        CallbackEmpty,
+        CallbackWithBool
     >;
 
-    Action(Callback cb) : m_type{ActionType::DOWN}, m_hint{""}, m_callback{cb}, m_hidden{true} {}
-    Action(std::string hint, Callback cb) : m_type{ActionType::DOWN}, m_hint{hint}, m_callback{cb} {}
-    Action(u8 type, Callback cb) : m_type{type}, m_hint{""}, m_callback{cb}, m_hidden{true} {}
-    Action(u8 type, std::string hint, Callback cb) : m_type{type}, m_hint{hint}, m_callback{cb} {}
+    Action(Callback cb) : Action{ActionType::DOWN, "", cb} {}
+    Action(std::string hint, Callback cb) : Action{ActionType::DOWN, hint, cb} {}
+    Action(u8 type, Callback cb) : Action{type, "", cb} {}
+    Action(u8 type, std::string hint, Callback cb) : m_type{type}, m_callback{cb}, m_hint{hint} {}
 
-    auto IsHidden() const noexcept { return m_hidden; }
+    auto IsHidden() const noexcept { return m_hint.empty(); }
 
     auto Invoke(bool down) const {
-        // todo: make this a visit
-        switch (m_callback.index()) {
-            case 0:
-                std::get<0>(m_callback)();
-                break;
-            case 1:
-                std::get<1>(m_callback)(down);
-                break;
-        }
-        // std::visit([down, this](auto& cb){
-        //     cb(down);
-        // }), m_callback;
+        std::visit([down](auto&& arg){
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr(std::is_same_v<T, CallbackEmpty>) {
+                arg();
+            } else if constexpr(std::is_same_v<T, CallbackWithBool>) {
+                arg(down);
+            } else {
+                static_assert(false, "non-exhaustive visitor!");
+            }
+        }, m_callback);
     }
 
-    u8 m_type;
-    std::string m_hint; // todo: make optional
-    Callback m_callback;
-    bool m_hidden{false}; // replace this optional text
+    u8 m_type{};
+    Callback m_callback{};
+    std::string m_hint{};
 };
 
 struct Controller {

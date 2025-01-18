@@ -8,7 +8,20 @@
 
 namespace sphaira::ui {
 
+struct uiButton final : Object {
+    uiButton(Button button, Action action) : m_button{button}, m_action{action} {}
+    auto Draw(NVGcontext* vg, Theme* theme) -> void override;
+
+    Button m_button;
+    Action m_action;
+    Vec4 m_button_pos{};
+    Vec4 m_hint_pos{};
+};
+
 struct Widget : public Object {
+    using Actions = std::map<Button, Action>;
+    using uiButtons = std::vector<uiButton>;
+
     virtual ~Widget() = default;
 
     virtual void Update(Controller* controller, TouchInfo* touch);
@@ -49,6 +62,8 @@ struct Widget : public Object {
         m_actions.clear();
     }
 
+    auto FireAction(Button button, u8 type = ActionType::DOWN) -> bool;
+
     void SetPop(bool pop = true) {
         m_pop = pop;
     }
@@ -57,9 +72,14 @@ struct Widget : public Object {
         return m_pop;
     }
 
-    using Actions = std::map<Button, Action>;
-    // using Actions = std::unordered_map<Button, Action>;
-    Actions m_actions;
+    auto SetUiButtonPos(Vec2 pos) {
+        m_button_pos = pos;
+    }
+
+    auto GetUiButtons() const -> uiButtons;
+
+    Actions m_actions{};
+    Vec2 m_button_pos{1220, 675};
     bool m_focus{false};
     bool m_pop{false};
 };

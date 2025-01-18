@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(sphaira_VERSION 0.5.0)
+set(sphaira_VERSION 0.6.2)
 
 project(sphaira
     VERSION ${sphaira_VERSION}
@@ -51,13 +51,13 @@ add_executable(sphaira
     source/ui/notification.cpp
     source/ui/nvg_util.cpp
     source/ui/option_box.cpp
-    source/ui/option_list.cpp
     source/ui/popup_list.cpp
     source/ui/progress_box.cpp
     source/ui/scrollable_text.cpp
-    source/ui/scrollbar.cpp
     source/ui/sidebar.cpp
     source/ui/widget.cpp
+    source/ui/list.cpp
+    source/ui/bubbles.cpp
 
     source/app.cpp
     source/download.cpp
@@ -81,12 +81,54 @@ target_compile_definitions(sphaira PRIVATE
     -DAPP_VERSION_HASH="${sphaira_VERSION_HASH}"
 )
 
+target_compile_options(sphaira PRIVATE
+    -Wall
+    -Wextra
+
+    # unsure if it's a good idea to enable these by default as
+    # it may cause breakage upon compiler updates.
+    # -Werror
+    # -Wfatal-errors
+
+    # disabled as nx uses s64 for size and offset, however stl uses size_t instead, thus
+    # there being a lot of warnings.
+    -Wno-sign-compare
+    # disabled as many overriden methods don't use the params.
+    -Wno-unused-parameter
+    # pedantic warning, missing fields are set to 0.
+    -Wno-missing-field-initializers
+    # disabled as it warns for strcat 2 paths together, but it will never
+    # overflow due to fs enforcing a max path len anyway.
+    -Wno-format-truncation
+
+    # the below are taken from my gba emulator, they've served me well ;)
+    -Wformat-overflow=2
+    -Wundef
+    -Wmissing-include-dirs
+    -fstrict-aliasing
+    -Wstrict-overflow=2
+    -Walloca
+    -Wduplicated-cond
+    -Wwrite-strings
+    -Wdate-time
+    -Wlogical-op
+    -Wpacked
+    -Wcast-qual
+    -Wcast-align
+    -Wimplicit-fallthrough=5
+    -Wsuggest-final-types
+    -Wuninitialized
+    -fimplicit-constexpr
+    -Wmissing-requires
+)
+
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
 
 FetchContent_Declare(ftpsrv
     GIT_REPOSITORY https://github.com/ITotalJustice/ftpsrv.git
-    GIT_TAG 1.2.1
+    GIT_TAG 1.2.2
+    SOURCE_SUBDIR NONE
 )
 
 FetchContent_Declare(libhaze
@@ -96,12 +138,12 @@ FetchContent_Declare(libhaze
 
 FetchContent_Declare(libpulsar
     GIT_REPOSITORY https://github.com/ITotalJustice/switch-libpulsar.git
-    GIT_TAG d729be3
+    GIT_TAG de656e4
 )
 
 FetchContent_Declare(nanovg
     GIT_REPOSITORY https://github.com/ITotalJustice/nanovg-deko3d.git
-    GIT_TAG 1902b38
+    GIT_TAG 845c9fc
 )
 
 FetchContent_Declare(stb
@@ -116,7 +158,7 @@ FetchContent_Declare(yyjson
 
 FetchContent_Declare(minIni
     GIT_REPOSITORY https://github.com/ITotalJustice/minIni-nx.git
-    GIT_TAG 63ec295
+    GIT_TAG 11cac8b
 )
 
 set(MININI_LIB_NAME minIni)
@@ -136,8 +178,6 @@ set(NANOVG_NO_GIF ON)
 set(NANOVG_NO_HDR ON)
 set(NANOVG_NO_PIC ON)
 set(NANOVG_NO_PNM ON)
-set(NANOVG_STBI_STATIC OFF)
-set(NANOVG_STBTT_STATIC ON)
 
 set(YYJSON_DISABLE_READER OFF)
 set(YYJSON_DISABLE_WRITER OFF)
@@ -148,7 +188,7 @@ set(YYJSON_DISABLE_UTF8_VALIDATION ON)
 set(YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS OFF)
 
 FetchContent_MakeAvailable(
-    # ftpsrv
+    ftpsrv
     libhaze
     libpulsar
     nanovg
@@ -156,11 +196,6 @@ FetchContent_MakeAvailable(
     minIni
     yyjson
 )
-
-FetchContent_GetProperties(ftpsrv)
-if (NOT ftpsrv_POPULATED)
-    FetchContent_Populate(ftpsrv)
-endif()
 
 set(FTPSRV_LIB_BUILD TRUE)
 set(FTPSRV_LIB_SOCK_UNISTD TRUE)
@@ -178,6 +213,7 @@ set(FTPSRV_LIB_CUSTOM_DEFINES
     USE_VFS_SAVE=$<BOOL:TRUE>
     USE_VFS_STORAGE=$<BOOL:TRUE>
     USE_VFS_GC=$<BOOL:${USE_VFS_GC}>
+    USE_VFS_USBHSFS=$<BOOL:FALSE>
     VFS_NX_BUFFER_IO=$<BOOL:TRUE>
 )
 
@@ -225,39 +261,6 @@ set_target_properties(libhaze PROPERTIES
     # force optimisations in debug mode as otherwise vapor errors
     # due to force_inline attribute failing...
     COMPILE_OPTIONS "$<$<CONFIG:Debug>:-Os>"
-)
-
-# todo: upstream cmake
-add_library(libpulsar
-    ${libpulsar_SOURCE_DIR}/src/archive/archive_file.c
-    ${libpulsar_SOURCE_DIR}/src/archive/archive.c
-    ${libpulsar_SOURCE_DIR}/src/bfgrp/bfgrp_location.c
-    ${libpulsar_SOURCE_DIR}/src/bfgrp/bfgrp.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_file.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_group.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_sound.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_string.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar_wave_archive.c
-    ${libpulsar_SOURCE_DIR}/src/bfsar/bfsar.c
-    ${libpulsar_SOURCE_DIR}/src/bfstm/bfstm_channel.c
-    ${libpulsar_SOURCE_DIR}/src/bfstm/bfstm_info.c
-    ${libpulsar_SOURCE_DIR}/src/bfstm/bfstm.c
-    ${libpulsar_SOURCE_DIR}/src/bfwar/bfwar_file.c
-    ${libpulsar_SOURCE_DIR}/src/bfwar/bfwar.c
-    ${libpulsar_SOURCE_DIR}/src/bfwav/bfwav_info.c
-    ${libpulsar_SOURCE_DIR}/src/bfwav/bfwav.c
-    ${libpulsar_SOURCE_DIR}/src/bfwsd/bfwsd_sound_data.c
-    ${libpulsar_SOURCE_DIR}/src/bfwsd/bfwsd_wave_id.c
-    ${libpulsar_SOURCE_DIR}/src/bfwsd/bfwsd.c
-    ${libpulsar_SOURCE_DIR}/src/player/player_load_formats.c
-    ${libpulsar_SOURCE_DIR}/src/player/player_load_lookup.c
-    ${libpulsar_SOURCE_DIR}/src/player/player_load.c
-    ${libpulsar_SOURCE_DIR}/src/player/player.c
-)
-target_include_directories(libpulsar PUBLIC ${libpulsar_SOURCE_DIR}/include)
-set_target_properties(libpulsar PROPERTIES
-    C_STANDARD 11
-    C_EXTENSIONS ON
 )
 
 add_library(stb INTERFACE)

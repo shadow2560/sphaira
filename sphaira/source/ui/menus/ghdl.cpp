@@ -119,7 +119,7 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
         log_write("found zip\n");
         auto zfile = unzOpen64(temp_file);
         if (!zfile) {
-            log_write("failed to open zip: %s\n", temp_file);
+            log_write("failed to open zip: %s\n", temp_file.s);
             return false;
         }
         ON_SCOPE_EXIT(unzClose(zfile));
@@ -155,34 +155,34 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
             Result rc;
             if (file_path[strlen(file_path) -1] == '/') {
                 if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
             } else {
                 if (R_FAILED(rc = fs.CreateDirectoryRecursivelyWithPath(file_path)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
                 if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
                 FsFile f;
                 if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Write, &f))) {
-                    log_write("failed to open file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
                 ON_SCOPE_EXIT(fsFileClose(&f));
 
                 if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                    log_write("failed to set file size: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to set file size: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
                 std::vector<char> buf(chunk_size);
-                u64 offset{};
+                s64 offset{};
                 while (offset < info.uncompressed_size) {
                     const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                     if (bytes_read <= 0) {
@@ -248,22 +248,22 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
 
     this->SetActions(
         std::make_pair(Button::DOWN, Action{[this](){
-            if (ScrollHelperDown(m_index, m_index_offset, 1, 1, 8, m_entries.size())) {
+            if (m_list->ScrollDown(m_index, 1, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (ScrollHelperUp(m_index, m_index_offset, 1, 1, 8, m_entries.size())) {
+            if (m_list->ScrollUp(m_index, 1, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::DPAD_RIGHT, Action{[this](){
-            if (ScrollHelperDown(m_index, m_index_offset, 8, 1, 8, m_entries.size())) {
+            if (m_list->ScrollDown(m_index, 8, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::DPAD_LEFT, Action{[this](){
-            if (ScrollHelperUp(m_index, m_index_offset, 8, 1, 8, m_entries.size())) {
+            if (m_list->ScrollUp(m_index, 8, m_entries.size())) {
                 SetIndex(m_index);
             }
         }}),
@@ -363,6 +363,9 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
             SetPop();
         }})
     );
+
+    const Vec4 v{75, GetY() + 1.f + 42.f, 1220.f-45.f*2, 60};
+    m_list = std::make_unique<List>(1, 8, m_pos, v);
 }
 
 Menu::~Menu() {
@@ -370,75 +373,49 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
+    m_list->OnUpdate(controller, touch, m_entries.size(), [this](auto i) {
+        if (m_index == i) {
+            FireAction(Button::A);
+        } else {
+            App::PlaySoundEffect(SoundEffect_Focus);
+            SetIndex(i);
+        }
+    });
 }
 
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
-    const auto& text_col = theme->elements[ThemeEntryID_TEXT].colour;
+    const auto& text_col = theme->GetColour(ThemeEntryID_TEXT);
 
     if (m_entries.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, text_col, "Empty..."_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty..."_i18n.c_str());
         return;
     }
 
-    const u64 SCROLL = m_index_offset;
-    constexpr u64 max_entry_display = 8;
-    const u64 entry_total = m_entries.size();
-
-    // only draw scrollbar if needed
-    if (entry_total > max_entry_display) {
-        const auto scrollbar_size = 500.f;
-        const auto sb_h = 1.f / (float)entry_total * scrollbar_size;
-        const auto sb_y = SCROLL;
-        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, gfx::getColour(gfx::Colour::BLACK));
-        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * (max_entry_display - 1)) - 4, gfx::getColour(gfx::Colour::SILVER));
-    }
-
-    // constexpr Vec4 line_top{30.f, 86.f, 1220.f, 1.f};
-    // constexpr Vec4 line_bottom{30.f, 646.f, 1220.f, 1.f};
-    // constexpr Vec4 block{280.f, 110.f, 720.f, 60.f};
-    constexpr Vec4 block{75.f, 110.f, 1220.f-45.f*2, 60.f};
     constexpr float text_xoffset{15.f};
 
-    // todo: cleanup
-    const float x = block.x;
-    float y = GetY() + 1.f + 42.f;
-    const float h = block.h;
-    const float w = block.w;
-
-    nvgSave(vg);
-    nvgScissor(vg, GetX(), GetY(), GetW(), GetH());
-
-    for (std::size_t i = m_index_offset; i < m_entries.size(); i++) {
+    m_list->Draw(vg, theme, m_entries.size(), [this, text_col](auto* vg, auto* theme, auto v, auto i) {
+        const auto& [x, y, w, h] = v;
         auto& e = m_entries[i];
 
         auto text_id = ThemeEntryID_TEXT;
         if (m_index == i) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
-            if (i == m_index_offset) {
-                gfx::drawRect(vg, x, y, w, 1.f, text_col);
+            if (i != m_entries.size() - 1) {
+                gfx::drawRect(vg, x, y + h, w, 1.f, theme->GetColour(ThemeEntryID_LINE_SEPARATOR));
             }
-            gfx::drawRect(vg, x, y + h, w, 1.f, text_col);
         }
 
         nvgSave(vg);
-        const auto txt_clip = std::min(GetY() + GetH(), y + h) - y;
-        nvgScissor(vg, x + text_xoffset, y, w-(x+text_xoffset+50), txt_clip);
-            gfx::drawTextArgs(vg, x + text_xoffset, y + (h / 2.f), 20.f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, "%s By %s", e.repo.c_str(), e.owner.c_str());
+        nvgIntersectScissor(vg, x + text_xoffset, y, w-(x+text_xoffset+50), h);
+            gfx::drawTextArgs(vg, x + text_xoffset, y + (h / 2.f), 20.f, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id), "%s By %s", e.repo.c_str(), e.owner.c_str());
         nvgRestore(vg);
 
-        gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f), 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour, "version: %s", e.tag.c_str());
-
-        y += h;
-        if (!InYBounds(y)) {
-            break;
-        }
-    }
-
-    nvgRestore(vg);
+        gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f), 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id), "version: %s", e.tag.c_str());
+    });
 }
 
 void Menu::OnFocusGained() {
@@ -448,10 +425,10 @@ void Menu::OnFocusGained() {
     }
 }
 
-void Menu::SetIndex(std::size_t index) {
+void Menu::SetIndex(s64 index) {
     m_index = index;
     if (!m_index) {
-        m_index_offset = 0;
+        m_list->SetYoff(0);
     }
 
     SetTitleSubHeading(m_entries[m_index].json_path);
@@ -460,8 +437,6 @@ void Menu::SetIndex(std::size_t index) {
 
 void Menu::Scan() {
     m_entries.clear();
-    m_index = 0;
-    m_index_offset = 0;
 
     // load from romfs first
     if (R_SUCCEEDED(romfsInit())) {

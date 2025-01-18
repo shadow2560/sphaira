@@ -124,7 +124,7 @@ auto nro_scan_internal(const fs::FsPath& path, std::vector<NroEntry>& nros, bool
         if (e.type == FsDirEntryType_Dir) {
             // assert(!root && "dir should only be scanned on non-root!");
             fs::FsPath fullpath;
-            std::snprintf(fullpath, sizeof(fullpath), "%s/%s/%s.nro", path, e.name, e.name);
+            std::snprintf(fullpath, sizeof(fullpath), "%s/%s/%s.nro", path.s, e.name, e.name);
 
             // fast path for detecting an nro in a folder
             NroEntry entry;
@@ -133,12 +133,12 @@ auto nro_scan_internal(const fs::FsPath& path, std::vector<NroEntry>& nros, bool
                 nros.emplace_back(entry);
             } else {
                 // slow path...
-                std::snprintf(fullpath, sizeof(fullpath), "%s/%s", path, e.name);
+                std::snprintf(fullpath, sizeof(fullpath), "%s/%s", path.s, e.name);
                 nro_scan_internal(fullpath, nros, hide_sphaira, nested, scan_all_dir, false);
             }
         } else if (e.type == FsDirEntryType_File && std::string_view{e.name}.ends_with(".nro")) {
             fs::FsPath fullpath;
-            std::snprintf(fullpath, sizeof(fullpath), "%s/%s", path, e.name);
+            std::snprintf(fullpath, sizeof(fullpath), "%s/%s", path.s, e.name);
 
             NroEntry entry;
             if (R_SUCCEEDED(nro_parse_internal(fs, fullpath, entry))) {
@@ -148,7 +148,7 @@ auto nro_scan_internal(const fs::FsPath& path, std::vector<NroEntry>& nros, bool
                     R_SUCCEED();
                 }
             } else {
-                log_write("error when trying to parse %s\n", fullpath);
+                log_write("error when trying to parse %s\n", fullpath.s);
             }
         }
     }

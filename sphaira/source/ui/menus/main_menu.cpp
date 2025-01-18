@@ -54,7 +54,7 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
     if (!pbox->ShouldExit()) {
         auto zfile = unzOpen64(zip_out);
         if (!zfile) {
-            log_write("failed to open zip: %s\n", zip_out);
+            log_write("failed to open zip: %s\n", zip_out.s);
             return false;
         }
         ON_SCOPE_EXIT(unzClose(zfile));
@@ -96,24 +96,24 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
             Result rc;
             if (file_path[strlen(file_path) -1] == '/') {
                 if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create folder: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
             } else {
                 if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
                 FsFile f;
                 if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Write, &f))) {
-                    log_write("failed to open file: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
                 ON_SCOPE_EXIT(fsFileClose(&f));
 
                 if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                    log_write("failed to set file size: %s 0x%04X\n", file_path, rc);
+                    log_write("failed to set file size: %s 0x%04X\n", file_path.s, rc);
                     return false;
                 }
 
@@ -127,7 +127,7 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
                     }
 
                     if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                        log_write("failed to write file: %s 0x%04X\n", file_path, rc);
+                        log_write("failed to write file: %s 0x%04X\n", file_path.s, rc);
                         return false;
                     }
 
@@ -149,6 +149,7 @@ MainMenu::MainMenu() {
         curl::Url{GITHUB_URL},
         curl::Path{CACHE_PATH},
         curl::Flags{curl::Flag_Cache},
+        curl::StopToken{this->GetToken()},
         curl::Header{
             { "Accept", "application/vnd.github+json" },
         },
@@ -228,6 +229,7 @@ MainMenu::MainMenu() {
             language_items.push_back("Portuguese"_i18n);
             language_items.push_back("Russian"_i18n);
             language_items.push_back("Swedish"_i18n);
+            language_items.push_back("Vietnamese"_i18n);
 
             options->Add(std::make_shared<SidebarEntryCallback>("Theme"_i18n, [this](){
                 SidebarEntryArray::Items theme_items{};
@@ -331,6 +333,11 @@ MainMenu::MainMenu() {
                 install_items.push_back("System memory"_i18n);
                 install_items.push_back("microSD card"_i18n);
 
+                SidebarEntryArray::Items text_scroll_speed_items;
+                text_scroll_speed_items.push_back("Slow"_i18n);
+                text_scroll_speed_items.push_back("Normal"_i18n);
+                text_scroll_speed_items.push_back("Fast"_i18n);
+
                 options->Add(std::make_shared<SidebarEntryBool>("Logging"_i18n, App::GetLogEnable(), [this](bool& enable){
                     App::SetLogEnable(enable);
                 }, "Enabled"_i18n, "Disabled"_i18n));
@@ -354,6 +361,10 @@ MainMenu::MainMenu() {
                 options->Add(std::make_shared<SidebarEntryBool>("Show install warning"_i18n, App::GetInstallPrompt(), [this](bool& enable){
                     App::SetInstallPrompt(enable);
                 }, "Enabled"_i18n, "Disabled"_i18n));
+
+                options->Add(std::make_shared<SidebarEntryArray>("Text scroll speed"_i18n, text_scroll_speed_items, [this](s64& index_out){
+                    App::SetTextScrollSpeed(index_out);
+                }, (s64)App::GetTextScrollSpeed()));
             }));
         }})
     );
@@ -416,6 +427,7 @@ void MainMenu::AddOnLRPress() {
             OnLRPress(m_filebrowser_menu, Button::L);
         }});
     }
+<<<<<<< HEAD
 
     if (m_current_menu != m_app_store_menu) {
         const auto label = m_current_menu == m_homebrew_menu ? "Store" : "Apps";
@@ -427,13 +439,8 @@ void MainMenu::AddOnLRPress() {
 
 void MainMenu::ShowRestartDialog() {
     App::Push(std::make_shared<OptionBox>(
-        "Restart Sphaira?"_i18n,
-        "Back"_i18n, "Restart"_i18n, 1, [this](auto op_index){
-            if (op_index && *op_index) {
-                App::ExitRestart();
-            }
-        }
-    ));
+        "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
+            App::ExitRestart();
 }
 
 void MainMenu::UpdateWithExePath(std::string message, fs::FsPath sphaira_path, std::function<void()> on_complete) {
@@ -467,6 +474,15 @@ return;
         }
     }
     if (on_complete) on_complete();
+=======
+
+    if (m_current_menu != m_app_store_menu) {
+        const auto label = m_current_menu == m_homebrew_menu ? "Store" : "Apps";
+        SetAction(Button::R, Action{i18n::get(label), [this]{
+            OnLRPress(m_app_store_menu, Button::R);
+        }});
+    }
+>>>>>>> master
 }
 
 } // namespace sphaira::ui::menu::main

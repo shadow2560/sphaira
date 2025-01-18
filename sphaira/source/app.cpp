@@ -1,6 +1,7 @@
 #include "ui/menus/main_menu.hpp"
 #include "ui/error_box.hpp"
 #include "ui/option_box.hpp"
+#include "ui/bubbles.hpp"
 
 #include "app.hpp"
 #include "log.hpp"
@@ -32,6 +33,50 @@ extern "C" {
 
 namespace sphaira {
 namespace {
+
+struct ThemeData {
+    fs::FsPath music_path{"/config/sphaira/themes/default_music.bfstm"};
+    std::string elements[ThemeEntryID_MAX]{};
+};
+
+struct ThemeIdPair {
+    const char* label;
+    ThemeEntryID id;
+    ElementType type{ElementType::None};
+};
+
+struct FrameBufferSize {
+    Vec2 size;
+    Vec2 scale;
+};
+
+constexpr ThemeIdPair THEME_ENTRIES[] = {
+    { "background", ThemeEntryID_BACKGROUND },
+    { "grid", ThemeEntryID_GRID },
+    { "text", ThemeEntryID_TEXT, ElementType::Colour },
+    { "text_info", ThemeEntryID_TEXT_INFO, ElementType::Colour },
+    { "text_selected", ThemeEntryID_TEXT_SELECTED, ElementType::Colour },
+    { "selected_background", ThemeEntryID_SELECTED_BACKGROUND, ElementType::Colour },
+    { "error", ThemeEntryID_ERROR, ElementType::Colour },
+    { "popup", ThemeEntryID_POPUP, ElementType::Colour },
+    { "line", ThemeEntryID_LINE, ElementType::Colour },
+    { "line_separator", ThemeEntryID_LINE_SEPARATOR, ElementType::Colour },
+    { "sidebar", ThemeEntryID_SIDEBAR, ElementType::Colour },
+    { "scrollbar", ThemeEntryID_SCROLLBAR, ElementType::Colour },
+    { "scrollbar_background", ThemeEntryID_SCROLLBAR_BACKGROUND, ElementType::Colour },
+    { "progressbar", ThemeEntryID_PROGRESSBAR, ElementType::Colour },
+    { "progressbar_background", ThemeEntryID_PROGRESSBAR_BACKGROUND, ElementType::Colour },
+    { "highlight_1", ThemeEntryID_HIGHLIGHT_1, ElementType::Colour },
+    { "highlight_2", ThemeEntryID_HIGHLIGHT_2, ElementType::Colour },
+    { "icon_colour", ThemeEntryID_ICON_COLOUR, ElementType::Colour },
+    { "icon_audio", ThemeEntryID_ICON_AUDIO, ElementType::Texture },
+    { "icon_video", ThemeEntryID_ICON_VIDEO, ElementType::Texture },
+    { "icon_image", ThemeEntryID_ICON_IMAGE, ElementType::Texture },
+    { "icon_file", ThemeEntryID_ICON_FILE, ElementType::Texture },
+    { "icon_folder", ThemeEntryID_ICON_FOLDER, ElementType::Texture },
+    { "icon_zip", ThemeEntryID_ICON_ZIP, ElementType::Texture },
+    { "icon_nro", ThemeEntryID_ICON_NRO, ElementType::Texture },
+};
 
 constinit App* g_app{};
 
@@ -183,6 +228,26 @@ void appplet_hook_calback(AppletHookType type, void *param) {
     }
 }
 
+auto GetFrameBufferSize() -> FrameBufferSize {
+    FrameBufferSize fb{};
+
+    switch (appletGetOperationMode()) {
+        case AppletOperationMode_Handheld:
+            fb.size.x = 1280;
+            fb.size.y = 720;
+            break;
+
+        case AppletOperationMode_Console:
+            fb.size.x = 1920;
+            fb.size.y = 1080;
+            break;
+    }
+
+    fb.scale.x = fb.size.x / SCREEN_WIDTH;
+    fb.scale.y = fb.size.y / SCREEN_HEIGHT;
+    return fb;
+}
+
 // this will try to decompress the icon and then re-convert it to jpg
 // in order to strip exif data.
 // this doesn't take long at all, but it's very overkill.
@@ -234,6 +299,62 @@ auto LoadThemeMeta(const fs::FsPath& path, ThemeMeta& meta) -> bool {
     log_write("loaded meta from: %s\n", path.s);
     meta.ini_path = path;
     return true;
+}
+
+void LoadThemeInternal(ThemeMeta meta, ThemeData& theme_data, int inherit_level = 0) {
+    constexpr auto inherit_level_max = 5;
+
+    // all themes will inherit from black theme by default.
+    if (meta.inherit.empty() && !inherit_level) {
+        meta.inherit = "romfs:/themes/base_black_theme.ini";
+    }
+
+    // check if the theme inherits from another, if so, load it.
+    // block inheriting from itself.
+    if (inherit_level < inherit_level_max && !meta.inherit.empty() && strcasecmp(meta.inherit, "none") && meta.inherit != meta.ini_path) {
+        log_write("inherit is not empty: %s\n", meta.inherit.s);
+        if (R_SUCCEEDED(romfsInit())) {
+            ThemeMeta inherit_meta;
+            const auto has_meta = LoadThemeMeta(meta.inherit, inherit_meta);
+            romfsExit();
+
+            // base themes do not have a meta
+            if (!has_meta) {
+                inherit_meta.ini_path = meta.inherit;
+            }
+
+            LoadThemeInternal(inherit_meta, theme_data, inherit_level + 1);
+        }
+    }
+
+    static constexpr auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
+        auto theme_data = static_cast<ThemeData*>(UserData);
+
+        if (!std::strcmp(Section, "theme")) {
+            if (!std::strcmp(Key, "music")) {
+                theme_data->music_path = Value;
+            } else {
+                for (auto& e : THEME_ENTRIES) {
+                    if (!std::strcmp(Key, e.label)) {
+                        theme_data->elements[e.id] = Value;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return 1;
+    };
+
+    if (R_SUCCEEDED(romfsInit())) {
+        ON_SCOPE_EXIT(romfsExit());
+
+        if (!ini_browse(cb, &theme_data, meta.ini_path)) {
+            log_write("failed to open ini: %s\n", meta.ini_path.s);
+        } else {
+            log_write("opened ini: %s\n", meta.ini_path.s);
+        }
+    }
 }
 
 void haze_callback(const HazeCallbackData *data) {
@@ -325,31 +446,21 @@ void App::Loop() {
                     }
                 } else if constexpr(std::is_same_v<T, curl::DownloadEventData>) {
                     log_write("[DownloadEventData] got event\n");
-                    arg.callback(arg.result);
+                    if (arg.callback && !arg.stoken.stop_requested()) {
+                        arg.callback(arg.result);
+                    }
                 } else {
                     static_assert(false, "non-exhaustive visitor!");
                 }
             }, event.value());
         }
 
-        u32 w{},h{};
-        switch (appletGetOperationMode()) {
-            case AppletOperationMode_Handheld:
-                w = 1280;
-                h = 720;
-                break;
-
-            case AppletOperationMode_Console:
-                w = 1920;
-                h = 1080;
-                break;
-        }
-
-        if (w != s_width || h != s_height) {
-            s_width = w;
-            s_height = h;
-            m_scale.x = (float)s_width / SCREEN_WIDTH;
-            m_scale.y = (float)s_height / SCREEN_HEIGHT;
+        const auto fb = GetFrameBufferSize();
+        if (fb.size.x != s_width || fb.size.y != s_height) {
+            s_width = fb.size.x;
+            s_height = fb.size.y;
+            m_scale = fb.scale;
+            this->destroyFramebufferResources();
             this->createFramebufferResources();
             renderer->UpdateViewSize(s_width, s_height);
         }
@@ -493,6 +604,10 @@ auto App::GetLanguage() -> long {
     return g_app->m_language.Get();
 }
 
+auto App::GetTextScrollSpeed() -> long {
+    return g_app->m_text_scroll_speed.Get();
+}
+
 void App::SetNxlinkEnable(bool enable) {
     if (App::GetNxlinkEnable() != enable) {
         g_app->m_nxlink_enabled.Set(enable);
@@ -520,13 +635,11 @@ void App::SetReplaceHbmenuEnable(bool enable) {
         g_app->m_replace_hbmenu.Set(enable);
         if (!enable) {
             // check we have already replaced hbmenu with sphaira
-            NacpStruct hbmenu_nacp;
-            if (R_FAILED(nro_get_nacp("/hbmenu.nro", hbmenu_nacp))) {
-                return;
-            }
-
-            if (std::strcmp(hbmenu_nacp.lang[0].name, "sphaira")) {
-                return;
+            NacpStruct hbmenu_nacp{};
+            if (R_SUCCEEDED(nro_get_nacp("/hbmenu.nro", hbmenu_nacp))) {
+                if (std::strcmp(hbmenu_nacp.lang[0].name, "sphaira")) {
+                    return;
+                }
             }
 
             // ask user if they want to restore hbmenu
@@ -568,7 +681,7 @@ void App::SetReplaceHbmenuEnable(bool enable) {
                     if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
                         if (std::strcmp(sphaira_nacp.display_version, hbmenu_nacp.display_version) < 0) {
                             if (R_FAILED(rc = fs.copy_entire_file(sphaira_path, "/hbmenu.nro"))) {
-                                log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path, rc, R_MODULE(rc), R_DESCRIPTION(rc));
+                                log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path.s, rc, R_MODULE(rc), R_DESCRIPTION(rc));
                             } else {
                                 log_write("success with updating hbmenu!\n");
                             }
@@ -679,6 +792,10 @@ void App::SetLanguage(long index) {
     }
 }
 
+void App::SetTextScrollSpeed(long index) {
+    g_app->m_text_scroll_speed.Set(index);
+}
+
 auto App::Install(OwoConfig& config) -> Result {
     R_TRY(romfsInit());
     ON_SCOPE_EXIT(romfsExit());
@@ -754,6 +871,51 @@ void App::Poll() {
     HidTouchScreenState state{};
     hidGetTouchScreenStates(&state, 1);
     m_touch_info.is_clicked = false;
+
+// todo: replace old touch code with gestures from below
+#if 0
+    static HidGestureState prev_gestures[17]{};
+    HidGestureState gestures[17]{};
+    const auto gesture_count = hidGetGestureStates(gestures, std::size(gestures));
+    for (int i = (int)gesture_count - 1; i >= 0; i--) {
+        bool found = false;
+        for (int j = 0; j < gesture_count; j++) {
+            if (gestures[i].type == prev_gestures[j].type && gestures[i].sampling_number == prev_gestures[j].sampling_number) {
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            continue;
+        }
+
+        auto gesture = gestures[i];
+        if (gesture_count && gesture.type == HidGestureType_Touch) {
+            log_write("[TOUCH] got gesture attr: %u direction: %u sampling_number: %zu context_number: %zu\n", gesture.attributes, gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Swipe) {
+            log_write("[SWIPE] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Tap) {
+            log_write("[TAP] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Press) {
+            log_write("[PRESS] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Cancel) {
+            log_write("[CANCEL] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Complete) {
+            log_write("[COMPLETE] got gesture direction: %u sampling_number: %zu context_number: %zu\n", gesture.direction, gesture.sampling_number, gesture.context_number);
+        }
+        else if (gesture_count && gesture.type == HidGestureType_Pan) {
+            log_write("[PAN] got gesture direction: %u sampling_number: %zu context_number: %zu x: %d y: %d dx: %d dy: %d vx: %.2f vy: %.2f count: %d\n", gesture.direction, gesture.sampling_number, gesture.context_number, gesture.x, gesture.y, gesture.delta_x, gesture.delta_y, gesture.velocity_x, gesture.velocity_y, gesture.point_count);
+        }
+    }
+
+    memcpy(prev_gestures, gestures, sizeof(gestures));
+#endif
 
     if (state.count == 1 && !m_touch_info.is_touching) {
         m_touch_info.initial = m_touch_info.cur = state.touches[0];
@@ -847,6 +1009,7 @@ void App::Draw() {
     }
 
     m_notif_manager.Draw(vg, &m_theme);
+    ui::bubble::Draw(vg, &m_theme);
 
     nvgResetTransform(vg);
     nvgEndFrame(this->vg);
@@ -868,7 +1031,13 @@ void DrawElement(const Vec4& v, ThemeEntryID id) {
         case ElementType::None: {
         } break;
         case ElementType::Texture: {
-            const auto paint = nvgImagePattern(g_app->vg, v.x, v.y, v.w, v.h, 0, e.texture, 1.f);
+            auto paint = nvgImagePattern(g_app->vg, v.x, v.y, v.w, v.h, 0, e.texture, 1.f);
+            // override the icon colours if set
+            if (id > ThemeEntryID_ICON_COLOUR && id < ThemeEntryID_MAX) {
+                if (g_app->m_theme.elements[ThemeEntryID_ICON_COLOUR].type != ElementType::None) {
+                    paint.innerColor = g_app->m_theme.GetColour(ThemeEntryID_ICON_COLOUR);
+                }
+            }
             ui::gfx::drawRect(g_app->vg, v, paint);
         } break;
         case ElementType::Colour: {
@@ -893,41 +1062,49 @@ auto App::LoadElementColour(std::string_view value) -> ElementEntry {
 
     if (value.starts_with("0x")) {
         value = value.substr(2);
-    } else if (value.starts_with('#')) {
-        value = value.substr(1);
+    } else {
+        return {};
     }
 
-    const u32 c = std::strtol(value.data(), nullptr, 16);
-    if (c) {
-        entry.colour = nvgRGBA((c >> 24) & 0xFF, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
-        entry.type = ElementType::Colour;
+    char* end;
+    u32 c = std::strtoul(value.data(), &end, 16);
+    if (!c && value.data() == end) {
+        return {};
     }
 
+    // force alpha bit if not already set.
+    if (value.length() <= 6) {
+        c <<= 8;
+        c |= 0xFF;
+    }
+
+    entry.colour = nvgRGBA((c >> 24) & 0xFF, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
+    entry.type = ElementType::Colour;
     return entry;
 }
 
-auto App::LoadElement(std::string_view value) -> ElementEntry {
+auto App::LoadElement(std::string_view value, ElementType type) -> ElementEntry {
     if (value.size() <= 1) {
         return {};
     }
 
-    if (auto e = LoadElementImage(value); e.type != ElementType::None) {
-        return e;
+    if (type == ElementType::None || type == ElementType::Colour) {
+        // most assets are colours, so prioritise this first
+        if (auto e = LoadElementColour(value); e.type != ElementType::None) {
+            return e;
+        }
     }
 
-    if (auto e = LoadElementColour(value); e.type != ElementType::None) {
-        return e;
+    if (type == ElementType::None || type == ElementType::Texture) {
+        if (auto e = LoadElementImage(value); e.type != ElementType::None) {
+            return e;
+        }
     }
 
     return {};
 }
 
 void App::CloseTheme() {
-    m_theme.meta.name.clear();
-    m_theme.meta.author.clear();
-    m_theme.meta.version.clear();
-    m_theme.meta.ini_path.clear();
-
     if (m_sound_ids[SoundEffect_Music]) {
         plsrPlayerFree(m_sound_ids[SoundEffect_Music]);
         m_sound_ids[SoundEffect_Music] = nullptr;
@@ -938,88 +1115,34 @@ void App::CloseTheme() {
         if (e.type == ElementType::Texture) {
             nvgDeleteImage(vg, e.texture);
         }
-        e.type = ElementType::None;
     }
+
+    m_theme = {};
 }
 
 void App::LoadTheme(const ThemeMeta& meta) {
     // reset theme
     CloseTheme();
 
-    // check if the theme inherits from another, if so, load it.
-    // block inheriting from itself.
-    if (!meta.inherit.empty() && meta.inherit != meta.ini_path) {
-        log_write("inherit is not empty: %s\n", meta.inherit.s);
-        if (R_SUCCEEDED(romfsInit())) {
-            ThemeMeta inherit_meta;
-            const auto has_meta = LoadThemeMeta(meta.inherit, inherit_meta);
-            romfsExit();
-
-            // base themes do not have a meta
-            if (!has_meta) {
-                inherit_meta.ini_path = meta.inherit;
-            }
-
-            LoadTheme(inherit_meta);
-        }
-    }
-
+    ThemeData theme_data{};
+    LoadThemeInternal(meta, theme_data);
     m_theme.meta = meta;
-
-    const auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
-        auto app = static_cast<App*>(UserData);
-        auto& theme = app->m_theme;
-        std::string_view section{Section};
-        std::string_view key{Key};
-        std::string_view value{Value};
-
-        if (section == "theme") {
-            if (key == "background") {
-                theme.elements[ThemeEntryID_BACKGROUND] = app->LoadElement(value);
-            } else if (key == "music") {
-                if (R_SUCCEEDED(plsrBFSTMOpen(Value, &theme.music))) {
-                    if (R_SUCCEEDED(plsrPlayerLoadStream(&theme.music, &app->m_sound_ids[SoundEffect_Music]))) {
-                        app->PlaySoundEffect(SoundEffect_Music);
-                    }
-                }
-            } else if (key == "grid") {
-                theme.elements[ThemeEntryID_GRID] = app->LoadElement(value);
-            } else if (key == "selected") {
-                theme.elements[ThemeEntryID_SELECTED] = app->LoadElement(value);
-            } else if (key == "selected_overlay") {
-                theme.elements[ThemeEntryID_SELECTED_OVERLAY] = app->LoadElement(value);
-            } else if (key == "text") {
-                theme.elements[ThemeEntryID_TEXT] = app->LoadElementColour(value);
-            } else if (key == "text_selected") {
-                theme.elements[ThemeEntryID_TEXT_SELECTED] = app->LoadElementColour(value);
-            } else if (key == "icon_audio") {
-                theme.elements[ThemeEntryID_ICON_AUDIO] = app->LoadElement(value);
-            } else if (key == "icon_video") {
-                theme.elements[ThemeEntryID_ICON_VIDEO] = app->LoadElement(value);
-            } else if (key == "icon_image") {
-                theme.elements[ThemeEntryID_ICON_IMAGE] = app->LoadElement(value);
-            } else if (key == "icon_file") {
-                theme.elements[ThemeEntryID_ICON_FILE] = app->LoadElement(value);
-            } else if (key == "icon_folder") {
-                theme.elements[ThemeEntryID_ICON_FOLDER] = app->LoadElement(value);
-            } else if (key == "icon_zip") {
-                theme.elements[ThemeEntryID_ICON_ZIP] = app->LoadElement(value);
-            } else if (key == "icon_game") {
-                theme.elements[ThemeEntryID_ICON_GAME] = app->LoadElement(value);
-            } else if (key == "icon_nro") {
-                theme.elements[ThemeEntryID_ICON_NRO] = app->LoadElement(value);
-            }
-        }
-
-        return 1;
-    };
 
     if (R_SUCCEEDED(romfsInit())) {
         ON_SCOPE_EXIT(romfsExit());
-        if (!ini_browse(cb, this, meta.ini_path)) {
-            log_write("failed to open ini: %s\n", meta.ini_path.s);
-        } else {
-            log_write("opened ini: %s\n", meta.ini_path);
+
+        // load all assets / colours.
+        for (auto& e : THEME_ENTRIES) {
+            m_theme.elements[e.id] = LoadElement(theme_data.elements[e.id], e.type);
+        }
+
+        // load music
+        if (!theme_data.music_path.empty()) {
+            if (R_SUCCEEDED(plsrBFSTMOpen(theme_data.music_path, &m_theme.music))) {
+                if (R_SUCCEEDED(plsrPlayerLoadStream(&m_theme.music, &m_sound_ids[SoundEffect_Music]))) {
+                    PlaySoundEffect(SoundEffect_Music);
+                }
+            }
         }
     }
 }
@@ -1106,6 +1229,12 @@ App::App(const char* argv0) {
 
     curl::Init();
 
+    // get current size of the framebuffer
+    const auto fb = GetFrameBufferSize();
+    s_width = fb.size.x;
+    s_height = fb.size.y;
+    m_scale = fb.scale;
+
     // Create the deko3d device
     this->device = dk::DeviceMaker{}
         .setCbDebug(deko3d_error_cb)
@@ -1129,7 +1258,7 @@ App::App(const char* argv0) {
     // Create the framebuffer resources
     this->createFramebufferResources();
 
-    this->renderer.emplace(SCREEN_WIDTH, SCREEN_HEIGHT, this->device, this->queue, *this->pool_images, *this->pool_code, *this->pool_data);
+    this->renderer.emplace(s_width, s_height, this->device, this->queue, *this->pool_images, *this->pool_code, *this->pool_data);
     this->vg = nvgCreateDk(&*this->renderer, NVG_ANTIALIAS | NVG_STENCIL_STROKES);
 
     i18n::init(GetLanguage());
@@ -1161,22 +1290,31 @@ App::App(const char* argv0) {
         }
     }
 
+    // disable audio in applet mode with a suspended application due to audren fatal.
+    // see: https://github.com/ITotalJustice/sphaira/issues/92
+    if (IsAppletWithSuspendedApp()) {
+        App::Notify("Audio disabled due to suspended game"_i18n);
+    } else {
+        plsrPlayerInit();
+    }
+
     if (R_SUCCEEDED(romfsMountDataStorageFromProgram(0x0100000000001000, "qlaunch"))) {
         ON_SCOPE_EXIT(romfsUnmount("qlaunch"));
-        plsrPlayerInit();
-        plsrBFSAROpen("qlaunch:/sound/qlaunch.bfsar", &m_qlaunch_bfsar);
-        ON_SCOPE_EXIT(plsrBFSARClose(&m_qlaunch_bfsar));
+        PLSR_BFSAR qlaunch_bfsar;
+        if (R_SUCCEEDED(plsrBFSAROpen("qlaunch:/sound/qlaunch.bfsar", &qlaunch_bfsar))) {
+            ON_SCOPE_EXIT(plsrBFSARClose(&qlaunch_bfsar));
 
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconFocus", &m_sound_ids[SoundEffect_Focus]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconScroll", &m_sound_ids[SoundEffect_Scroll]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconLimit", &m_sound_ids[SoundEffect_Limit]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeStartupMenu_game", &m_sound_ids[SoundEffect_Startup]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconAdd", &m_sound_ids[SoundEffect_Install]);
-        plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeInsertError", &m_sound_ids[SoundEffect_Error]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconFocus", &m_sound_ids[SoundEffect_Focus]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconScroll", &m_sound_ids[SoundEffect_Scroll]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconLimit", &m_sound_ids[SoundEffect_Limit]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeStartupMenu_game", &m_sound_ids[SoundEffect_Startup]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconAdd", &m_sound_ids[SoundEffect_Install]);
+            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeInsertError", &m_sound_ids[SoundEffect_Error]);
 
-        plsrPlayerSetVolume(m_sound_ids[SoundEffect_Limit], 2.0f);
-        plsrPlayerSetVolume(m_sound_ids[SoundEffect_Focus], 0.5f);
-        PlaySoundEffect(SoundEffect_Startup);
+            plsrPlayerSetVolume(m_sound_ids[SoundEffect_Limit], 2.0f);
+            plsrPlayerSetVolume(m_sound_ids[SoundEffect_Focus], 0.5f);
+            PlaySoundEffect(SoundEffect_Startup);
+        }
     } else {
         log_write("failed to mount romfs 0x0100000000001000\n");
     }
@@ -1215,6 +1353,7 @@ App::App(const char* argv0) {
     appletHook(&m_appletHookCookie, appplet_hook_calback, this);
 
     hidInitializeTouchScreen();
+    hidInitializeGesture();
     padConfigureInput(8, HidNpadStyleSet_NpadStandard);
     // padInitializeDefault(&m_pad);
     padInitializeAny(&m_pad);
@@ -1233,7 +1372,7 @@ App::App(const char* argv0) {
             log_write("launching from sphaira created forwarder\n");
             m_is_launched_via_sphaira_forwader = true;
         } else {
-            log_write("launching from unknown forwader: %.*s size: %zu\n", loader_info_size, envGetLoaderInfo(), loader_info_size);
+            log_write("launching from unknown forwader: %.*s size: %zu\n", (int)loader_info_size, envGetLoaderInfo(), loader_info_size);
         }
     } else {
         log_write("not launching from forwarder\n");
@@ -1261,6 +1400,9 @@ App::App(const char* argv0) {
         }
     }
 
+    // soon (tm)
+    // ui::bubble::Init();
+
     App::Push(std::make_shared<ui::menu::main::MainMenu>());
     log_write("finished app constructor\n");
 }
@@ -1284,6 +1426,8 @@ App::~App() {
     i18n::exit();
     curl::Exit();
 
+    ui::bubble::Exit();
+
     // this has to be called before any cleanup to ensure the lifetime of
     // nvg is still active as some widgets may need to free images.
     m_widgets.clear();
@@ -1302,11 +1446,8 @@ App::~App() {
         }
     }
 
-	// Close the archive
-	plsrBFSARClose(&m_qlaunch_bfsar);
-
 	// De-initialize our player
-	plsrPlayerExit();
+    plsrPlayerExit();
 
     this->destroyFramebufferResources();
     nvgDeleteDk(this->vg);
@@ -1328,7 +1469,7 @@ App::~App() {
         }
 
         if (R_FAILED(rc = fs.copy_entire_file("/hbmenu.nro", GetExePath()))) {
-            log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", GetExePath(), rc, R_MODULE(rc), R_DESCRIPTION(rc));
+            log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", GetExePath().s, rc, R_MODULE(rc), R_DESCRIPTION(rc));
         } else {
             log_write("success with copying over root file!\n");
         }
@@ -1353,7 +1494,7 @@ App::~App() {
             if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
                 if (std::strcmp(hbmenu_nacp.display_version, sphaira_nacp.display_version) < 0) {
                     if (R_FAILED(rc = fs.copy_entire_file(GetExePath(), sphaira_path))) {
-                        log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path, rc, R_MODULE(rc), R_DESCRIPTION(rc));
+                        log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path.s, rc, R_MODULE(rc), R_DESCRIPTION(rc));
                     } else {
                         log_write("success with updating hbmenu!\n");
                     }

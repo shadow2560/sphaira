@@ -128,7 +128,7 @@ auto GetRomDatabaseFromPath(std::string_view path) -> int {
         if ((
             p.folder.length() == db_name.length() && !strncasecmp(p.folder.data(), db_name.data(), p.folder.length())) ||
             (p.database.length() == db_name.length() && !strncasecmp(p.database.data(), db_name.data(), p.database.length()))) {
-            log_write("found it :) %.*s\n", p.database.length(), p.database.data());
+            log_write("found it :) %.*s\n", (int)p.database.length(), p.database.data());
             return i;
         }
     }
@@ -144,7 +144,7 @@ auto GetRomDatabaseFromPath(std::string_view path) -> int {
             if ((
                 p.folder.length() == db_name2.length() && !strcasecmp(p.folder.data(), db_name2.data())) ||
                 (p.database.length() == db_name2.length() && !strcasecmp(p.database.data(), db_name2.data()))) {
-                log_write("found it :) %.*s\n", p.database.length(), p.database.data());
+                log_write("found it :) %.*s\n", (int)p.database.length(), p.database.data());
                 return i;
             }
         }
@@ -246,22 +246,22 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
             }
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
-            if (ScrollHelperDown(m_index, m_index_offset, 1, 1, 8, m_entries_current.size())) {
+            if (m_list->ScrollDown(m_index, 1, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (ScrollHelperUp(m_index, m_index_offset, 1, 1, 8, m_entries_current.size())) {
+            if (m_list->ScrollUp(m_index, 1, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::DPAD_RIGHT, Action{[this](){
-            if (ScrollHelperDown(m_index, m_index_offset, 8, 1, 8, m_entries_current.size())) {
+            if (m_list->ScrollDown(m_index, 8, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::DPAD_LEFT, Action{[this](){
-            if (ScrollHelperUp(m_index, m_index_offset, 8, 1, 8, m_entries_current.size())) {
+            if (m_list->ScrollUp(m_index, 8, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
@@ -352,15 +352,15 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 sort_items.push_back("Alphabetical"_i18n);
 
                 SidebarEntryArray::Items order_items;
-                order_items.push_back("Decending"_i18n);
+                order_items.push_back("Descending"_i18n);
                 order_items.push_back("Ascending"_i18n);
 
-                options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
                     m_sort.Set(index_out);
                     SortAndFindLastFile();
                 }, m_sort.Get()));
 
-                options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
                     m_order.Set(index_out);
                     SortAndFindLastFile();
                 }, m_order.Get()));
@@ -452,9 +452,8 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                         if (R_SUCCEEDED(rc)) {
                             Scan(m_path);
                         } else {
-                            char msg[FS_MAX_PATH];
-                            std::snprintf(msg, sizeof(msg), "Failed to rename file: %s", entry.name);
-                            App::Push(std::make_shared<ErrorBox>(rc, msg));
+                            const auto msg = std::string("Failed to rename file: ") + entry.name;
+                            App::Push(std::make_shared<ErrorBox>(rc, msg.c_str()));
                         }
                     }
                 }));
@@ -478,10 +477,10 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
                         m_fs->CreateDirectoryRecursivelyWithPath(full_path);
                         if (R_SUCCEEDED(m_fs->CreateFile(full_path, 0, 0))) {
-                            log_write("created file: %s\n", full_path);
+                            log_write("created file: %s\n", full_path.s);
                             Scan(m_path);
                         } else {
-                            log_write("failed to create file: %s\n", full_path);
+                            log_write("failed to create file: %s\n", full_path.s);
                         }
                     }
                 }));
@@ -499,10 +498,10 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                         }
 
                         if (R_SUCCEEDED(m_fs->CreateDirectoryRecursively(full_path))) {
-                            log_write("created dir: %s\n", full_path);
+                            log_write("created dir: %s\n", full_path.s);
                             Scan(m_path);
                         } else {
-                            log_write("failed to create dir: %s\n", full_path);
+                            log_write("failed to create dir: %s\n", full_path.s);
                         }
                     }
                 }));
@@ -542,7 +541,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 mount_items.push_back("Image System memory"_i18n);
                 mount_items.push_back("Image microSD card"_i18n);
 
-                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this](s64& index_out){
                     App::PopToMenu();
                     m_mount.Set(index_out);
                     SetFs("/", index_out);
@@ -550,6 +549,9 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
             }));
         }})
     );
+
+    const Vec4 v{75, GetY() + 1.f + 42.f, 1220.f-45.f*2, 60};
+    m_list = std::make_unique<List>(1, 8, m_pos, v);
 
     fs::FsPath buf;
     ini_gets("paths", "last_path", "/", buf, sizeof(buf), App::CONFIG_PATH);
@@ -562,47 +564,30 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
+    m_list->OnUpdate(controller, touch, m_entries_current.size(), [this](auto i) {
+        if (m_index == i) {
+            FireAction(Button::A);
+        } else {
+            App::PlaySoundEffect(SoundEffect_Focus);
+            SetIndex(i);
+        }
+    });
 }
 
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
-    const auto& text_col = theme->elements[ThemeEntryID_TEXT].colour;
+    const auto& text_col = theme->GetColour(ThemeEntryID_TEXT);
 
     if (m_entries_current.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, text_col, "Empty..."_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty..."_i18n.c_str());
         return;
     }
 
-    const u64 SCROLL = m_index_offset;
-    constexpr u64 max_entry_display = 8;
-    const u64 entry_total = m_entries_current.size();
-
-    // only draw scrollbar if needed
-    if (entry_total > max_entry_display) {
-        const auto scrollbar_size = 500.f;
-        const auto sb_h = 1.f / (float)entry_total * scrollbar_size;
-        const auto sb_y = SCROLL;
-        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, gfx::getColour(gfx::Colour::BLACK));
-        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * (max_entry_display - 1)) - 4, gfx::getColour(gfx::Colour::SILVER));
-    }
-
-    // constexpr Vec4 line_top{30.f, 86.f, 1220.f, 1.f};
-    // constexpr Vec4 line_bottom{30.f, 646.f, 1220.f, 1.f};
-    // constexpr Vec4 block{280.f, 110.f, 720.f, 60.f};
-    constexpr Vec4 block{75.f, 110.f, 1220.f-45.f*2, 60.f};
     constexpr float text_xoffset{15.f};
 
-    // todo: cleanup
-    const float x = block.x;
-    float y = GetY() + 1.f + 42.f;
-    const float h = block.h;
-    const float w = block.w;
-
-    nvgSave(vg);
-    nvgScissor(vg, GetX(), GetY(), GetW(), GetH());
-
-    for (std::size_t i = m_index_offset; i < m_entries_current.size(); i++) {
+    m_list->Draw(vg, theme, m_entries_current.size(), [this, text_col](auto* vg, auto* theme, auto v, auto i) {
+        const auto& [x, y, w, h] = v;
         auto& e = GetEntry(i);
 
         if (e.IsDir()) {
@@ -619,19 +604,17 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         if (e.IsSelected()) {
-            // gfx::drawText(vg, x - 60.f, y + (h / 2.f) - (48.f / 2), 48.f, "\uE14B", nullptr, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, gfx::Colour::CYAN);
-            gfx::drawText(vg, x, y + (h / 2.f) - (24.f / 2), 24.f, "\uE14B", nullptr, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, gfx::Colour::CYAN);
+            gfx::drawText(vg, Vec2{x - 10.f, y + (h / 2.f) - (24.f / 2)}, 24.f, "\uE14B", nullptr, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT_SELECTED));
         }
 
         auto text_id = ThemeEntryID_TEXT;
         if (m_index == i) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
+            gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
-            if (i == m_index_offset) {
-                gfx::drawRect(vg, x, y, w, 1.f, text_col);
+            if (i != m_entries_current.size() - 1) {
+                gfx::drawRect(vg, Vec4{x, y + h, w, 1.f}, theme->GetColour(ThemeEntryID_LINE_SEPARATOR));
             }
-            gfx::drawRect(vg, x, y + h, w, 1.f, text_col);
         }
 
         if (e.IsDir()) {
@@ -655,14 +638,13 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         nvgSave(vg);
-        const auto txt_clip = std::min(GetY() + GetH(), y + h) - y;
-        nvgScissor(vg, x + text_xoffset+65, y, w-(x+text_xoffset+65+50), txt_clip);
-            gfx::drawText(vg, x + text_xoffset+65, y + (h / 2.f), 20.f, e.name, NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->elements[text_id].colour);
+        nvgIntersectScissor(vg, x + text_xoffset+65, y, w-(x+text_xoffset+65+50), h);
+            gfx::drawText(vg, x + text_xoffset+65, y + (h / 2.f), 20.f, e.name, NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id));
         nvgRestore(vg);
 
         if (e.IsDir()) {
-            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->elements[text_id].colour, "%zd files"_i18n.c_str(), e.file_count);
-            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->elements[text_id].colour, "%zd dirs"_i18n.c_str(), e.dir_count);
+            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%zd files"_i18n.c_str(), e.file_count);
+            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(text_id), "%zd dirs"_i18n.c_str(), e.dir_count);
         } else {
             if (!e.time_stamp.is_valid) {
                 const auto path = GetNewPath(e);
@@ -671,21 +653,14 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             const auto t = (time_t)(e.time_stamp.modified);
             struct tm tm{};
             localtime_r(&t, &tm);
-            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->elements[text_id].colour, "%02u/%02u/%u", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
+            gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(text_id), "%02u/%02u/%u", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
             if ((double)e.file_size / 1024.0 / 1024.0 <= 0.009) {
-                gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->elements[text_id].colour, "%.2f KiB", (double)e.file_size / 1024.0);
+                gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%.2f KiB", (double)e.file_size / 1024.0);
             } else {
-                gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->elements[text_id].colour, "%.2f MiB", (double)e.file_size / 1024.0 / 1024.0);
+                gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%.2f MiB", (double)e.file_size / 1024.0 / 1024.0);
             }
         }
-
-        y += h;
-        if (!InYBounds(y)) {
-            break;
-        }
-    }
-
-    nvgRestore(vg);
+    });
 }
 
 void Menu::OnFocusGained() {
@@ -705,10 +680,10 @@ void Menu::OnFocusGained() {
     }
 }
 
-void Menu::SetIndex(std::size_t index) {
+void Menu::SetIndex(s64 index) {
     m_index = index;
     if (!m_index) {
-        m_index_offset = 0;
+        m_list->SetYoff();
     }
 
     if (!m_entries_current.empty() && !GetEntry().checked_internal_extension && GetEntry().extension == "zip") {
@@ -801,18 +776,16 @@ void Menu::InstallForwarder() {
 }
 
 auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
-    log_write("new scan path: %s\n", new_path);
+    log_write("new scan path: %s\n", new_path.s);
     if (!is_walk_up && !m_path.empty() && !m_entries_current.empty()) {
-        const LastFile f{GetEntry().name, m_index, m_index_offset, m_entries_current.size()};
+        const LastFile f(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
         m_previous_highlighted_file.emplace_back(f);
     }
-
-    log_write("\nold index: %zu start: %zu\n", m_index, m_index_offset);
 
     m_path = new_path;
     m_entries.clear();
     m_index = 0;
-    m_index_offset = 0;
+    m_list->SetYoff(0);
     SetTitleSubHeading(m_path);
 
     if (m_selected_type == SelectedType::None) {
@@ -894,7 +867,7 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
                 if (assoc_db == PATHS[db_idx].folder || assoc_db == PATHS[db_idx].database) {
                     for (const auto& assoc_ext : assoc.ext) {
                         if (assoc_ext == extension) {
-                            log_write("found ext: %s assoc_ext: %s assoc.ext: %s\n", assoc.path, assoc_ext.c_str(), extension.c_str());
+                            log_write("found ext: %s assoc_ext: %s assoc.ext: %s\n", assoc.path.s, assoc_ext.c_str(), extension.c_str());
                             out_entries.emplace_back(assoc);
                         }
                     }
@@ -912,7 +885,7 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
             if (assoc.database.empty()) {
                 for (const auto& assoc_ext : assoc.ext) {
                     if (assoc_ext == extension) {
-                        log_write("found ext: %s\n", assoc.path);
+                        log_write("found ext: %s\n", assoc.path.s);
                         out_entries.emplace_back(assoc);
                     }
                 }
@@ -1060,14 +1033,14 @@ void Menu::Sort() {
             case SortType_Size: {
                 if (lhs.file_size == rhs.file_size) {
                     return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) < 0;
-                } else if (order == OrderType_Decending) {
+                } else if (order == OrderType_Descending) {
                     return lhs.file_size > rhs.file_size;
                 } else {
                     return lhs.file_size < rhs.file_size;
                 }
             } break;
             case SortType_Alphabetical: {
-                if (order == OrderType_Decending) {
+                if (order == OrderType_Descending) {
                     return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) < 0;
                 } else {
                     return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) > 0;
@@ -1090,7 +1063,7 @@ void Menu::Sort() {
 void Menu::SortAndFindLastFile() {
     std::optional<LastFile> last_file;
     if (!m_path.empty() && !m_entries_current.empty()) {
-        last_file = LastFile{GetEntry().name, m_index, m_index_offset, m_entries_current.size()};
+        last_file = LastFile(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
     }
 
     Sort();
@@ -1111,21 +1084,20 @@ void Menu::SetIndexFromLastFile(const LastFile& last_file) {
         }
     }
     if (index >= 0) {
-        if ((u64)index == last_file.index && m_entries_current.size() == last_file.entries_count) {
-            m_index_offset = last_file.offset;
+        if (index == last_file.index && m_entries_current.size() == last_file.entries_count) {
+            m_list->SetYoff(last_file.offset);
             log_write("index is the same as last time\n");
         } else {
             // file position changed!
             log_write("file position changed\n");
             // guesstimate where the position is
             if (index >= 8) {
-                m_index_offset = (index - 8) + 1;
+                m_list->SetYoff(((index - 8) + 1) * m_list->GetMaxY());
             } else {
-                m_index_offset = 0;
+                m_list->SetYoff(0);
             }
         }
         SetIndex(index);
-        log_write("\nnew index: %zu start: %zu mod: %zu\n", m_index, m_index_offset, index % 8);
     }
 }
 
@@ -1174,7 +1146,7 @@ void Menu::OnDeleteCallback() {
                 if (p.IsDir()) {
                     pbox->NewTransfer("Scanning "_i18n + full_path);
                     if (R_FAILED(get_collections(full_path, p.name, collections))) {
-                        log_write("failed to get dir collection: %s\n", full_path);
+                        log_write("failed to get dir collection: %s\n", full_path.s);
                         return false;
                     }
                 }
@@ -1192,10 +1164,10 @@ void Menu::OnDeleteCallback() {
                         const auto full_path = GetNewPath(c.path, p.name);
                         pbox->NewTransfer("Deleting "_i18n + full_path);
                         if (p.type == FsDirEntryType_Dir) {
-                            log_write("deleting dir: %s\n", full_path);
+                            log_write("deleting dir: %s\n", full_path.s);
                             m_fs->DeleteDirectory(full_path);
                         } else {
-                            log_write("deleting file: %s\n", full_path);
+                            log_write("deleting file: %s\n", full_path.s);
                             m_fs->DeleteFile(full_path);
                         }
                     }
@@ -1220,10 +1192,10 @@ void Menu::OnDeleteCallback() {
                 pbox->NewTransfer("Deleting "_i18n + full_path);
 
                 if (p.IsDir()) {
-                    log_write("deleting dir: %s\n", full_path);
+                    log_write("deleting dir: %s\n", full_path.s);
                     m_fs->DeleteDirectory(full_path);
                 } else {
-                    log_write("deleting file: %s\n", full_path);
+                    log_write("deleting file: %s\n", full_path.s);
                     m_fs->DeleteFile(full_path);
                 }
             }
@@ -1238,8 +1210,6 @@ void Menu::OnDeleteCallback() {
 }
 
 void Menu::OnPasteCallback() {
-    bool use_progress_box{true};
-
     // check if we only have 1 file / folder and is cut (rename)
     if (m_selected_files.size() == 1 && m_selected_type == SelectedType::Cut) {
         const auto& entry = m_selected_files[0];
@@ -1289,7 +1259,7 @@ void Menu::OnPasteCallback() {
                     if (p.IsDir()) {
                         pbox->NewTransfer("Scanning "_i18n + full_path);
                         if (R_FAILED(get_collections(full_path, p.name, collections))) {
-                            log_write("failed to get dir collection: %s\n", full_path);
+                            log_write("failed to get dir collection: %s\n", full_path.s);
                             return false;
                         }
                     }
@@ -1326,7 +1296,7 @@ void Menu::OnPasteCallback() {
                         const auto src_path = GetNewPath(c.path, p.name);
                         const auto dst_path = GetNewPath(base_dst_path, p.name);
 
-                        log_write("creating: %s to %s\n", src_path, dst_path);
+                        log_write("creating: %s to %s\n", src_path.s, dst_path.s);
                         pbox->NewTransfer("Creating "_i18n + dst_path);
                         m_fs->CreateDirectory(dst_path);
                     }
@@ -1341,7 +1311,7 @@ void Menu::OnPasteCallback() {
                         const auto dst_path = GetNewPath(base_dst_path, p.name);
 
                         pbox->NewTransfer("Copying "_i18n + src_path);
-                        log_write("copying: %s to %s\n", src_path, dst_path);
+                        log_write("copying: %s to %s\n", src_path.s, dst_path.s);
                         R_TRY_RESULT(pbox->CopyFile(src_path, dst_path), false);
                     }
                 }
@@ -1441,7 +1411,7 @@ auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name
     // get a list of all the files / dirs
     FsDirCollection collection;
     R_TRY(get_collection(path, parent_name, collection, true, true, false));
-    log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path, parent_name, collection.files.size(), collection.dirs.size());
+    log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path.s, parent_name.s, collection.files.size(), collection.dirs.size());
     out.emplace_back(collection);
 
     // for (size_t i = 0; i < collection.dirs.size(); i++) {
@@ -1449,7 +1419,7 @@ auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name
         // use heap as to not explode the stack
         const auto new_path = std::make_unique<fs::FsPath>(Menu::GetNewPath(path, p.name));
         const auto new_parent_name = std::make_unique<fs::FsPath>(Menu::GetNewPath(parent_name, p.name));
-        log_write("trying to get nested collection: %s parent_name: %s\n", *new_path, *new_parent_name);
+        log_write("trying to get nested collection: %s parent_name: %s\n", new_path->s, new_parent_name->s);
         R_TRY(get_collections(*new_path, *new_parent_name, out));
     }
 

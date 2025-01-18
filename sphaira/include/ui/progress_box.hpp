@@ -22,7 +22,7 @@ struct ProgressBox final : Widget {
     auto Draw(NVGcontext* vg, Theme* theme) -> void override;
 
     auto NewTransfer(const std::string& transfer) -> ProgressBox&;
-    auto UpdateTransfer(u64 offset, u64 size) -> ProgressBox&;
+    auto UpdateTransfer(s64 offset, s64 size) -> ProgressBox&;
     void RequestExit();
     auto ShouldExit() -> bool;
 
@@ -42,9 +42,9 @@ struct ProgressBox final : Widget {
 
 public:
     struct ThreadData {
-        ProgressBox* pbox;
-        ProgressBoxCallback callback;
-        bool result;
+        ProgressBox* pbox{};
+        ProgressBoxCallback callback{};
+        bool result{};
     };
 
 private:
@@ -55,9 +55,8 @@ private:
     ProgressBoxDoneCallback m_done{};
     std::string m_title{};
     std::string m_transfer{};
-    u64 m_size{};
-    u64 m_offset{};
-    bool m_exit_requested{};
+    s64 m_size{};
+    s64 m_offset{};
 };
 
 // this is a helper function that does many things.

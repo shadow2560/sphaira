@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/widget.hpp"
+#include "ui/list.hpp"
 #include <memory>
 
 namespace sphaira::ui {
@@ -9,11 +10,9 @@ class SidebarEntryBase : public Widget {
 public:
     SidebarEntryBase(std::string&& title);
     virtual auto Draw(NVGcontext* vg, Theme* theme) -> void override;
-    virtual auto OnLayoutChange() -> void override {}
 
 protected:
     std::string m_title;
-    Vec2 m_offset{};
 };
 
 class SidebarEntryBool final : public SidebarEntryBase {
@@ -24,9 +23,9 @@ public:
     SidebarEntryBool(std::string title, bool option, Callback cb, std::string true_str = "On", std::string false_str = "Off");
     SidebarEntryBool(std::string title, bool& option, std::string true_str = "On", std::string false_str = "Off");
 
+private:
     auto Draw(NVGcontext* vg, Theme* theme) -> void override;
 
-private:
     bool m_option;
     Callback m_callback;
     std::string m_true_str;
@@ -50,20 +49,24 @@ class SidebarEntryArray final : public SidebarEntryBase {
 public:
     using Items = std::vector<std::string>;
     using ListCallback = std::function<void()>;
-    using Callback = std::function<void(std::size_t& index)>;
+    using Callback = std::function<void(s64& index)>;
 
 public:
-    explicit SidebarEntryArray(std::string title, Items items, Callback cb, std::size_t index = 0);
+    explicit SidebarEntryArray(std::string title, Items items, Callback cb, s64 index = 0);
     SidebarEntryArray(std::string title, Items items, Callback cb, std::string index);
     SidebarEntryArray(std::string title, Items items, std::string& index);
 
     auto Draw(NVGcontext* vg, Theme* theme) -> void override;
+    auto OnFocusGained() noexcept -> void override;
+    auto OnFocusLost() noexcept -> void override;
 
 private:
     Items m_items;
     ListCallback m_list_callback;
     Callback m_callback;
-    std::size_t m_index;
+    s64 m_index;
+    s64 m_tick{};
+    float m_text_yoff{};
 };
 
 template <typename T>
@@ -101,32 +104,29 @@ public:
     Sidebar(std::string title, std::string sub, Side side);
 
     auto Update(Controller* controller, TouchInfo* touch) -> void override;
-    auto OnLayoutChange() -> void override {}
     auto Draw(NVGcontext* vg, Theme* theme) -> void override;
     auto OnFocusGained() noexcept -> void override;
     auto OnFocusLost() noexcept -> void override;
 
     void Add(std::shared_ptr<SidebarEntryBase> entry);
-    void AddSpacer();
-    void AddHeader(std::string name);
 
 private:
-    void SetIndex(std::size_t index);
+    void SetIndex(s64 index);
+    void SetupButtons();
 
 private:
     std::string m_title;
     std::string m_sub;
     Side m_side;
     Items m_items;
-    std::size_t m_index{};
-    std::size_t m_index_offset{};
+    s64 m_index{};
+
+    std::unique_ptr<List> m_list;
 
     Vec4 m_top_bar{};
     Vec4 m_bottom_bar{};
     Vec2 m_title_pos{};
     Vec4 m_base_pos{};
-
-    float m_selected_y{};
 
     static constexpr float m_title_size{28.f};
     // static constexpr Vec2 box_size{380.f, 70.f};

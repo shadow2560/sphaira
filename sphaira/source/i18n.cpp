@@ -77,6 +77,7 @@ bool init(long index) {
         case 10: setLanguage = SetLanguage_PT; break; // "Portuguese"
         case 11: setLanguage = SetLanguage_RU; break; // "Russian"
         case 12: lang_name = "se"; break; // "Swedish"
+        case 13: lang_name = "vi"; break; // "Vietnamese"
     }
 
     switch (setLanguage) {
@@ -91,6 +92,7 @@ bool init(long index) {
         case SetLanguage_PT: lang_name = "pt"; break;
         case SetLanguage_RU: lang_name = "ru"; break;
         case SetLanguage_ZHTW: lang_name = "zh"; break;
+        default: break;
     }
 
     const fs::FsPath sdmc_path = "/config/sphaira/i18n/" + lang_name + ".json";

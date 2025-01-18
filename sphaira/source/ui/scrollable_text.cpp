@@ -9,9 +9,9 @@ namespace sphaira::ui {
 ScrollableText::ScrollableText(const std::string& text, float x, float y, float y_clip, float w, float font_size)
 : m_font_size{font_size}
 , m_y_off_base{y}
-, m_y_off{y}
 , m_clip_y{y_clip}
 , m_end_w{w}
+, m_y_off{y}
 {
     SetActions(
         std::make_pair(Button::LS_DOWN, Action{[this](){
@@ -94,17 +94,15 @@ void ScrollableText::Draw(NVGcontext* vg, Theme* theme) {
         const auto sb_h = 1.f / max_index * scrollbar_size;
         const auto in_clip = m_clip_y / m_step - 1;
         const auto sb_y = m_index;
-        // gfx::drawRect(vg, banner_vec.x+banner_vec.w-20, m_y_off_base, 10, scrollbar_size, theme->elements[ThemeEntryID_GRID].colour);
-        // gfx::drawRect(vg, banner_vec.x+banner_vec.w-20+2, m_y_off_base + sb_h * sb_y, 10-4, sb_h + (sb_h * in_clip) - 4, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
-        gfx::drawRect(vg, banner_vec.w, m_y_off_base, 10, scrollbar_size, theme->elements[ThemeEntryID_GRID].colour);
-        gfx::drawRect(vg, banner_vec.w+2, m_y_off_base + sb_h * sb_y, 10-4, sb_h + (sb_h * in_clip) - 4, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
+        gfx::drawRect(vg, banner_vec.w, m_y_off_base, 10, scrollbar_size, theme->GetColour(ThemeEntryID_SCROLLBAR_BACKGROUND));
+        gfx::drawRect(vg, banner_vec.w+2, m_y_off_base + sb_h * sb_y, 10-4, sb_h + (sb_h * in_clip) - 4, theme->GetColour(ThemeEntryID_SCROLLBAR));
     }
 
     nvgSave(vg);
-    nvgScissor(vg, 0, m_y_off_base - m_font_size, 1280, m_clip_y + m_font_size); // clip
+    nvgIntersectScissor(vg, 0, m_y_off_base - m_font_size, 1280, m_clip_y + m_font_size); // clip
 
     nvgTextLineHeight(App::GetVg(), 1.7);
-    gfx::drawTextBox(vg, banner_vec.x + 40, m_y_off, m_font_size, m_bounds[2] - m_bounds[0], theme->elements[ThemeEntryID_TEXT].colour, m_text.c_str());
+    gfx::drawTextBox(vg, banner_vec.x + 40, m_y_off, m_font_size, m_bounds[2] - m_bounds[0], theme->GetColour(ThemeEntryID_TEXT), m_text.c_str());
     nvgRestore(vg);
 }
 

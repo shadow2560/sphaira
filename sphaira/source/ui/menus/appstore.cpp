@@ -18,7 +18,7 @@
 #include <string>
 #include <cstring>
 #include <yyjson.h>
-#include <nanovg/stb_image.h>
+#include <stb_image.h>
 #include <minizip/unzip.h>
 #include <mbedtls/md5.h>
 #include <ranges>
@@ -65,31 +65,9 @@ auto BuildIconUrl(const Entry& e) -> std::string {
     return out;
 }
 
-#if 0
-auto BuildInfoUrl(const Entry& e) -> std::string {
-    char out[0x100];
-    std::snprintf(out, sizeof(out), "%s/packages/%s/info.json", URL_BASE, e.name.c_str());
-    return out;
-}
-#endif
-
 auto BuildBannerUrl(const Entry& e) -> std::string {
     char out[0x100];
     std::snprintf(out, sizeof(out), "%s/packages/%s/screen.png", URL_BASE, e.name.c_str());
-    return out;
-}
-
-#if 0
-auto BuildScreensUrl(const Entry& e, u8 num) -> std::string {
-    char out[0x100];
-    std::snprintf(out, sizeof(out), "%s/packages/%s/screen%u.png", URL_BASE, e.name.c_str(), num+1);
-    return out;
-}
-#endif
-
-auto BuildMainifestUrl(const Entry& e) -> std::string {
-    char out[0x100];
-    std::snprintf(out, sizeof(out), "%s/packages/%s/manifest.install", URL_BASE, e.name.c_str());
     return out;
 }
 
@@ -99,26 +77,15 @@ auto BuildZipUrl(const Entry& e) -> std::string {
     return out;
 }
 
-auto BuildFeedbackUrl(std::span<u32> ids) -> std::string {
-    std::string out{"https://wiiubru.com/feedback/messages?ids="};
-    for (u32 i = 0; i < ids.size(); i++) {
-        if (i != 0) {
-            out.push_back(',');
-        }
-        out += std::to_string(ids[i]);
-    }
-    return out;
-}
-
 auto BuildIconCachePath(const Entry& e) -> fs::FsPath {
     fs::FsPath out;
-    std::snprintf(out, sizeof(out), "%s/icons/%s.png", CACHE_PATH, e.name.c_str());
+    std::snprintf(out, sizeof(out), "%s/icons/%s.png", CACHE_PATH.s, e.name.c_str());
     return out;
 }
 
 auto BuildBannerCachePath(const Entry& e) -> fs::FsPath {
     fs::FsPath out;
-    std::snprintf(out, sizeof(out), "%s/banners/%s.png", CACHE_PATH, e.name.c_str());
+    std::snprintf(out, sizeof(out), "%s/banners/%s.png", CACHE_PATH.s, e.name.c_str());
     return out;
 }
 
@@ -274,7 +241,7 @@ void DrawIcon(NVGcontext* vg, const LazyImage& l, const LazyImage& d, float x, f
     if (iw > w || ih > h) {
         crop = true;
         nvgSave(vg);
-        nvgScissor(vg, x, y, w, h);
+        nvgIntersectScissor(vg, x, y, w, h);
     }
     if (rounded_image) {
         gfx::drawImageRounded(vg, ix, iy, iw, ih, i.image);
@@ -302,7 +269,6 @@ auto AppDlToStr(u32 value) -> std::string {
 
 void ReadFromInfoJson(Entry& e) {
     const auto info_path = BuildInfoCachePath(e);
-    const auto manifest_path = BuildManifestCachePath(e);
 
     yyjson_read_err err;
     auto doc = yyjson_read_file(info_path, YYJSON_READ_NOFLAG, nullptr, &err);
@@ -340,9 +306,9 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
             const auto safe_buf = fs::AppendPath("/", e.path);
             // this will handle read only files, ie, hbmenu.nro
             if (R_FAILED(fs.DeleteFile(safe_buf))) {
-                log_write("failed to delete file: %s\n", safe_buf);
+                log_write("failed to delete file: %s\n", safe_buf.s);
             } else {
-                log_write("deleted file: %s\n", safe_buf);
+                log_write("deleted file: %s\n", safe_buf.s);
                 // todo: delete empty directories!
                 // fs::delete_directory(safe_buf);
             }
@@ -353,9 +319,9 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
     const auto dir = BuildPackageCachePath(entry);
     pbox->NewTransfer("Removing "_i18n + dir);
     if (R_FAILED(fs.DeleteDirectoryRecursively(dir))) {
-        log_write("failed to delete folder: %s\n", dir);
+        log_write("failed to delete folder: %s\n", dir.s);
     } else {
-        log_write("deleted: %s\n", dir);
+        log_write("deleted: %s\n", dir.s);
     }
     return true;
 }
@@ -458,7 +424,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
     if (!pbox->ShouldExit()) {
         auto zfile = unzOpen64(zip_out);
         if (!zfile) {
-            log_write("failed to open zip: %s\n", zip_out);
+            log_write("failed to open zip: %s\n", zip_out.s);
             return false;
         }
         ON_SCOPE_EXIT(unzClose(zfile));
@@ -501,7 +467,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
             pbox->NewTransfer(inzip);
 
             if (UNZ_END_OF_LIST_OF_FILE == unzLocateFile(zfile, inzip, 0)) {
-                log_write("failed to find %s\n", inzip);
+                log_write("failed to find %s\n", inzip.s);
                 return false;
             }
 
@@ -526,19 +492,19 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
 
             Result rc;
             if (R_FAILED(rc = fs.CreateFile(output, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                log_write("failed to create file: %s 0x%04X\n", output, rc);
+                log_write("failed to create file: %s 0x%04X\n", output.s, rc);
                 return false;
             }
 
             FsFile f;
             if (R_FAILED(rc = fs.OpenFile(output, FsOpenMode_Write, &f))) {
-                log_write("failed to open file: %s 0x%04X\n", output, rc);
+                log_write("failed to open file: %s 0x%04X\n", output.s, rc);
                 return false;
             }
             ON_SCOPE_EXIT(fsFileClose(&f));
 
             if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                log_write("failed to set file size: %s 0x%04X\n", output, rc);
+                log_write("failed to set file size: %s 0x%04X\n", output.s, rc);
                 return false;
             }
 
@@ -551,12 +517,12 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
 
                 const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                 if (bytes_read <= 0) {
-                    log_write("failed to read zip file: %s\n", inzip);
+                    log_write("failed to read zip file: %s\n", inzip.s);
                     return false;
                 }
 
                 if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                    log_write("failed to write file: %s 0x%04X\n", output, rc);
+                    log_write("failed to write file: %s 0x%04X\n", output.s, rc);
                     return false;
                 }
 
@@ -615,9 +581,9 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
                 const auto safe_buf = fs::AppendPath("/", old_entry.path);
                 // std::strcat(safe_buf, old_entry.path);
                 if (R_FAILED(fs.DeleteFile(safe_buf))) {
-                    log_write("failed to delete: %s\n", safe_buf);
+                    log_write("failed to delete: %s\n", safe_buf.s);
                 } else {
-                    log_write("deleted file: %s\n", safe_buf);
+                    log_write("deleted file: %s\n", safe_buf.s);
                 }
             }
         }
@@ -663,6 +629,7 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
                         curl::Url{URL_POST_FEEDBACK},
                         curl::Path{file},
                         curl::Fields{post},
+                        curl::StopToken{this->GetToken()},
                         curl::OnComplete{[](auto& result){
                             if (result.success) {
                                 log_write("got feedback!\n");
@@ -697,6 +664,7 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
         curl::Url{url},
         curl::Path{path},
         curl::Flags{curl::Flag_Cache},
+        curl::StopToken{this->GetToken()},
         curl::OnComplete{[this, path](auto& result){
             if (result.success) {
                 if (result.code == 304) {
@@ -711,6 +679,11 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
     SetSubHeading(m_entry.binary);
     SetSubHeading(m_entry.description);
     UpdateOptions();
+
+    // todo: see Draw()
+    // const Vec4 v{75, 110, 370, 155};
+    // const Vec2 pad{10, 10};
+    // m_list = std::make_unique<List>(3, 3, v, pad);
 }
 
 EntryMenu::~EntryMenu() {
@@ -728,11 +701,13 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
     constexpr Vec4 line_vec(30, 86, 1220, 646);
     constexpr Vec4 banner_vec(70, line_vec.y + 20, 848.f, 208.f);
     constexpr Vec4 icon_vec(968, line_vec.y + 30, 256, 150);
+    constexpr Vec4 grid_vec(icon_vec.x - 50, line_vec.y + 1, line_vec.w, line_vec.h - line_vec.y - 1);
 
     // nvgSave(vg);
     // nvgScissor(vg, line_vec.x, line_vec.y, line_vec.w - line_vec.x, line_vec.h - line_vec.y); // clip
     // ON_SCOPE_EXIT(nvgRestore(vg));
 
+    gfx::drawRect(vg, grid_vec, theme->GetColour(ThemeEntryID_GRID));
     DrawIcon(vg, m_banner, m_entry.image.image ? m_entry.image : m_default_icon, banner_vec, false);
     DrawIcon(vg, m_entry.image, m_default_icon, icon_vec);
 
@@ -741,23 +716,20 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
     const float text_inc_y = 32;
     const float font_size = 20;
 
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "version: %s"_i18n.c_str(), m_entry.version.c_str());
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "version: %s"_i18n.c_str(), m_entry.version.c_str());
     text_start_y += text_inc_y;
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "updated: %s"_i18n.c_str(), m_entry.updated.c_str());
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "updated: %s"_i18n.c_str(), m_entry.updated.c_str());
     text_start_y += text_inc_y;
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "category: %s"_i18n.c_str(), m_entry.category.c_str());
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "category: %s"_i18n.c_str(), m_entry.category.c_str());
     text_start_y += text_inc_y;
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "extracted: %.2f MiB"_i18n.c_str(), (double)m_entry.extracted / 1024.0);
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "extracted: %.2f MiB"_i18n.c_str(), (double)m_entry.extracted / 1024.0);
     text_start_y += text_inc_y;
-    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, "app_dls: %s"_i18n.c_str(), AppDlToStr(m_entry.app_dls).c_str());
+    gfx::drawTextArgs(vg, text_start_x, text_start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "app_dls: %s"_i18n.c_str(), AppDlToStr(m_entry.app_dls).c_str());
     text_start_y += text_inc_y;
 
-    // for (const auto& option : m_options) {
-    const auto& text_col = theme->elements[ThemeEntryID_TEXT].colour;
-
+    // todo: rewrite this mess and use list
     constexpr float mm = 0;//20;
     constexpr Vec4 block{968.f + mm, 110.f, 256.f - mm*2, 60.f};
-    constexpr float text_xoffset{15.f};
     const float x = block.x;
     float y = 1.f + text_start_y + (text_inc_y * 3) ;
     const float h = block.h;
@@ -768,15 +740,10 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
         auto text_id = ThemeEntryID_TEXT;
         if (m_index == i) {
             text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
-        } else {
-            // if (i == m_index_offset) {
-                // gfx::drawRect(vg, x, y, w, 1.f, text_col);
-            // }
-            // gfx::drawRect(vg, x, y + h, w, 1.f, text_col);
+            gfx::drawRectOutline(vg, theme, 4.f, Vec4{x, y, w, h});
         }
 
-        gfx::drawTextArgs(vg, x + w / 2, y + h / 2, 22, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER, theme->elements[ThemeEntryID_TEXT].colour, option.display_text.c_str());
+        gfx::drawTextArgs(vg, x + w / 2, y + h / 2, 22, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER, theme->GetColour(text_id), option.display_text.c_str());
         y -= block.h + 18;
     }
 
@@ -858,7 +825,7 @@ void EntryMenu::UpdateOptions() {
     SetIndex(0);
 }
 
-void EntryMenu::SetIndex(std::size_t index) {
+void EntryMenu::SetIndex(s64 index) {
     m_index = index;
     const auto option = m_options[m_index];
     if (option.confirm_text.empty()) {
@@ -886,8 +853,6 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
     fs.CreateDirectoryRecursively("/switch/sphaira/cache/appstore/banners");
     fs.CreateDirectoryRecursively("/switch/sphaira/cache/appstore/screens");
 
-    // m_span = m_entries;
-
     this->SetActions(
         std::make_pair(Button::RIGHT, Action{[this](){
             if (m_entries_current.empty()) {
@@ -912,22 +877,22 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
             }
         }}),
         std::make_pair(Button::DOWN, Action{[this](){
-            if (ScrollHelperDown(m_index, m_start, 3, 3, 9, m_entries_current.size())) {
+            if (m_list->ScrollDown(m_index, 3, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::UP, Action{[this](){
-            if (ScrollHelperUp(m_index, m_start, 3, 3, 9, m_entries_current.size())) {
+            if (m_list->ScrollUp(m_index, 3, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::R2, Action{[this](){
-            if (ScrollHelperDown(m_index, m_start, 9, 3, 9, m_entries_current.size())) {
+            if (m_list->ScrollDown(m_index, 9, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
         std::make_pair(Button::L2, Action{[this](){
-            if (ScrollHelperUp(m_index, m_start, 9, 3, 9, m_entries_current.size())) {
+            if (m_list->ScrollUp(m_index, 9, m_entries_current.size())) {
                 SetIndex(m_index);
             }
         }}),
@@ -959,20 +924,20 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
             sort_items.push_back("Alphabetical"_i18n);
 
             SidebarEntryArray::Items order_items;
-            order_items.push_back("Decending"_i18n);
+            order_items.push_back("Descending"_i18n);
             order_items.push_back("Ascending"_i18n);
 
-            options->Add(std::make_shared<SidebarEntryArray>("Filter"_i18n, filter_items, [this, filter_items](std::size_t& index_out){
+            options->Add(std::make_shared<SidebarEntryArray>("Filter"_i18n, filter_items, [this, filter_items](s64& index_out){
                 SetFilter((Filter)index_out);
-            }, (std::size_t)m_filter));
+            }, (s64)m_filter));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](std::size_t& index_out){
+            options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
                 SetSort((SortType)index_out);
-            }, (std::size_t)m_sort));
+            }, (s64)m_sort));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](std::size_t& index_out){
+            options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
                 SetOrder((OrderType)index_out);
-            }, (std::size_t)m_order));
+            }, (s64)m_order));
 
             options->Add(std::make_shared<SidebarEntryCallback>("Search"_i18n, [this](){
                 std::string out;
@@ -989,6 +954,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
         curl::Url{URL_JSON},
         curl::Path{REPO_PATH},
         curl::Flags{curl::Flag_Cache},
+        curl::StopToken{this->GetToken()},
         curl::OnComplete{[this](auto& result){
             if (result.success) {
                 m_repo_download_state = ImageDownloadState::Done;
@@ -1005,6 +971,9 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"AppStore"_i18n}
     m_sort = (SortType)ini_getl(INI_SECTION, "sort", m_sort, App::CONFIG_PATH);
     m_order = (OrderType)ini_getl(INI_SECTION, "order", m_order, App::CONFIG_PATH);
 
+    const Vec4 v{75, 110, 370, 155};
+    const Vec2 pad{10, 10};
+    m_list = std::make_unique<List>(3, 9, m_pos, v, pad);
     Sort();
 }
 
@@ -1014,138 +983,132 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
+    m_list->OnUpdate(controller, touch, m_entries_current.size(), [this](auto i) {
+        if (m_index == i) {
+            FireAction(Button::A);
+        } else {
+            App::PlaySoundEffect(SoundEffect_Focus);
+            SetIndex(i);
+        }
+    });
 }
 
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
     if (m_entries.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Loading..."_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Loading..."_i18n.c_str());
         return;
     }
 
     if (m_entries_current.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::YELLOW, "Empty!"_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty!"_i18n.c_str());
         return;
-    }
-
-    const u64 SCROLL = m_start;
-    const u64 max_entry_display = 9;
-    const u64 nro_total = m_entries_current.size();
-    const u64 cursor_pos = m_index;
-
-    // only draw scrollbar if needed
-    if (nro_total > max_entry_display) {
-        const auto scrollbar_size = 500.f;
-        const auto sb_h = 3.f / (float)nro_total * scrollbar_size;
-        const auto sb_y = SCROLL / 3.f;
-        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, theme->elements[ThemeEntryID_GRID].colour);
-        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * 2) - 4, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
     }
 
     // max images per frame, in order to not hit io / gpu too hard.
     const int image_load_max = 2;
     int image_load_count = 0;
 
-    for (u64 i = 0, pos = SCROLL, y = 110, w = 370, h = 155; pos < nro_total && i < max_entry_display; y += h + 10) {
-        for (u64 j = 0, x = 75; j < 3 && pos < nro_total && i < max_entry_display; j++, i++, pos++, x += w + 10) {
-            const auto index = m_entries_current[pos];
-            auto& e = m_entries[index];
-            auto& image = e.image;
+    m_list->Draw(vg, theme, m_entries_current.size(), [this, &image_load_count](auto* vg, auto* theme, auto v, auto pos) {
+        const auto& [x, y, w, h] = v;
+        const auto index = m_entries_current[pos];
+        auto& e = m_entries[index];
+        auto& image = e.image;
 
-            // try and load cached image.
-            if (image_load_count < image_load_max && !image.image && !image.tried_cache) {
-                image.tried_cache = true;
-                image.cached = EntryLoadImageFile(BuildIconCachePath(e), image);
-                if (image.cached) {
-                    image_load_count++;
-                }
-            }
-
-            // lazy load image
-            if (!image.image || image.cached) {
-                switch (image.state) {
-                    case ImageDownloadState::None: {
-                        const auto path = BuildIconCachePath(e);
-                        const auto url = BuildIconUrl(e);
-                        image.state = ImageDownloadState::Progress;
-                        curl::Api().ToFileAsync(
-                            curl::Url{url},
-                            curl::Path{path},
-                            curl::Flags{curl::Flag_Cache},
-                            curl::OnComplete{[this, &image](auto& result) {
-                                if (result.success) {
-                                   image.state = ImageDownloadState::Done;
-                                    // data hasn't changed
-                                    if (result.code == 304) {
-                                        image.cached = false;
-                                    }
-                                } else {
-                                    image.state = ImageDownloadState::Failed;
-                                    log_write("failed to download image\n");
-                                }
-                            }
-                        });
-                    }   break;
-                    case ImageDownloadState::Progress: {
-
-                    }   break;
-                    case ImageDownloadState::Done: {
-                        if (image_load_count < image_load_max) {
-                            image.cached = false;
-                            if (!EntryLoadImageFile(BuildIconCachePath(e), e.image)) {
-                                image.state = ImageDownloadState::Failed;
-                            } else {
-                                image_load_count++;
-                            }
-                        }
-                    }   break;
-                    case ImageDownloadState::Failed: {
-                    }   break;
-                }
-            }
-
-            auto text_id = ThemeEntryID_TEXT;
-            if (pos == cursor_pos) {
-                text_id = ThemeEntryID_TEXT_SELECTED;
-                gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, x, y, w, h, theme->elements[ThemeEntryID_SELECTED].colour);
-            } else {
-                DrawElement(x, y, w, h, ThemeEntryID_GRID);
-            }
-
-            constexpr double image_scale = 256.0 / 115.0;
-            // const float image_size = 256 / image_scale;
-            // const float image_size_h = 150 / image_scale;
-            DrawIcon(vg, e.image, m_default_image, x + 20, y + 20, 115, 115, true, image_scale);
-            // gfx::drawImage(vg, x + 20, y + 20, image_size, image_size_h, image.image ? image.image : m_default_image);
-
-            nvgSave(vg);
-            nvgScissor(vg, x, y, w - 30.f, h); // clip
-            {
-                const float font_size = 18;
-                gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.title.c_str());
-                gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.author.c_str());
-                gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->elements[text_id].colour, e.version.c_str());
-            }
-            nvgRestore(vg);
-
-            float i_size = 22;
-            switch (e.status) {
-                case EntryStatus::Get:
-                    gfx::drawImageRounded(vg, x + w - 30.f, y + 110, i_size, i_size, m_get.image);
-                    break;
-                case EntryStatus::Installed:
-                    gfx::drawImageRounded(vg, x + w - 30.f, y + 110, i_size, i_size, m_installed.image);
-                    break;
-                case EntryStatus::Local:
-                    gfx::drawImageRounded(vg, x + w - 30.f, y + 110, i_size, i_size, m_local.image);
-                    break;
-                case EntryStatus::Update:
-                    gfx::drawImageRounded(vg, x + w - 30.f, y + 110, i_size, i_size, m_update.image);
-                    break;
+        // try and load cached image.
+        if (image_load_count < image_load_max && !image.image && !image.tried_cache) {
+            image.tried_cache = true;
+            image.cached = EntryLoadImageFile(BuildIconCachePath(e), image);
+            if (image.cached) {
+                image_load_count++;
             }
         }
-    }
+
+        // lazy load image
+        if (!image.image || image.cached) {
+            switch (image.state) {
+                case ImageDownloadState::None: {
+                    const auto path = BuildIconCachePath(e);
+                    const auto url = BuildIconUrl(e);
+                    image.state = ImageDownloadState::Progress;
+                    curl::Api().ToFileAsync(
+                        curl::Url{url},
+                        curl::Path{path},
+                        curl::Flags{curl::Flag_Cache},
+                        curl::StopToken{this->GetToken()},
+                        curl::OnComplete{[this, &image](auto& result) {
+                            if (result.success) {
+                                image.state = ImageDownloadState::Done;
+                                // data hasn't changed
+                                if (result.code == 304) {
+                                    image.cached = false;
+                                }
+                            } else {
+                                image.state = ImageDownloadState::Failed;
+                                log_write("failed to download image\n");
+                            }
+                        }
+                    });
+                }   break;
+                case ImageDownloadState::Progress: {
+
+                }   break;
+                case ImageDownloadState::Done: {
+                    if (image_load_count < image_load_max) {
+                        image.cached = false;
+                        if (!EntryLoadImageFile(BuildIconCachePath(e), e.image)) {
+                            image.state = ImageDownloadState::Failed;
+                        } else {
+                            image_load_count++;
+                        }
+                    }
+                }   break;
+                case ImageDownloadState::Failed: {
+                }   break;
+            }
+        }
+
+        auto text_id = ThemeEntryID_TEXT;
+        if (pos == m_index) {
+            text_id = ThemeEntryID_TEXT_SELECTED;
+            gfx::drawRectOutline(vg, theme, 4.f, v);
+        } else {
+            DrawElement(x, y, w, h, ThemeEntryID_GRID);
+        }
+
+        constexpr double image_scale = 256.0 / 115.0;
+        // const float image_size = 256 / image_scale;
+        // const float image_size_h = 150 / image_scale;
+        DrawIcon(vg, e.image, m_default_image, x + 20, y + 20, 115, 115, true, image_scale);
+        // gfx::drawImage(vg, x + 20, y + 20, image_size, image_size_h, image.image ? image.image : m_default_image);
+
+        nvgSave(vg);
+        nvgIntersectScissor(vg, v.x, v.y, w - 30.f, h); // clip
+        {
+            const float font_size = 18;
+            gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.title.c_str());
+            gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.author.c_str());
+            gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.version.c_str());
+        }
+        nvgRestore(vg);
+
+        float i_size = 22;
+        switch (e.status) {
+            case EntryStatus::Get:
+                gfx::drawImageRounded(vg, x + w - 30.f, y + 110, i_size, i_size, m_get.image);
+                break;
+            case EntryStatus::Installed:
+                gfx::drawImageRounded(vg, x + w - 30.f, y + 110, i_size, i_size, m_installed.image);
+                break;
+            case EntryStatus::Local:
+                gfx::drawImageRounded(vg, x + w - 30.f, y + 110, i_size, i_size, m_local.image);
+                break;
+            case EntryStatus::Update:
+                gfx::drawImageRounded(vg, x + w - 30.f, y + 110, i_size, i_size, m_update.image);
+                break;
+        }
+    });
 }
 
 void Menu::OnFocusGained() {
@@ -1174,21 +1137,16 @@ void Menu::OnFocusGained() {
         if (m_dirty) {
             m_dirty = false;
             const auto& current_entry = m_entries[m_entries_current[m_index]];
-            // m_start = 0;
-            // m_index = 0;
-            log_write("\nold index: %zu start: %zu\n", m_index, m_start);
-            // old index: 19 start: 12
             Sort();
 
             for (u32 i = 0; i < m_entries_current.size(); i++) {
                 if (current_entry.name == m_entries[m_entries_current[i]].name) {
                     SetIndex(i);
                     if (i >= 9) {
-                        m_start = (i - 9) / 3 * 3 + 3;
+                        m_list->SetYoff((((i - 9) + 3) / 3) * m_list->GetMaxY());
                     } else {
-                        m_start = 0;
+                        m_list->SetYoff(0);
                     }
-                    log_write("\nnew index: %zu start: %zu\n", m_index, m_start);
                     break;
                 }
             }
@@ -1196,10 +1154,10 @@ void Menu::OnFocusGained() {
     }
 }
 
-void Menu::SetIndex(std::size_t index) {
+void Menu::SetIndex(s64 index) {
     m_index = index;
     if (!m_index) {
-        m_start = 0;
+        m_list->SetYoff(0);
     }
 
     this->SetSubHeading(std::to_string(m_index + 1) + " / " + std::to_string(m_entries_current.size()));
@@ -1302,7 +1260,7 @@ void Menu::Sort() {
                 case SortType_Updated: {
                     if (lhs.updated_num == rhs.updated_num) {
                         return strcasecmp(lhs.name.c_str(), rhs.name.c_str()) < 0;
-                    } else if (m_order == OrderType_Decending) {
+                    } else if (m_order == OrderType_Descending) {
                         return lhs.updated_num > rhs.updated_num;
                     } else {
                         return lhs.updated_num < rhs.updated_num;
@@ -1311,7 +1269,7 @@ void Menu::Sort() {
                 case SortType_Downloads: {
                     if (lhs.app_dls == rhs.app_dls) {
                         return strcasecmp(lhs.name.c_str(), rhs.name.c_str()) < 0;
-                    } else if (m_order == OrderType_Decending) {
+                    } else if (m_order == OrderType_Descending) {
                         return lhs.app_dls > rhs.app_dls;
                     } else {
                         return lhs.app_dls < rhs.app_dls;
@@ -1320,14 +1278,14 @@ void Menu::Sort() {
                 case SortType_Size: {
                     if (lhs.extracted == rhs.extracted) {
                         return strcasecmp(lhs.name.c_str(), rhs.name.c_str()) < 0;
-                    } else if (m_order == OrderType_Decending) {
+                    } else if (m_order == OrderType_Descending) {
                         return lhs.extracted > rhs.extracted;
                     } else {
                         return lhs.extracted < rhs.extracted;
                     }
                 } break;
                 case SortType_Alphabetical: {
-                    if (m_order == OrderType_Decending) {
+                    if (m_order == OrderType_Descending) {
                         return strcasecmp(lhs.name.c_str(), rhs.name.c_str()) < 0;
                     } else {
                         return strcasecmp(lhs.name.c_str(), rhs.name.c_str()) > 0;
@@ -1394,9 +1352,10 @@ void Menu::SetSearch(const std::string& term) {
         SetFilter(m_filter);
         SetIndex(m_entry_search_jump_back);
         if (m_entry_search_jump_back >= 9) {
-            m_start = (m_entry_search_jump_back - 9) / 3 * 3 + 3;
+            m_list->SetYoff(0);
+            m_list->SetYoff((((m_entry_search_jump_back - 9) + 3) / 3) * m_list->GetMaxY());
         } else {
-            m_start = 0;
+            m_list->SetYoff(0);
         }
     }});
 
@@ -1427,11 +1386,12 @@ void Menu::SetAuthor() {
         } else {
             SetFilter(m_filter);
         }
+
         SetIndex(m_entry_author_jump_back);
         if (m_entry_author_jump_back >= 9) {
-            m_start = (m_entry_author_jump_back - 9) / 3 * 3 + 3;
+            m_list->SetYoff((((m_entry_author_jump_back - 9) + 3) / 3) * m_list->GetMaxY());
         } else {
-            m_start = 0;
+            m_list->SetYoff(0);
         }
     }});
 
