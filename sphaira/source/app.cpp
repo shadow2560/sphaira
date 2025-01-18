@@ -203,6 +203,39 @@ auto GetNroIcon(const std::vector<u8>& nro_icon) -> std::vector<u8> {
     return nro_icon;
 }
 
+auto LoadThemeMeta(const fs::FsPath& path, ThemeMeta& meta) -> bool {
+    meta = {};
+
+    char buf[FS_MAX_PATH]{};
+    int len{};
+    len = ini_gets("meta", "name", "", buf, sizeof(buf) - 1, path);
+    if (len <= 1) {
+        return false;
+    }
+    meta.name = buf;
+
+    len = ini_gets("meta", "author", "", buf, sizeof(buf) - 1, path);
+    if (len <= 1) {
+        return false;
+    }
+    meta.author = buf;
+
+    len = ini_gets("meta", "version", "", buf, sizeof(buf) - 1, path);
+    if (len <= 1) {
+        return false;
+    }
+    meta.version = buf;
+
+    len = ini_gets("meta", "inherit", "", buf, sizeof(buf) - 1, path);
+    if (len > 1) {
+        meta.inherit = buf;
+    }
+
+    log_write("loaded meta from: %s\n", path.s);
+    meta.ini_path = path;
+    return true;
+}
+
 void haze_callback(const HazeCallbackData *data) {
     App::NotifyFlashLed();
     evman::push(*data, false);
@@ -391,12 +424,12 @@ auto App::GetThemeMetaList() -> std::span<ThemeMeta> {
     return g_app->m_theme_meta_entries;
 }
 
-void App::SetTheme(u64 theme_index) {
-    g_app->LoadTheme(g_app->m_theme_meta_entries[theme_index].ini_path.c_str());
+void App::SetTheme(s64 theme_index) {
+    g_app->LoadTheme(g_app->m_theme_meta_entries[theme_index]);
     g_app->m_theme_index = theme_index;
 }
 
-auto App::GetThemeIndex() -> u64 {
+auto App::GetThemeIndex() -> s64 {
     return g_app->m_theme_index;
 }
 
@@ -422,6 +455,10 @@ auto App::GetLogEnable() -> bool {
 
 auto App::GetReplaceHbmenuEnable() -> bool {
     return g_app->m_replace_hbmenu.Get();
+}
+
+auto App::GetProposeUpdatesForStandardPaths() -> bool {
+    return g_app->m_propose_updates_for_standard_paths.Get();
 }
 
 auto App::GetInstallEnable() -> bool {
@@ -579,6 +616,10 @@ void App::SetReplaceHbmenuEnable(bool enable) {
     }
 }
 
+void App::SetProposeUpdatesForStandardPaths(bool enable) {
+    g_app->m_propose_updates_for_standard_paths.Set(enable);
+}
+
 void App::SetInstallEnable(bool enable) {
     g_app->m_install.Set(enable);
 }
@@ -626,6 +667,15 @@ void App::SetLanguage(long index) {
     if (App::GetLanguage() != index) {
         g_app->m_language.Set(index);
         on_i18n_change();
+
+        App::Push(std::make_shared<ui::OptionBox>(
+            "Restart Sphaira?"_i18n,
+            "Back"_i18n, "Restart"_i18n, 1, [](auto op_index){
+                if (op_index && *op_index) {
+                    App::ExitRestart();
+                }
+            }
+        ));
     }
 }
 
@@ -701,41 +751,40 @@ void App::ExitRestart() {
 void App::Poll() {
     m_controller.Reset();
 
-    padUpdate(&m_pad);
-    m_controller.m_kdown = padGetButtonsDown(&m_pad);
-    m_controller.m_kheld = padGetButtons(&m_pad);
-    m_controller.m_kup = padGetButtonsUp(&m_pad);
-    m_controller.UpdateButtonHeld(static_cast<u64>(Button::ANY_DIRECTION));
+    HidTouchScreenState state{};
+    hidGetTouchScreenStates(&state, 1);
+    m_touch_info.is_clicked = false;
 
-    HidTouchScreenState touch_state{};
-    hidGetTouchScreenStates(&touch_state, 1);
-
-    if (touch_state.count == 1 && !m_touch_info.is_touching) {
-        m_touch_info.initial_x = m_touch_info.prev_x = m_touch_info.cur_x = touch_state.touches[0].x;
-        m_touch_info.initial_y = m_touch_info.prev_y = m_touch_info.cur_y = touch_state.touches[0].y;
-        m_touch_info.finger_id = touch_state.touches[0].finger_id;
+    if (state.count == 1 && !m_touch_info.is_touching) {
+        m_touch_info.initial = m_touch_info.cur = state.touches[0];
         m_touch_info.is_touching = true;
         m_touch_info.is_tap = true;
-        // PlaySoundEffect(SoundEffect_Limit);
-    } else if (touch_state.count >= 1 && m_touch_info.is_touching && m_touch_info.finger_id == touch_state.touches[0].finger_id) {
-        m_touch_info.prev_x = m_touch_info.cur_x;
-        m_touch_info.prev_y = m_touch_info.cur_y;
-
-        m_touch_info.cur_x = touch_state.touches[0].x;
-        m_touch_info.cur_y = touch_state.touches[0].y;
+    } else if (state.count >= 1 && m_touch_info.is_touching) {
+        m_touch_info.cur = state.touches[0];
 
         if (m_touch_info.is_tap &&
-            (std::abs(m_touch_info.initial_x - m_touch_info.cur_x) > 20 ||
-            std::abs(m_touch_info.initial_y - m_touch_info.cur_y) > 20)) {
+            (std::abs((s32)m_touch_info.initial.x - (s32)m_touch_info.cur.x) > 20 ||
+            std::abs((s32)m_touch_info.initial.y - (s32)m_touch_info.cur.y) > 20)) {
             m_touch_info.is_tap = false;
+            m_touch_info.is_scroll = true;
         }
     } else if (m_touch_info.is_touching) {
         m_touch_info.is_touching = false;
-
-        // check if we clicked on anything, if so, handle it
+        m_touch_info.is_scroll = false;
         if (m_touch_info.is_tap) {
-            // todo:
+            m_touch_info.is_clicked = true;
+        } else {
+            m_touch_info.is_end = true;
         }
+    }
+
+    // todo: better implement this to match hos
+    if (!m_touch_info.is_touching && !m_touch_info.is_clicked) {
+        padUpdate(&m_pad);
+        m_controller.m_kdown = padGetButtonsDown(&m_pad);
+        m_controller.m_kheld = padGetButtons(&m_pad);
+        m_controller.m_kup = padGetButtonsUp(&m_pad);
+        m_controller.UpdateButtonHeld(static_cast<u64>(Button::ANY_DIRECTION));
     }
 }
 
@@ -809,17 +858,21 @@ auto App::GetVg() -> NVGcontext* {
 }
 
 void DrawElement(float x, float y, float w, float h, ThemeEntryID id) {
+    DrawElement({x, y, w, h}, id);
+}
+
+void DrawElement(const Vec4& v, ThemeEntryID id) {
     const auto& e = g_app->m_theme.elements[id];
 
     switch (e.type) {
         case ElementType::None: {
         } break;
         case ElementType::Texture: {
-            const auto paint = nvgImagePattern(g_app->vg, x, y, w, h, 0, e.texture, 1.f);
-            ui::gfx::drawRect(g_app->vg, x, y, w, h, paint);
+            const auto paint = nvgImagePattern(g_app->vg, v.x, v.y, v.w, v.h, 0, e.texture, 1.f);
+            ui::gfx::drawRect(g_app->vg, v, paint);
         } break;
         case ElementType::Colour: {
-            ui::gfx::drawRect(g_app->vg, x, y, w, h, e.colour);
+            ui::gfx::drawRect(g_app->vg, v, e.colour);
         } break;
     }
 }
@@ -870,15 +923,17 @@ auto App::LoadElement(std::string_view value) -> ElementEntry {
 }
 
 void App::CloseTheme() {
-    m_theme.name.clear();
-    m_theme.author.clear();
-    m_theme.version.clear();
-    m_theme.path.clear();
+    m_theme.meta.name.clear();
+    m_theme.meta.author.clear();
+    m_theme.meta.version.clear();
+    m_theme.meta.ini_path.clear();
+
     if (m_sound_ids[SoundEffect_Music]) {
         plsrPlayerFree(m_sound_ids[SoundEffect_Music]);
         m_sound_ids[SoundEffect_Music] = nullptr;
         plsrBFSTMClose(&m_theme.music);
     }
+
     for (auto& e : m_theme.elements) {
         if (e.type == ElementType::Texture) {
             nvgDeleteImage(vg, e.texture);
@@ -887,10 +942,29 @@ void App::CloseTheme() {
     }
 }
 
-void App::LoadTheme(const fs::FsPath& path) {
+void App::LoadTheme(const ThemeMeta& meta) {
     // reset theme
     CloseTheme();
-    m_theme.path = path;
+
+    // check if the theme inherits from another, if so, load it.
+    // block inheriting from itself.
+    if (!meta.inherit.empty() && meta.inherit != meta.ini_path) {
+        log_write("inherit is not empty: %s\n", meta.inherit.s);
+        if (R_SUCCEEDED(romfsInit())) {
+            ThemeMeta inherit_meta;
+            const auto has_meta = LoadThemeMeta(meta.inherit, inherit_meta);
+            romfsExit();
+
+            // base themes do not have a meta
+            if (!has_meta) {
+                inherit_meta.ini_path = meta.inherit;
+            }
+
+            LoadTheme(inherit_meta);
+        }
+    }
+
+    m_theme.meta = meta;
 
     const auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
         auto app = static_cast<App*>(UserData);
@@ -899,15 +973,7 @@ void App::LoadTheme(const fs::FsPath& path) {
         std::string_view key{Key};
         std::string_view value{Value};
 
-        if (section == "meta") {
-            if (key == "name") {
-                theme.name = key;
-            } else if (key == "author") {
-                theme.author = key;
-            } else if (key == "version") {
-                theme.version = key;
-            }
-        } else if (section == "theme") {
+        if (section == "theme") {
             if (key == "background") {
                 theme.elements[ThemeEntryID_BACKGROUND] = app->LoadElement(value);
             } else if (key == "music") {
@@ -950,10 +1016,10 @@ void App::LoadTheme(const fs::FsPath& path) {
 
     if (R_SUCCEEDED(romfsInit())) {
         ON_SCOPE_EXIT(romfsExit());
-        if (!ini_browse(cb, this, path)) {
-            log_write("failed to open ini: %s\n", path);
+        if (!ini_browse(cb, this, meta.ini_path)) {
+            log_write("failed to open ini: %s\n", meta.ini_path.s);
         } else {
-            log_write("opened ini: %s\n", path);
+            log_write("opened ini: %s\n", meta.ini_path);
         }
     }
 }
@@ -983,40 +1049,10 @@ void App::ScanThemes(const std::string& path) {
 
         const auto full_path = path + name;
 
-        if (!ini_haskey("meta", "name", full_path.c_str())) {
-            continue;
-        }
-        if (!ini_haskey("meta", "author", full_path.c_str())) {
-            continue;
-        }
-        if (!ini_haskey("meta", "version", full_path.c_str())) {
-            continue;
-        }
-
         ThemeMeta meta{};
-
-        char buf[FS_MAX_PATH]{};
-        int len{};
-        len = ini_gets("meta", "name", "", buf, sizeof(buf) - 1, full_path.c_str());
-        if (len <= 1) {
-            continue;
+        if (LoadThemeMeta(full_path, meta)) {
+            m_theme_meta_entries.emplace_back(meta);
         }
-        meta.name = buf;
-
-        len = ini_gets("meta", "author", "", buf, sizeof(buf) - 1, full_path.c_str());
-        if (len <= 1) {
-            continue;
-        }
-        meta.author = buf;
-
-        len = ini_gets("meta", "version", "", buf, sizeof(buf) - 1, full_path.c_str());
-        if (len <= 1) {
-            continue;
-        }
-        meta.version = buf;
-
-        meta.ini_path = full_path;
-        m_theme_meta_entries.emplace_back(meta);
     }
 }
 
@@ -1129,6 +1165,7 @@ App::App(const char* argv0) {
         ON_SCOPE_EXIT(romfsUnmount("qlaunch"));
         plsrPlayerInit();
         plsrBFSAROpen("qlaunch:/sound/qlaunch.bfsar", &m_qlaunch_bfsar);
+        ON_SCOPE_EXIT(plsrBFSARClose(&m_qlaunch_bfsar));
 
         plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconFocus", &m_sound_ids[SoundEffect_Focus]);
         plsrPlayerLoadSoundByName(&m_qlaunch_bfsar, "SeGameIconScroll", &m_sound_ids[SoundEffect_Scroll]);
@@ -1147,16 +1184,29 @@ App::App(const char* argv0) {
     ScanThemeEntries();
 
     fs::FsPath theme_path{};
+    constexpr fs::FsPath default_theme_path{"romfs:/themes/abyss_theme.ini"};
     if (App::GetThemeShuffleEnable() && m_theme_meta_entries.size()) {
         theme_path = m_theme_meta_entries[randomGet64() % m_theme_meta_entries.size()].ini_path;
     } else {
-        ini_gets("config", "theme", "romfs:/themes/abyss_theme.ini", theme_path, sizeof(theme_path), CONFIG_PATH);
+        ini_gets("config", "theme", default_theme_path, theme_path, sizeof(theme_path), CONFIG_PATH);
     }
-    LoadTheme(theme_path);
+
+    // try and load previous theme, default to previous version otherwise.
+    ThemeMeta theme_meta;
+    if (R_SUCCEEDED(romfsInit())) {
+        ON_SCOPE_EXIT(romfsExit());
+        if (!LoadThemeMeta(theme_path, theme_meta)) {
+            log_write("failed to load meta using default\n");
+            theme_path = default_theme_path;
+            LoadThemeMeta(theme_path, theme_meta);
+        }
+    }
+    log_write("loading theme from: %s\n", theme_meta.ini_path.s);
+    LoadTheme(theme_meta);
 
     // find theme index using the path of the theme.ini
     for (u64 i = 0; i < m_theme_meta_entries.size(); i++) {
-        if (m_theme.path == m_theme_meta_entries[i].ini_path) {
+        if (m_theme.meta.ini_path == m_theme_meta_entries[i].ini_path) {
             m_theme_index = i;
             break;
         }
@@ -1241,7 +1291,7 @@ App::~App() {
 
     appletUnhook(&m_appletHookCookie);
 
-    ini_puts("config", "theme", m_theme.path, CONFIG_PATH);
+    ini_puts("config", "theme", m_theme.meta.ini_path, CONFIG_PATH);
 
     CloseTheme();
 

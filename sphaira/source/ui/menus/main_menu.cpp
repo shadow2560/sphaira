@@ -100,7 +100,6 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
                     return false;
                 }
             } else {
-                Result rc;
                 if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create file: %s 0x%04X\n", file_path, rc);
                     return false;
@@ -119,7 +118,7 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
                 }
 
                 std::vector<char> buf(chunk_size);
-                u64 offset{};
+                s64 offset{};
                 while (offset < info.uncompressed_size) {
                     const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                     if (bytes_read <= 0) {
@@ -209,9 +208,6 @@ MainMenu::MainMenu() {
         }
     });
 
-    AddOnLPress();
-    AddOnRPress();
-
     this->SetActions(
         std::make_pair(Button::START, Action{App::Exit}),
         std::make_pair(Button::Y, Action{"Menu"_i18n, [this](){
@@ -233,8 +229,6 @@ MainMenu::MainMenu() {
             language_items.push_back("Russian"_i18n);
             language_items.push_back("Swedish"_i18n);
 
-            options->AddHeader("Header"_i18n);
-            options->AddSpacer();
             options->Add(std::make_shared<SidebarEntryCallback>("Theme"_i18n, [this](){
                 SidebarEntryArray::Items theme_items{};
                 const auto theme_meta = App::GetThemeMetaList();
@@ -245,7 +239,7 @@ MainMenu::MainMenu() {
                 auto options = std::make_shared<Sidebar>("Theme Options"_i18n, Sidebar::Side::LEFT);
                 ON_SCOPE_EXIT(App::Push(options));
 
-                options->Add(std::make_shared<SidebarEntryArray>("Select Theme"_i18n, theme_items, [this, theme_items](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Select Theme"_i18n, theme_items, [this, theme_items](s64& index_out){
                     App::SetTheme(index_out);
                 }, App::GetThemeIndex()));
 
@@ -282,14 +276,18 @@ MainMenu::MainMenu() {
                             if (success) {
                                 m_update_state = UpdateState::None;
                                 App::Notify("Updated to "_i18n + m_update_version);
-                                App::Push(std::make_shared<OptionBox>(
-                                    "Restart Sphaira?"_i18n,
-                                    "Back"_i18n, "Restart"_i18n, 1, [this](auto op_index){
-                                        if (op_index && *op_index) {
-                                            App::ExitRestart();
-                                        }
-                                    }
-                                ));
+
+                                if (App::GetProposeUpdatesForStandardPaths()) {
+                                    UpdateWithExePath("Also update "_i18n + "/hbmenu.nro", "/hbmenu.nro", [this]() {
+                                        UpdateWithExePath("Also update "_i18n + "/switch/sphaira.nro", "/switch/sphaira.nro", [this]() {
+                                            UpdateWithExePath("Also update "_i18n + "/switch/sphaira/sphaira.nro", "/switch/sphaira/sphaira.nro", [this]() {
+                                                ShowRestartDialog();
+                                            });
+                                        });
+                                    });
+                                } else {
+                                    ShowRestartDialog();
+                                }
                             } else {
                                 App::Push(std::make_shared<ui::ErrorBox>(MAKERESULT(351, 1), "Failed to download update"_i18n));
                             }
@@ -298,9 +296,9 @@ MainMenu::MainMenu() {
                 }
             }));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Language"_i18n, language_items, [this](std::size_t& index_out){
+            options->Add(std::make_shared<SidebarEntryArray>("Language"_i18n, language_items, [this](s64& index_out){
                 App::SetLanguage(index_out);
-            }, (std::size_t)App::GetLanguage()));
+            }, (s64)App::GetLanguage()));
 
             options->Add(std::make_shared<SidebarEntryCallback>("Misc"_i18n, [this](){
                 auto options = std::make_shared<Sidebar>("Misc Options"_i18n, Sidebar::Side::LEFT);
@@ -341,13 +339,17 @@ MainMenu::MainMenu() {
                     App::SetReplaceHbmenuEnable(enable);
                 }, "Enabled"_i18n, "Disabled"_i18n));
 
+                options->Add(std::make_shared<SidebarEntryBool>("Propose updates for standard paths"_i18n, App::GetProposeUpdatesForStandardPaths(), [this](bool& enable){
+                    App::SetProposeUpdatesForStandardPaths(enable);
+                }, "Enabled"_i18n, "Disabled"_i18n));
+
                 options->Add(std::make_shared<SidebarEntryBool>("Install forwarders"_i18n, App::GetInstallEnable(), [this](bool& enable){
                     App::SetInstallEnable(enable);
                 }, "Enabled"_i18n, "Disabled"_i18n));
 
-                options->Add(std::make_shared<SidebarEntryArray>("Install location"_i18n, install_items, [this](std::size_t& index_out){
+                options->Add(std::make_shared<SidebarEntryArray>("Install location"_i18n, install_items, [this](s64& index_out){
                     App::SetInstallSdEnable(index_out);
-                }, (std::size_t)App::GetInstallSdEnable()));
+                }, (s64)App::GetInstallSdEnable()));
 
                 options->Add(std::make_shared<SidebarEntryBool>("Show install warning"_i18n, App::GetInstallPrompt(), [this](bool& enable){
                     App::SetInstallPrompt(enable);
@@ -360,6 +362,8 @@ MainMenu::MainMenu() {
     m_filebrowser_menu = std::make_shared<filebrowser::Menu>(m_homebrew_menu->GetHomebrewList());
     m_app_store_menu = std::make_shared<appstore::Menu>(m_homebrew_menu->GetHomebrewList());
     m_current_menu = m_homebrew_menu;
+
+    AddOnLRPress();
 
     for (auto [button, action] : m_actions) {
         m_current_menu->SetAction(button, action);
@@ -393,17 +397,11 @@ void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
     if (m_current_menu == m_homebrew_menu) {
         m_current_menu = menu;
         RemoveAction(b);
-        if (b == Button::L) {
-            AddOnRPress();
-        } else {
-            AddOnLPress();
-        }
     } else {
         m_current_menu = m_homebrew_menu;
-        AddOnRPress();
-        AddOnLPress();
     }
 
+    AddOnLRPress();
     m_current_menu->OnFocusGained();
 
     for (auto [button, action] : m_actions) {
@@ -411,18 +409,64 @@ void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
     }
 }
 
-void MainMenu::AddOnLPress() {
-    const auto label = m_current_menu == m_homebrew_menu ? "Files" : "Apps";
-    SetAction(Button::L, Action{i18n::get(label), [this]{
-        OnLRPress(m_filebrowser_menu, Button::L);
-    }});
+void MainMenu::AddOnLRPress() {
+    if (m_current_menu != m_filebrowser_menu) {
+        const auto label = m_current_menu == m_homebrew_menu ? "Files" : "Apps";
+        SetAction(Button::L, Action{i18n::get(label), [this]{
+            OnLRPress(m_filebrowser_menu, Button::L);
+        }});
+    }
+
+    if (m_current_menu != m_app_store_menu) {
+        const auto label = m_current_menu == m_homebrew_menu ? "Store" : "Apps";
+        SetAction(Button::R, Action{i18n::get(label), [this]{
+            OnLRPress(m_app_store_menu, Button::R);
+        }});
+    }
 }
 
-void MainMenu::AddOnRPress() {
-    const auto label = m_current_menu == m_homebrew_menu ? "Store" : "Apps";
-    SetAction(Button::R, Action{i18n::get(label), [this]{
-        OnLRPress(m_app_store_menu, Button::R);
-    }});
+void MainMenu::ShowRestartDialog() {
+    App::Push(std::make_shared<OptionBox>(
+        "Restart Sphaira?"_i18n,
+        "Back"_i18n, "Restart"_i18n, 1, [this](auto op_index){
+            if (op_index && *op_index) {
+                App::ExitRestart();
+            }
+        }
+    ));
+}
+
+void MainMenu::UpdateWithExePath(std::string message, fs::FsPath sphaira_path, std::function<void()> on_complete) {
+    if (sphaira_path == App::GetExePath()) {
+        if (on_complete) on_complete();
+        return;
+    }
+    fs::FsNativeSd fs;
+    NacpStruct test_nacp, exe_nacp;
+    nro_get_nacp(App::GetExePath(), exe_nacp);;
+    bool file_exist = fs.FileExists(sphaira_path);
+    if (file_exist) {
+        Result rc = nro_get_nacp(sphaira_path, test_nacp);
+        if (R_SUCCEEDED(rc) && !std::strcmp(test_nacp.lang[0].name, "sphaira") && std::strcmp(test_nacp.display_version, exe_nacp.display_version) < 0) {
+            App::Push(std::make_shared<OptionBox>(
+                message + "?",
+                "No"_i18n, "Yes"_i18n, 1, [this, sphaira_path, on_complete](auto op_index){
+                    if (op_index && *op_index) {
+fs::FsNativeSd fs;
+Result rc;
+                        if (R_FAILED(rc = fs.copy_entire_file(sphaira_path, App::GetExePath()))) {
+                            App::Push(std::make_shared<ui::ErrorBox>(rc,
+                                "Failed to update "_i18n + sphaira_path.s
+                            ));
+                        }
+                    }
+                    if (on_complete) on_complete();
+                }
+            ));
+return;
+        }
+    }
+    if (on_complete) on_complete();
 }
 
 } // namespace sphaira::ui::menu::main

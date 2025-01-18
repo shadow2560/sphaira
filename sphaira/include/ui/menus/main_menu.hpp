@@ -32,10 +32,12 @@ struct MainMenu final : Widget {
         return true;
     }
 
+    void ShowRestartDialog();
+    void UpdateWithExePath(std::string message, fs::FsPath sphaira_path, std::function<void()> on_complete = nullptr);
+
 private:
     void OnLRPress(std::shared_ptr<MenuBase> menu, Button b);
-    void AddOnLPress();
-    void AddOnRPress();
+    void AddOnLRPress();
 
 private:
     std::shared_ptr<homebrew::Menu> m_homebrew_menu{};

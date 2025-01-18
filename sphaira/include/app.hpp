@@ -25,6 +25,7 @@ enum SoundEffect {
     SoundEffect_Startup,
     SoundEffect_Install,
     SoundEffect_Error,
+    SoundEffect_MAX,
 };
 
 enum class LaunchType {
@@ -33,7 +34,9 @@ enum class LaunchType {
     Forwader_Sphaira,
 };
 
+// todo: why is this global???
 void DrawElement(float x, float y, float w, float h, ThemeEntryID id);
+void DrawElement(const Vec4&, ThemeEntryID id);
 
 class App {
 public:
@@ -56,8 +59,8 @@ public:
     static void NotifyFlashLed();
 
     static auto GetThemeMetaList() -> std::span<ThemeMeta>;
-    static void SetTheme(u64 theme_index);
-    static auto GetThemeIndex() -> u64;
+    static void SetTheme(s64 theme_index);
+    static auto GetThemeIndex() -> s64;
 
     static auto GetDefaultImage(int* w = nullptr, int* h = nullptr) -> int;
 
@@ -71,6 +74,7 @@ public:
     static auto GetNxlinkEnable() -> bool;
     static auto GetLogEnable() -> bool;
     static auto GetReplaceHbmenuEnable() -> bool;
+    static auto GetProposeUpdatesForStandardPaths() -> bool;
     static auto GetInstallEnable() -> bool;
     static auto GetInstallSdEnable() -> bool;
     static auto GetInstallPrompt() -> bool;
@@ -83,6 +87,7 @@ public:
     static void SetNxlinkEnable(bool enable);
     static void SetLogEnable(bool enable);
     static void SetReplaceHbmenuEnable(bool enable);
+    static void SetProposeUpdatesForStandardPaths(bool enable);
     static void SetInstallEnable(bool enable);
     static void SetInstallSdEnable(bool enable);
     static void SetInstallPrompt(bool enable);
@@ -104,7 +109,7 @@ public:
     auto LoadElementColour(std::string_view value) -> ElementEntry;
     auto LoadElement(std::string_view data) -> ElementEntry;
 
-    void LoadTheme(const fs::FsPath& path);
+    void LoadTheme(const ThemeMeta& meta);
     void CloseTheme();
     void ScanThemes(const std::string& path);
     void ScanThemeEntries();
@@ -143,7 +148,7 @@ public:
 
     Theme m_theme{};
     fs::FsPath theme_path{};
-    std::size_t m_theme_index{};
+    s64 m_theme_index{};
 
     bool m_quit{};
 
@@ -152,6 +157,7 @@ public:
     option::OptionBool m_ftp_enabled{INI_SECTION, "ftp_enabled", false};
     option::OptionBool m_log_enabled{INI_SECTION, "log_enabled", false};
     option::OptionBool m_replace_hbmenu{INI_SECTION, "replace_hbmenu", false};
+    option::OptionBool m_propose_updates_for_standard_paths{INI_SECTION, "propose_updates_for_standard_paths", false};
     option::OptionBool m_install{INI_SECTION, "install", false};
     option::OptionBool m_install_sd{INI_SECTION, "install_sd", true};
     option::OptionLong m_install_prompt{INI_SECTION, "install_prompt", true};
@@ -160,7 +166,7 @@ public:
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto
 
     PLSR_BFSAR m_qlaunch_bfsar{};
-    PLSR_PlayerSoundId m_sound_ids[24]{};
+    PLSR_PlayerSoundId m_sound_ids[SoundEffect_MAX]{};
 
 private: // from nanovg decko3d example by adubbz
     static constexpr unsigned NumFramebuffers = 2;
