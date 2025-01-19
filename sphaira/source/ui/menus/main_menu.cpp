@@ -23,7 +23,7 @@
 namespace sphaira::ui::menu::main {
 namespace {
 
-constexpr const char* GITHUB_URL{"https://api.github.com/repos/ITotalJustice/sphaira/releases/latest"};
+constexpr const char* GITHUB_URL{"https://api.github.com/repos/shadow2560/sphaira/releases/latest"};
 constexpr fs::FsPath CACHE_PATH{"/switch/sphaira/cache/sphaira_latest.json"};
 
 auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string version) -> bool {

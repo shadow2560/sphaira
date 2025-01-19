@@ -25,7 +25,7 @@ namespace {
         log_write("curl_share_setopt(%s, %s) msg: %s\n", #opt, #v, curl_share_strerror(r)); \
     } \
 
-constexpr auto API_AGENT = "ITotalJustice";
+constexpr auto API_AGENT = "shadow2560";
 constexpr u64 CHUNK_SIZE = 1024*1024;
 constexpr auto MAX_THREADS = 4;
 constexpr int THREAD_PRIO = 0x2C;
