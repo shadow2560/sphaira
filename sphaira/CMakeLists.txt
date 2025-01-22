@@ -330,7 +330,7 @@ nx_generate_nacp(
     OUTPUT sphaira.nacp
     NAME ${CMAKE_PROJECT_NAME}
     AUTHOR TotalJustice
-    VERSION ${CMAKE_PROJECT_VERSION}
+    VERSION ${sphaira_VERSION}
 )
 
 # create nro

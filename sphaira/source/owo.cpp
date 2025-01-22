@@ -655,7 +655,7 @@ void patch_npdm(std::vector<u8>& npdm, const NpdmPatch& patch) {
     splGetConfig(SplConfigItem_ExosphereVersion, &ver);
     ver >>= 40;
 
-    if (ver >= MAKEHOSVERSION(1,7,1)) {
+    if (ver >= MAKEHOSVERSION(1,8,0)) {
         npdm_patch_kc(npdm, meta.aci0_offset + aci0.kac_offset, aci0.kac_size, 16, BIT(19));
         npdm_patch_kc(npdm, meta.acid_offset + acid.kac_offset, acid.kac_size, 16, BIT(19));
     }
