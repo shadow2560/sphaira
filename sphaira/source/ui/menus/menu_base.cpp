@@ -38,22 +38,22 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
 
     nvgFontSize(vg, font_size);
 
-    #define draw(...) \
+    #define draw(colour, ...) \
         gfx::textBounds(vg, 0, 0, bounds, __VA_ARGS__); \
         start_x -= bounds[2] - bounds[0]; \
-        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT), __VA_ARGS__); \
+        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(colour), __VA_ARGS__); \
         start_x -= spacing;
 
     // draw("version %s", APP_VERSION);
-    draw("%u\uFE6A", m_battery_percetange);
-    draw("%02u:%02u:%02u", m_tm.tm_hour, m_tm.tm_min, m_tm.tm_sec);
+    draw(ThemeEntryID_TEXT, "%u\uFE6A", m_battery_percetange);
+    draw(ThemeEntryID_TEXT, "%02u:%02u:%02u", m_tm.tm_hour, m_tm.tm_min, m_tm.tm_sec);
     if (m_ip) {
-        draw("%u.%u.%u.%u", m_ip&0xFF, (m_ip>>8)&0xFF, (m_ip>>16)&0xFF, (m_ip>>24)&0xFF);
+        draw(ThemeEntryID_TEXT, "%u.%u.%u.%u", m_ip&0xFF, (m_ip>>8)&0xFF, (m_ip>>16)&0xFF, (m_ip>>24)&0xFF);
     } else {
-        draw(("No Internet"_i18n).c_str());
+        draw(ThemeEntryID_TEXT, ("No Internet"_i18n).c_str());
     }
     if (!App::IsApplication()) {
-        draw(("[Applet Mode]"_i18n).c_str());
+        draw(ThemeEntryID_ERROR, ("[Applet Mode]"_i18n).c_str());
     }
 
     #undef draw
