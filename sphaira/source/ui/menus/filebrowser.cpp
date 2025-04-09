@@ -793,7 +793,7 @@ auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
     }
 
     FsDir d;
-    R_TRY(m_fs->OpenDirectory(new_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &d));
+    R_TRY(m_fs->OpenDirectory(new_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles, &d));
     ON_SCOPE_EXIT(fsDirClose(&d));
 
     s64 count;
