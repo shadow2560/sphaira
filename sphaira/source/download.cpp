@@ -757,4 +757,14 @@ auto ToFileAsync(const Api& e) -> bool {
     return g_thread_queue.Add(e);
 }
 
+auto EscapeString(const std::string& str) -> std::string {
+    std::string result;
+    const auto s = curl_escape(str.data(), str.length());
+    if (s) {
+        result = s;
+        curl_free(s);
+    }
+    return result;
+}
+
 } // namespace sphaira::curl

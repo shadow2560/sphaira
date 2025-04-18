@@ -87,6 +87,9 @@ auto ToFile(const Api& e) -> ApiResult;
 auto ToMemoryAsync(const Api& e) -> bool;
 auto ToFileAsync(const Api& e) -> bool;
 
+// uses curl to convert string to their %XX
+auto EscapeString(const std::string& str) -> std::string;
+
 struct Api {
     Api() = default;
 
