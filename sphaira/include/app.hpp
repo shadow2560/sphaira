@@ -77,7 +77,6 @@ public:
     static auto GetInstallEnable() -> bool;
     static auto GetInstallSdEnable() -> bool;
     static auto GetInstallPrompt() -> bool;
-    static auto GetThemeShuffleEnable() -> bool;
     static auto GetThemeMusicEnable() -> bool;
     static auto Get12HourTimeEnable() -> bool;
     static auto GetLanguage() -> long;
@@ -91,7 +90,6 @@ public:
     static void SetInstallEnable(bool enable);
     static void SetInstallSdEnable(bool enable);
     static void SetInstallPrompt(bool enable);
-    static void SetThemeShuffleEnable(bool enable);
     static void SetThemeMusicEnable(bool enable);
     static void Set12HourTimeEnable(bool enable);
     static void SetLanguage(long index);
@@ -177,7 +175,6 @@ public:
     option::OptionBool m_install{INI_SECTION, "install", false};
     option::OptionBool m_install_sd{INI_SECTION, "install_sd", true};
     option::OptionLong m_install_prompt{INI_SECTION, "install_prompt", true};
-    option::OptionBool m_theme_shuffle{INI_SECTION, "theme_shuffle", false};
     option::OptionBool m_theme_music{INI_SECTION, "theme_music", true};
     option::OptionBool m_12hour_time{INI_SECTION, "12hour_time", false};
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto

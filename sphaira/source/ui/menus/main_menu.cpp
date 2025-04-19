@@ -246,10 +246,6 @@ MainMenu::MainMenu() {
                     App::SetTheme(index_out);
                 }, App::GetThemeIndex()));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Shuffle"_i18n, App::GetThemeShuffleEnable(), [this](bool& enable){
-                    App::SetThemeShuffleEnable(enable);
-                }, "Enabled"_i18n, "Disabled"_i18n));
-
                 options->Add(std::make_shared<SidebarEntryBool>("Music"_i18n, App::GetThemeMusicEnable(), [this](bool& enable){
                     App::SetThemeMusicEnable(enable);
                 }, "Enabled"_i18n, "Disabled"_i18n));

@@ -580,10 +580,6 @@ auto App::GetInstallPrompt() -> bool {
     return g_app->m_install_prompt.Get();
 }
 
-auto App::GetThemeShuffleEnable() -> bool {
-    return g_app->m_theme_shuffle.Get();
-}
-
 auto App::GetThemeMusicEnable() -> bool {
     return g_app->m_theme_music.Get();
 }
@@ -739,10 +735,6 @@ void App::SetInstallSdEnable(bool enable) {
 
 void App::SetInstallPrompt(bool enable) {
     g_app->m_install_prompt.Set(enable);
-}
-
-void App::SetThemeShuffleEnable(bool enable) {
-    g_app->m_theme_shuffle.Set(enable);
 }
 
 void App::SetThemeMusicEnable(bool enable) {
@@ -1323,11 +1315,7 @@ App::App(const char* argv0) {
 
     fs::FsPath theme_path{};
     constexpr fs::FsPath default_theme_path{"romfs:/themes/abyss_theme.ini"};
-    if (App::GetThemeShuffleEnable() && m_theme_meta_entries.size()) {
-        theme_path = m_theme_meta_entries[randomGet64() % m_theme_meta_entries.size()].ini_path;
-    } else {
-        ini_gets("config", "theme", default_theme_path, theme_path, sizeof(theme_path), CONFIG_PATH);
-    }
+    ini_gets("config", "theme", default_theme_path, theme_path, sizeof(theme_path), CONFIG_PATH);
 
     // try and load previous theme, default to previous version otherwise.
     ThemeMeta theme_meta;
