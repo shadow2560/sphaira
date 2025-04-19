@@ -365,7 +365,13 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
     fs::FsNativeSd().CreateDirectoryRecursively(CACHE_PATH);
 
     SetAction(Button::B, Action{"Back"_i18n, [this]{
-        SetPop();
+        // if search is valid, then we are in search mode, return back to normal.
+        if (!m_search.empty()) {
+            m_search.clear();
+            InvalidateAllPages();
+        } else {
+            SetPop();
+        }
     }});
 
     this->SetActions(
@@ -480,6 +486,8 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
                 std::string out;
                 if (R_SUCCEEDED(swkbd::ShowText(out)) && !out.empty()) {
                     m_search = out;
+                    // PackListDownload();
+                    InvalidateAllPages();
                 }
             }));
         }}),
@@ -652,11 +660,9 @@ void Menu::OnFocusGained() {
 }
 
 void Menu::InvalidateAllPages() {
-    for (auto& e : m_pages) {
-        e.m_packList.clear();
-        e.m_ready = PageLoadState::None;
-    }
-
+    m_pages.clear();
+    m_pages.resize(1);
+    m_page_index = 0;
     PackListDownload();
 }
 
