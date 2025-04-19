@@ -68,7 +68,7 @@ auto apiBuildUrlListInternal(const Config& e, bool is_pack) -> std::string {
     if (is_pack) {
         cmd = "packList";
         // fields += ",themes{id,creator{display_name},details{name,description},last_updated,dl_count,like_count,target,preview{original,thumb}}";
-        fields += ",themes{id, preview{thumb}}";
+        fields += ",themes{id,preview{thumb}}";
     } else {
         cmd = "themeList";
         p0 += ",$target:String";
@@ -92,7 +92,9 @@ auto apiBuildUrlListInternal(const Config& e, bool is_pack) -> std::string {
         json += ",\"query\":\"" + e.query + "\"";
     }
 
-    return api+"("+p0+"){"+cmd+"("+p1+")"+fields+"}}&variables={"+json+"}";
+    json = curl::EscapeString('{'+json+'}');
+
+    return api+"("+p0+"){"+cmd+"("+p1+")"+fields+"}}&variables="+json;
 }
 
 auto apiBuildUrlDownloadInternal(const std::string& id, bool is_pack) -> std::string {
