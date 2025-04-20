@@ -42,14 +42,15 @@ Result ShowInternal(Config& cfg, const char* guide, const char* initial, s64 len
 } // namespace
 
 Result ShowText(std::string& out, const char* guide, const char* initial, s64 len_min, s64 len_max) {
-    Config cfg;
+    Config cfg{};
     R_TRY(ShowInternal(cfg, guide, initial, len_min, len_max));
     out = cfg.out_text;
     R_SUCCEED();
 }
 
 Result ShowNumPad(s64& out, const char* guide, const char* initial, s64 len_min, s64 len_max) {
-    Config cfg;
+    Config cfg{};
+    cfg.numpad = true;
     R_TRY(ShowInternal(cfg, guide, initial, len_min, len_max));
     out = std::atoll(cfg.out_text);
     R_SUCCEED();
