@@ -102,6 +102,14 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
     }
 }
 
+auto ProgressBox::SetTitle(const std::string& title)  -> ProgressBox& {
+    mutexLock(&m_mutex);
+    m_title = title;
+    mutexUnlock(&m_mutex);
+    Yield();
+    return *this;
+}
+
 auto ProgressBox::NewTransfer(const std::string& transfer)  -> ProgressBox& {
     mutexLock(&m_mutex);
     m_transfer = transfer;

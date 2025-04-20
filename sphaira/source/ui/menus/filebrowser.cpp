@@ -18,6 +18,8 @@
 #include "owo.hpp"
 #include "swkbd.hpp"
 #include "i18n.hpp"
+#include "yati/yati.hpp"
+#include "yati/source/file.hpp"
 
 #include <minIni.h>
 #include <minizip/unzip.h>
@@ -52,6 +54,10 @@ constexpr std::string_view VIDEO_EXTENSIONS[] = {
 constexpr std::string_view IMAGE_EXTENSIONS[] = {
     "png", "jpg", "jpeg", "bmp", "gif",
 };
+constexpr std::string_view INSTALL_EXTENSIONS[] = {
+    "nsp", "xci", "nsz", "xcz",
+};
+
 
 struct RomDatabaseEntry {
     std::string_view folder;
@@ -294,6 +300,8 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                                 nro_launch(GetNewPathCurrent());
                             }
                         }));
+                } else if (App::GetInstallEnable() && IsExtension(entry.GetExtension(), INSTALL_EXTENSIONS)) {
+                    InstallFile(GetEntry());
                 } else {
                     const auto assoc_list = FindFileAssocFor();
                     if (!assoc_list.empty()) {
@@ -406,7 +414,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     }
                     log_write("clicked on delete\n");
                     App::Push(std::make_shared<OptionBox>(
-                        "Delete Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
+                        "Delete Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
                             if (op_index && *op_index) {
                                 App::PopToMenu();
                                 OnDeleteCallback();
@@ -421,7 +429,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 options->Add(std::make_shared<SidebarEntryCallback>("Paste"_i18n, [this](){
                     const std::string buf = "Paste "_i18n + std::to_string(m_selected_files.size()) + " file(s)?"_i18n;
                     App::Push(std::make_shared<OptionBox>(
-                        buf, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
+                        buf, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
                         if (op_index && *op_index) {
                             App::PopToMenu();
                             OnPasteCallback();
@@ -457,6 +465,32 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                         }
                     }
                 }));
+            }
+
+            // if install is enabled, check if all currently selected files are installable.
+            if (m_entries_current.size() && App::GetInstallEnable()) {
+                bool should_install = true;
+                if (!m_selected_count) {
+                    should_install = IsExtension(GetEntry().GetExtension(), INSTALL_EXTENSIONS);
+                } else {
+                    const auto entries = GetSelectedEntries();
+                    for (auto&e : entries) {
+                        if (!IsExtension(e.GetExtension(), INSTALL_EXTENSIONS)) {
+                            should_install = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (should_install) {
+                    options->Add(std::make_shared<SidebarEntryCallback>("Install"_i18n, [this](){
+                        if (!m_selected_count) {
+                            InstallFile(GetEntry());
+                        } else {
+                            InstallFiles(GetSelectedEntries());
+                        }
+                    }));
+                }
             }
 
             options->Add(std::make_shared<SidebarEntryCallback>("Advanced"_i18n, [this](){
@@ -628,6 +662,9 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 icon = ThemeEntryID_ICON_VIDEO;
             } else if (IsExtension(ext, IMAGE_EXTENSIONS)) {
                 icon = ThemeEntryID_ICON_IMAGE;
+            } else if (IsExtension(ext, INSTALL_EXTENSIONS)) {
+                // todo: maybe replace this icon with something else?
+                icon = ThemeEntryID_ICON_NRO;
             } else if (IsExtension(ext, "zip")) {
                 icon = ThemeEntryID_ICON_ZIP;
             } else if (IsExtension(ext, "nro")) {
@@ -773,6 +810,34 @@ void Menu::InstallForwarder() {
             }
         }
     ));
+}
+
+void Menu::InstallFile(const FileEntry& target) {
+    std::vector<FileEntry> targets{target};
+    InstallFiles(targets);
+}
+
+void Menu::InstallFiles(const std::vector<FileEntry>& targets) {
+    App::Push(std::make_shared<OptionBox>("Install Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this, targets](auto op_index){
+        if (op_index && *op_index) {
+            App::PopToMenu();
+
+            App::Push(std::make_shared<ui::ProgressBox>("Installing App"_i18n, [this, targets](auto pbox) mutable -> bool {
+                for (auto& e : targets) {
+                    const auto rc = yati::InstallFromFile(pbox, &m_fs->m_fs, GetNewPath(e));
+                    if (rc == yati::Result_Cancelled) {
+                        break;
+                    } else if (R_FAILED(rc)) {
+                        return false;
+                    } else {
+                        App::Notify("Installed " + e.GetName());
+                    }
+                }
+
+                return true;
+            }));
+        }
+    }));
 }
 
 auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {

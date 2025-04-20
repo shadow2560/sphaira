@@ -74,6 +74,19 @@ add_executable(sphaira
     source/web.cpp
     source/i18n.cpp
     source/ftpsrv_helper.cpp
+
+    source/yati/yati.cpp
+    source/yati/container/nsp.cpp
+    source/yati/container/xci.cpp
+    source/yati/source/file.cpp
+    source/yati/source/stdio.cpp
+
+    source/yati/nx/es.cpp
+    source/yati/nx/keys.cpp
+    source/yati/nx/nca.cpp
+    source/yati/nx/ncm.cpp
+    source/yati/nx/ns.cpp
+    source/yati/nx/nxdumptool_rsa.c
 )
 
 target_compile_definitions(sphaira PRIVATE
@@ -161,6 +174,24 @@ FetchContent_Declare(minIni
     GIT_TAG 11cac8b
 )
 
+FetchContent_Declare(zstd
+    GIT_REPOSITORY https://github.com/facebook/zstd.git
+    GIT_TAG v1.5.7
+    SOURCE_SUBDIR build/cmake
+)
+
+set(USE_NEW_ZSTD ON)
+
+set(ZSTD_BUILD_STATIC ON)
+set(ZSTD_BUILD_SHARED OFF)
+set(ZSTD_BUILD_COMPRESSION OFF)
+set(ZSTD_BUILD_DECOMPRESSION ON)
+set(ZSTD_BUILD_DICTBUILDER OFF)
+set(ZSTD_LEGACY_SUPPORT OFF)
+set(ZSTD_MULTITHREAD_SUPPORT OFF)
+set(ZSTD_BUILD_PROGRAMS OFF)
+set(ZSTD_BUILD_TESTS OFF)
+
 set(MININI_LIB_NAME minIni)
 set(MININI_USE_STDIO ON)
 set(MININI_USE_NX ON)
@@ -195,6 +226,7 @@ FetchContent_MakeAvailable(
     stb
     minIni
     yyjson
+    zstd
 )
 
 set(FTPSRV_LIB_BUILD TRUE)
@@ -274,6 +306,11 @@ find_package(CURL REQUIRED)
 find_path(mbedtls_inc mbedtls REQUIRED)
 find_library(mbedcrypto_lib mbedcrypto REQUIRED)
 
+if (NOT USE_NEW_ZSTD)
+    find_path(zstd_inc zstd.h REQUIRED)
+    find_library(zstd_lib zstd REQUIRED)
+endif()
+
 set_target_properties(sphaira PROPERTIES
     C_STANDARD 11
     C_EXTENSIONS ON
@@ -295,6 +332,15 @@ target_link_libraries(sphaira PRIVATE
     CURL::libcurl
     ${mbedcrypto_lib}
 )
+
+if (USE_NEW_ZSTD)
+    message(STATUS "USING UPSTREAM ZSTD")
+    target_link_libraries(sphaira PRIVATE libzstd_static)
+else()
+    message(STATUS "USING LOCAL ZSTD")
+    target_link_libraries(sphaira PRIVATE ${zstd_lib})
+    target_include_directories(sphaira PRIVATE ${zstd_inc})
+endif()
 
 target_include_directories(sphaira PRIVATE
     include

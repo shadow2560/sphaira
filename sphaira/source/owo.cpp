@@ -7,6 +7,14 @@
 #include <string_view>
 #include <span>
 
+#include "yati/nx/nca.hpp"
+#include "yati/nx/ncm.hpp"
+#include "yati/nx/npdm.hpp"
+#include "yati/nx/ns.hpp"
+#include "yati/nx/es.hpp"
+#include "yati/nx/keys.hpp"
+#include "yati/nx/crypto.hpp"
+
 #include "owo.hpp"
 #include "defines.hpp"
 #include "app.hpp"
@@ -23,51 +31,8 @@ constexpr u32 PFS0_EXEFS_HASH_BLOCK_SIZE = 0x10000;
 constexpr u32 PFS0_LOGO_HASH_BLOCK_SIZE = 0x1000;
 constexpr u32 PFS0_META_HASH_BLOCK_SIZE = 0x1000;
 constexpr u32 PFS0_PADDING_SIZE = 0x200;
-constexpr u32 NCA_SECTION_TOTAL = 0x4;
 constexpr u32 ROMFS_ENTRY_EMPTY = 0xFFFFFFFF;
 constexpr u32 ROMFS_FILEPARTITION_OFS = 0x200;
-
-enum NcaDistributionType {
-    NcaDistributionType_System   = 0x0,
-    NcaDistributionType_GameCard = 0x1
-};
-
-enum NcaContentType {
-    NcaContentType_Program    = 0x0,
-    NcaContentType_Meta       = 0x1,
-    NcaContentType_Control    = 0x2,
-    NcaContentType_Manual     = 0x3,
-    NcaContentType_Data       = 0x4,
-    NcaContentType_PublicData = 0x5,
-};
-
-enum NcaFileSystemType {
-    NcaFileSystemType_RomFS = 0x0,
-    NcaFileSystemType_PFS0  = 0x1
-};
-
-enum NcaHashType {
-    NcaHashType_Auto                    = 0x0,
-    NcaHashType_HierarchicalSha256      = 0x2,
-    NcaHashType_HierarchicalIntegrity   = 0x3
-};
-
-enum NcaEncryptionType {
-    NcaEncryptionType_Auto      = 0x0,
-    NcaEncryptionType_None      = 0x1,
-    NcaEncryptionType_AesCtrOld = 0x2,
-    NcaEncryptionType_AesCtr    = 0x3,
-    NcaEncryptionType_AesCtrEx  = 0x4
-};
-
-enum NsApplicationRecordType {
-    // installed
-    NsApplicationRecordType_Installed       = 0x3,
-    // application is gamecard, but gamecard isn't insterted
-    NsApplicationRecordType_GamecardMissing = 0x5,
-    // archived
-    NsApplicationRecordType_Archived        = 0xB,
-};
 
 // stdio-like wrapper for std::vector
 struct BufHelper {
@@ -124,12 +89,6 @@ struct CnmtHeader {
 };
 static_assert(sizeof(CnmtHeader) == 0x20);
 
-struct NcmContentStorageRecord {
-    NcmContentMetaKey key;
-    u8 storage_id; //
-    u8 padding[0x7];
-};
-
 struct NcmContentMetaData {
     NcmContentMetaHeader header;
     NcmApplicationMetaExtendedHeader extended;
@@ -142,7 +101,7 @@ struct NcaMetaEntry {
     NcaEntry nca_entry;
     NcmContentMetaHeader content_meta_header{};
     NcmContentMetaKey content_meta_key{};
-    NcmContentStorageRecord content_storage_record{};
+    ncm::ContentStorageRecord content_storage_record{};
     NcmContentMetaData content_meta_data{};
 };
 
@@ -171,61 +130,6 @@ struct FileEntry {
 
 using FileEntries = std::vector<FileEntry>;
 
-struct NpdmMeta {
-    u32 magic; // "META"
-    u32 signature_key_generation; // +9.0.0
-    u32 _0x8;
-    u8 flags;
-    u8 _0xD;
-    u8 main_thread_priority;
-    u8 main_thread_core_num;
-    u32 _0x10;
-    u32 sys_resource_size; // +3.0.0
-    u32 version;
-    u32 main_thread_stack_size;
-    char title_name[0x10];
-    char product_code[0x10];
-    u8 _0x40[0x30];
-    u32 aci0_offset;
-    u32 aci0_size;
-    u32 acid_offset;
-    u32 acid_size;
-};
-
-struct NpdmAcid {
-    u8 rsa_sig[0x100];
-    u8 rsa_pub[0x100];
-    u32 magic; // "ACID"
-    u32 size;
-    u8 version;
-    u8 _0x209[0x1];
-    u8 _0x20A[0x2];
-    u32 flags;
-    u64 program_id_min;
-    u64 program_id_max;
-    u32 fac_offset;
-    u32 fac_size;
-    u32 sac_offset;
-    u32 sac_size;
-    u32 kac_offset;
-    u32 kac_size;
-    u8 _0x238[0x8];
-};
-
-struct NpdmAci0 {
-    u32 magic; // "ACI0"
-    u8 _0x4[0xC];
-    u64 program_id;
-    u8 _0x18[0x8];
-    u32 fac_offset;
-    u32 fac_size;
-    u32 sac_offset;
-    u32 sac_size;
-    u32 kac_offset;
-    u32 kac_size;
-    u8 _0x38[0x8];
-};
-
 struct NpdmPatch {
     char title_name[0x10]{"Application"};
     char product_code[0x10]{};
@@ -237,56 +141,6 @@ struct NcapPatch {
     std::string author;
     u64 tid;
 };
-
-struct NcaSectionTableEntry {
-    u32 media_start_offset; // divided by 0x200.
-    u32 media_end_offset;   // divided by 0x200.
-    u8 _0x8[0x4];           // unknown.
-    u8 _0xC[0x4];           // unknown.
-};
-
-struct LayerRegion {
-    u64 offset;
-    u64 size;
-};
-
-struct HierarchicalSha256Data {
-    u8 master_hash[0x20];
-    u32 block_size;
-    u32 layer_count;
-    LayerRegion hash_layer;
-    LayerRegion pfs0_layer;
-    LayerRegion unused_layers[3];
-    u8 _0x78[0x80];
-};
-
-#pragma pack(push, 1)
-struct HierarchicalIntegrityVerificationLevelInformation {
-    u64 logical_offset;
-    u64 hash_data_size;
-    u32 block_size; // log2
-    u32 _0x14; // reserved
-};
-#pragma pack(pop)
-
-struct InfoLevelHash {
-    u32 max_layers;
-    HierarchicalIntegrityVerificationLevelInformation levels[6];
-    u8 signature_salt[0x20];
-};
-
-struct IntegrityMetaInfo {
-    u32 magic; // IVFC
-    u32 version;
-    u32 master_hash_size;
-    InfoLevelHash info_level_hash;
-    u8 master_hash[0x20];
-    u8 _0xE0[0x18];
-};
-
-static_assert(sizeof(HierarchicalSha256Data) == 0xF8);
-static_assert(sizeof(IntegrityMetaInfo) == 0xF8);
-static_assert(sizeof(HierarchicalSha256Data) == sizeof(IntegrityMetaInfo));
 
 typedef struct romfs_dirent_ctx {
     u32 entry_offset;
@@ -316,70 +170,6 @@ typedef struct {
     u64 file_hash_table_size;
     u64 file_partition_size;
 } romfs_ctx_t;
-
-struct NcaFsHeader {
-    u16 version;           // always 2.
-    u8 fs_type;            // see NcaFileSystemType.
-    u8 hash_type;          // see NcaHashType.
-    u8 encryption_type;    // see NcaEncryptionType.
-    u8 metadata_hash_type;
-    u8 _0x6[0x2];          // empty.
-
-    union {
-        HierarchicalSha256Data hierarchical_sha256_data;
-        IntegrityMetaInfo integrity_meta_info; // used for romfs
-    } hash_data;
-
-    u8 patch_info[0x40];
-    u64 section_ctr;
-    u8 spares_info[0x30];
-    u8 compression_info[0x28];
-    u8 meta_data_hash_data_info[0x30];
-    u8 reserved[0x30];
-};
-
-struct NcaSectionHeaderHash {
-    u8 sha256[0x20];
-};
-
-struct NcaKeyArea {
-    u8 area[0x10];
-};
-
-struct NcaHeader {
-    u8 rsa_fixed_key[0x100];
-    u8 rsa_npdm[0x100];        // key from npdm.
-    u32 magic;
-    u8 distribution_type;      // see NcaDistributionType.
-    u8 content_type;           // see NcaContentType.
-    u8 old_key_gen;            // see NcaOldKeyGeneration.
-    u8 kaek_index;             // see NcaKeyAreaEncryptionKeyIndex.
-    u64 size;
-    u64 title_id;
-    u32 context_id;
-    u32 sdk_version;
-    u8 key_gen;                // see NcaKeyGeneration.
-    u8 header_1_sig_key_gen;
-    u8 _0x222[0xE];            // empty.
-    FsRightsId rights_id;
-
-    NcaSectionTableEntry fs_table[NCA_SECTION_TOTAL];
-    NcaSectionHeaderHash fs_header_hash[NCA_SECTION_TOTAL];
-    NcaKeyArea key_area[NCA_SECTION_TOTAL];
-
-    u8 _0x340[0xC0];           // empty.
-
-    NcaFsHeader fs_header[NCA_SECTION_TOTAL];
-};
-
-constexpr u8 HEADER_KEK_SRC[0x10] = {
-    0x1F, 0x12, 0x91, 0x3A, 0x4A, 0xCB, 0xF0, 0x0D, 0x4C, 0xDE, 0x3A, 0xF6, 0xD5, 0x23, 0x88, 0x2A
-};
-
-constexpr u8 HEADER_KEY_SRC[0x20] = {
-    0x5A, 0x3E, 0xD8, 0x4F, 0xDE, 0xC0, 0xD8, 0x26, 0x31, 0xF7, 0xE2, 0x5D, 0x19, 0x7B, 0xF5, 0xD0,
-    0x1C, 0x9B, 0x7B, 0xFA, 0xF6, 0x28, 0x18, 0x3D, 0x71, 0xF6, 0x4D, 0x73, 0xF1, 0x50, 0xB9, 0xD2
-};
 
 auto write_padding(BufHelper& buf, u64 off, u64 block) -> u64 {
     const u64 size = block - (off % block);
@@ -632,9 +422,9 @@ auto npdm_patch_kc(std::vector<u8>& npdm, u32 off, u32 size, u32 bitmask, u32 va
 
 // todo: manually build npdm
 void patch_npdm(std::vector<u8>& npdm, const NpdmPatch& patch) {
-    NpdmMeta meta{};
-    NpdmAci0 aci0{};
-    NpdmAcid acid{};
+    npdm::Meta meta{};
+    npdm::Aci0 aci0{};
+    npdm::Acid acid{};
     std::memcpy(&meta, npdm.data(), sizeof(meta));
     std::memcpy(&aci0, npdm.data() + meta.aci0_offset, sizeof(aci0));
     std::memcpy(&acid, npdm.data() + meta.acid_offset, sizeof(acid));
@@ -805,7 +595,7 @@ void write_nca_padding(BufHelper& buf) {
     write_padding(buf, buf.tell(), 0x200);
 }
 
-void nca_encrypt_header(NcaHeader* header, std::span<const u8> key) {
+void nca_encrypt_header(nca::Header* header, std::span<const u8> key) {
     Aes128XtsContext ctx{};
     aes128XtsContextCreate(&ctx, key.data(), key.data() + 0x10, true);
 
@@ -816,41 +606,41 @@ void nca_encrypt_header(NcaHeader* header, std::span<const u8> key) {
     }
 }
 
-void write_nca_section(NcaHeader& nca_header, u8 index, u64 start, u64 end) {
+void write_nca_section(nca::Header& nca_header, u8 index, u64 start, u64 end) {
     auto& section = nca_header.fs_table[index];
     section.media_start_offset = start / 0x200; // 0xC00 / 0x200
     section.media_end_offset = end / 0x200; // Section end offset / 200
     section._0x8[0] = 0x1; // Always 1
 }
 
-void write_nca_fs_header_pfs0(NcaHeader& nca_header, u8 index, const std::vector<u8>& master_hash, u64 hash_table_size, u32 block_size) {
+void write_nca_fs_header_pfs0(nca::Header& nca_header, u8 index, const std::vector<u8>& master_hash, u64 hash_table_size, u32 block_size) {
     auto& fs_header = nca_header.fs_header[index];
-    fs_header.hash_type = NcaHashType_HierarchicalSha256;
-    fs_header.fs_type = NcaFileSystemType_PFS0;
+    fs_header.hash_type = nca::HashType_HierarchicalSha256;
+    fs_header.fs_type = nca::FileSystemType_PFS0;
     fs_header.version = 0x2; // Always 2
     fs_header.hash_data.hierarchical_sha256_data.layer_count = 0x2;
     fs_header.hash_data.hierarchical_sha256_data.block_size = block_size;
-    fs_header.encryption_type = NcaEncryptionType_None;
+    fs_header.encryption_type = nca::EncryptionType_None;
     fs_header.hash_data.hierarchical_sha256_data.hash_layer.size = hash_table_size;
     std::memcpy(fs_header.hash_data.hierarchical_sha256_data.master_hash, master_hash.data(), master_hash.size());
     sha256CalculateHash(&nca_header.fs_header_hash[index], &fs_header, sizeof(fs_header));
 }
 
-void write_nca_fs_header_romfs(NcaHeader& nca_header, u8 index) {
+void write_nca_fs_header_romfs(nca::Header& nca_header, u8 index) {
     auto& fs_header = nca_header.fs_header[index];
-    fs_header.hash_type = NcaHashType_HierarchicalIntegrity;
-    fs_header.fs_type = NcaFileSystemType_RomFS;
+    fs_header.hash_type = nca::HashType_HierarchicalIntegrity;
+    fs_header.fs_type = nca::FileSystemType_RomFS;
     fs_header.version = 0x2; // Always 2
     fs_header.hash_data.integrity_meta_info.magic = 0x43465649;
     fs_header.hash_data.integrity_meta_info.version = 0x20000; // Always 0x20000
     fs_header.hash_data.integrity_meta_info.master_hash_size = SHA256_HASH_SIZE;
     fs_header.hash_data.integrity_meta_info.info_level_hash.max_layers = 0x7;
-    fs_header.encryption_type = NcaEncryptionType_None;
+    fs_header.encryption_type = nca::EncryptionType_None;
     fs_header.hash_data.integrity_meta_info.info_level_hash.levels[5].block_size = 0x0E; // 0x4000
     sha256CalculateHash(&nca_header.fs_header_hash[index], &fs_header, sizeof(fs_header));
 }
 
-void write_nca_pfs0(NcaHeader& nca_header, u8 index, const FileEntries& entries, u32 block_size, BufHelper& buf) {
+void write_nca_pfs0(nca::Header& nca_header, u8 index, const FileEntries& entries, u32 block_size, BufHelper& buf) {
     const auto pfs0 = build_pfs0(entries);
     const auto pfs0_hash_table = build_pfs0_hash_table(pfs0, block_size);
     const auto pfs0_master_hash = build_pfs0_master_hash(pfs0_hash_table);
@@ -887,7 +677,7 @@ auto ivfc_create_level(const std::vector<u8>& src) -> std::vector<u8> {
     return buf.buf;
 }
 
-void write_nca_romfs(NcaHeader& nca_header, u8 index, const FileEntries& entries, u32 block_size, BufHelper& buf) {
+void write_nca_romfs(nca::Header& nca_header, u8 index, const FileEntries& entries, u32 block_size, BufHelper& buf) {
     auto& fs_header = nca_header.fs_header[index];
     auto& meta_info = fs_header.hash_data.integrity_meta_info;
     auto& info_level_hash = meta_info.info_level_hash;
@@ -921,22 +711,22 @@ void write_nca_romfs(NcaHeader& nca_header, u8 index, const FileEntries& entries
     write_nca_fs_header_romfs(nca_header, index);
 }
 
-void write_nca_header_encypted(NcaHeader& nca_header, u64 tid, std::span<const u8> key, NcaContentType type, BufHelper& buf) {
-    nca_header.magic = 0x3341434E;
-    nca_header.distribution_type = NcaDistributionType_System;
+void write_nca_header_encypted(nca::Header& nca_header, u64 tid, const keys::Keys& keys, nca::ContentType type, BufHelper& buf) {
+    nca_header.magic = NCA3_MAGIC;
+    nca_header.distribution_type = nca::DistributionType_System;
     nca_header.content_type = type;
     nca_header.title_id = tid;
     nca_header.sdk_version = 0x000C1100;
     nca_header.size = buf.tell();
 
-    nca_encrypt_header(&nca_header, key);
+    nca_encrypt_header(&nca_header, keys.header_key);
     buf.seek(0);
     buf.write(&nca_header, sizeof(nca_header));
 }
 
-auto create_program_nca(u64 tid, std::span<const u8> key, const FileEntries& exefs, const FileEntries& romfs, const FileEntries& logo) -> NcaEntry {
+auto create_program_nca(u64 tid, const keys::Keys& keys, const FileEntries& exefs, const FileEntries& romfs, const FileEntries& logo) -> NcaEntry {
     BufHelper buf;
-    NcaHeader nca_header{};
+    nca::Header nca_header{};
     buf.write(&nca_header, sizeof(nca_header));
 
     write_nca_pfs0(nca_header, 0, exefs, PFS0_EXEFS_HASH_BLOCK_SIZE, buf);
@@ -945,23 +735,23 @@ auto create_program_nca(u64 tid, std::span<const u8> key, const FileEntries& exe
     if (logo.size() == 2 && !logo[0].data.empty() && !logo[1].data.empty()) {
         write_nca_pfs0(nca_header, 2, logo, PFS0_LOGO_HASH_BLOCK_SIZE, buf);
     }
-    write_nca_header_encypted(nca_header, tid, key, NcaContentType_Program, buf);
+    write_nca_header_encypted(nca_header, tid, keys, nca::ContentType_Program, buf);
 
     return {buf, NcmContentType_Program};
 }
 
-auto create_control_nca(u64 tid, std::span<const u8> key, const FileEntries& romfs) -> NcaEntry{
-    NcaHeader nca_header{};
+auto create_control_nca(u64 tid, const keys::Keys& keys, const FileEntries& romfs) -> NcaEntry{
+    nca::Header nca_header{};
     BufHelper buf;
     buf.write(&nca_header, sizeof(nca_header));
 
     write_nca_romfs(nca_header, 0, romfs, IVFC_HASH_BLOCK_SIZE, buf);
-    write_nca_header_encypted(nca_header, tid, key, NcaContentType_Control, buf);
+    write_nca_header_encypted(nca_header, tid, keys, nca::ContentType_Control, buf);
 
     return {buf, NcmContentType_Control};
 }
 
-auto create_meta_nca(u64 tid, std::span<const u8> key, NcmStorageId storage_id, const std::vector<NcaEntry>& ncas) -> NcaMetaEntry {
+auto create_meta_nca(u64 tid, const keys::Keys& keys, NcmStorageId storage_id, const std::vector<NcaEntry>& ncas) -> NcaMetaEntry {
     CnmtHeader cnmt_header{};
     NcmApplicationMetaExtendedHeader cnmt_extended{};
     NcmPackagedContentInfo packaged_content_info[2]{};
@@ -997,10 +787,10 @@ auto create_meta_nca(u64 tid, std::span<const u8> key, NcmStorageId storage_id, 
     std::snprintf(cnmt_name, sizeof(cnmt_name), "Application_%016lX.cnmt", tid);
     add_file_entry(cnmt, cnmt_name, cnmt_buf.buf.data(), cnmt_buf.buf.size());
 
-    NcaHeader nca_header{};
+    nca::Header nca_header{};
     buf.write(&nca_header, sizeof(nca_header));
     write_nca_pfs0(nca_header, 0, cnmt, PFS0_META_HASH_BLOCK_SIZE, buf);
-    write_nca_header_encypted(nca_header, tid, key, NcaContentType_Meta, buf);
+    write_nca_header_encypted(nca_header, tid, keys, nca::ContentType_Meta, buf);
 
     // entry
     NcaMetaEntry entry{buf, NcmContentType_Meta};
@@ -1040,26 +830,6 @@ auto create_meta_nca(u64 tid, std::span<const u8> key, NcmStorageId storage_id, 
     return entry;
 }
 
-Result nsDeleteApplicationRecord(Service* srv, u64 tid) {
-    return serviceDispatchIn(srv, 27, tid);
-}
-
-Result nsPushApplicationRecord(Service* srv, u64 tid, const NcmContentStorageRecord* records, u32 count) {
-    const struct {
-        u8 last_modified_event;
-        u8 padding[0x7];
-        u64 tid;
-    } in = { NsApplicationRecordType_Installed, {0}, tid };
-
-    return serviceDispatchIn(srv, 16, in,
-        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_In },
-        .buffers = { { records, sizeof(NcmContentStorageRecord) * count } });
-}
-
-Result nsInvalidateApplicationControlCache(Service* srv, u64 tid) {
-    return serviceDispatchIn(srv, 404, tid);
-}
-
 auto install_forwader_internal(ui::ProgressBox* pbox, OwoConfig& config, NcmStorageId storage_id) -> Result {
     R_UNLESS(!config.nro_path.empty(), OwoError_BadArgs);
     // R_UNLESS(!config.icon.empty(), OwoError_BadArgs);
@@ -1073,14 +843,8 @@ auto install_forwader_internal(ui::ProgressBox* pbox, OwoConfig& config, NcmStor
     R_TRY(nsInitialize());
     ON_SCOPE_EXIT(nsExit());
 
-    // generate header kek
-    u8 header_kek[0x20];
-    R_TRY(splCryptoGenerateAesKek(HEADER_KEK_SRC, 0, 0, header_kek));
-    // gen header key 0
-    u8 key[0x20];
-    R_TRY(splCryptoGenerateAesKey(header_kek, HEADER_KEY_SRC, key));
-    // gen header key 1
-    R_TRY(splCryptoGenerateAesKey(header_kek, HEADER_KEY_SRC + 0x10, key + 0x10));
+    keys::Keys keys;
+    R_TRY(keys::parse_keys(keys, false));
 
     // fix args to include nro path
     if (config.args.empty()) {
@@ -1124,7 +888,7 @@ auto install_forwader_internal(ui::ProgressBox* pbox, OwoConfig& config, NcmStor
         patch_npdm(exefs[1].data, npdm_patch);
 
         nca_entries.emplace_back(
-            create_program_nca(tid, key, exefs, romfs, logo)
+            create_program_nca(tid, keys, exefs, romfs, logo)
         );
     } else {
         nca_entries.emplace_back(
@@ -1147,18 +911,18 @@ auto install_forwader_internal(ui::ProgressBox* pbox, OwoConfig& config, NcmStor
         add_file_entry(romfs, "/icon_AmericanEnglish.dat", config.icon);
 
         nca_entries.emplace_back(
-            create_control_nca(tid, key, romfs)
+            create_control_nca(tid, keys, romfs)
         );
     }
 
     // create meta
     NcmContentMetaHeader content_meta_header;
     NcmContentMetaKey content_meta_key;
-    NcmContentStorageRecord content_storage_record;
+    ncm::ContentStorageRecord content_storage_record;
     NcmContentMetaData content_meta_data;
     {
         pbox->NewTransfer("Creating Meta"_i18n).UpdateTransfer(2, 8);
-        const auto meta_entry = create_meta_nca(tid, key, storage_id, nca_entries);
+        const auto meta_entry = create_meta_nca(tid, keys, storage_id, nca_entries);
 
         nca_entries.emplace_back(meta_entry.nca_entry);
         content_meta_header = meta_entry.content_meta_header;
@@ -1218,15 +982,15 @@ auto install_forwader_internal(ui::ProgressBox* pbox, OwoConfig& config, NcmStor
 
         // remove previous application record
         if (already_installed || hosversionBefore(2,0,0)) {
-            const auto rc = nsDeleteApplicationRecord(srv_ptr, tid);
+            const auto rc = ns::DeleteApplicationRecord(srv_ptr, tid);
             R_UNLESS(R_SUCCEEDED(rc) || hosversionBefore(2,0,0), rc);
         }
 
-        R_TRY(nsPushApplicationRecord(srv_ptr, tid, &content_storage_record, 1));
+        R_TRY(ns::PushApplicationRecord(srv_ptr, tid, &content_storage_record, 1));
 
         // force flush
         if (already_installed || hosversionBefore(2,0,0)) {
-            const auto rc = nsInvalidateApplicationControlCache(srv_ptr, tid);
+            const auto rc = ns::InvalidateApplicationControlCache(srv_ptr, tid);
             R_UNLESS(R_SUCCEEDED(rc) || hosversionBefore(2,0,0), rc);
         }
     }

@@ -1008,6 +1008,10 @@ void App::Draw() {
     this->queue.presentImage(this->swapchain, slot);
 }
 
+auto App::GetApp() -> App* {
+    return g_app;
+}
+
 auto App::GetVg() -> NVGcontext* {
     return g_app->vg;
 }
