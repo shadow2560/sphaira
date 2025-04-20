@@ -38,7 +38,7 @@ void thread_func(void* user) {
 
 } // namespace
 
-Menu::Menu() : MenuBase{"Irs"_i18n} {
+Menu::Menu() : MenuBase{"USB"_i18n} {
     SetAction(Button::B, Action{"Back"_i18n, [this](){
         SetPop();
     }});
