@@ -46,6 +46,7 @@ add_executable(sphaira
     source/ui/menus/menu_base.cpp
     source/ui/menus/themezer.cpp
     source/ui/menus/ghdl.cpp
+    source/ui/menus/usb_menu.cpp
 
     source/ui/error_box.cpp
     source/ui/notification.cpp
@@ -80,6 +81,7 @@ add_executable(sphaira
     source/yati/container/xci.cpp
     source/yati/source/file.cpp
     source/yati/source/stdio.cpp
+    source/yati/source/usb.cpp
 
     source/yati/nx/es.cpp
     source/yati/nx/keys.cpp

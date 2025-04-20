@@ -2,6 +2,7 @@
 #include "ui/menus/irs_menu.hpp"
 #include "ui/menus/themezer.hpp"
 #include "ui/menus/ghdl.hpp"
+#include "ui/menus/usb_menu.hpp"
 
 #include "ui/sidebar.hpp"
 #include "ui/popup_list.hpp"
@@ -315,6 +316,12 @@ MainMenu::MainMenu() {
                 if (App::IsApplication()) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Web"_i18n, [](){
                         WebShow("https://lite.duckduckgo.com/lite");
+                    }));
+                }
+
+                if (App::GetApp()->m_install.Get()) {
+                    options->Add(std::make_shared<SidebarEntryCallback>("Usb Install"_i18n, [](){
+                        App::Push(std::make_shared<menu::usb::Menu>());
                     }));
                 }
             }));
