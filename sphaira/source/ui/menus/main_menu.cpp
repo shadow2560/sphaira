@@ -3,6 +3,7 @@
 #include "ui/menus/themezer.hpp"
 #include "ui/menus/ghdl.hpp"
 #include "ui/menus/usb_menu.hpp"
+#include "ui/menus/ftp_menu.hpp"
 #include "ui/menus/gc_menu.hpp"
 
 #include "ui/sidebar.hpp"
@@ -321,6 +322,12 @@ MainMenu::MainMenu() {
                 }
 
                 if (App::GetApp()->m_install.Get()) {
+                    if (App::GetFtpEnable()) {
+                        options->Add(std::make_shared<SidebarEntryCallback>("Ftp Install"_i18n, [](){
+                            App::Push(std::make_shared<menu::ftp::Menu>());
+                        }));
+                    }
+
                     options->Add(std::make_shared<SidebarEntryCallback>("Usb Install"_i18n, [](){
                         App::Push(std::make_shared<menu::usb::Menu>());
                     }));
