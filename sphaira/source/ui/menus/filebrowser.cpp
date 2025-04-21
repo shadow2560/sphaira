@@ -942,14 +942,12 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
     // only support roms in correctly named folders, sorry!
     const auto db_indexs = GetRomDatabaseFromPath(m_path);
     const auto& entry = GetEntry();
-    const auto extension = entry.internal_extension.empty() ? entry.extension : entry.internal_extension;
-    if (extension.empty()) {
+    const auto extension = entry.extension;
+    const auto internal_extension = entry.internal_extension.empty() ? entry.extension : entry.internal_extension;
+    if (extension.empty() && internal_extension.empty()) {
         // log_write("failed to get extension for db: %s path: %s\n", database_entry.c_str(), m_path);
         return {};
     }
-
-    // log_write("got extension for db: %s path: %s\n", database_entry.c_str(), m_path);
-
 
     std::vector<FileAssocEntry> out_entries;
     if (!db_indexs.empty()) {
@@ -960,15 +958,14 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
                 // if (assoc_db == PATHS[db_idx].folder || assoc_db == PATHS[db_idx].database) {
                 for (auto db_idx : db_indexs) {
                     if (PATHS[db_idx].IsDatabase(assoc_db)) {
-                        for (const auto& assoc_ext : assoc.ext) {
-                            if (assoc_ext == extension) {
-                                log_write("found ext: %s assoc_ext: %s assoc.ext: %s\n", assoc.path.s, assoc_ext.c_str(), extension.c_str());
-                                out_entries.emplace_back(assoc);
-                            }
+                        if (assoc.IsExtension(extension, internal_extension)) {
+                            out_entries.emplace_back(assoc);
+                            goto jump;
                         }
                     }
                 }
             }
+            jump:
         }
     } else {
         // otherwise, if not in a valid folder, find an entry that doesn't
@@ -979,11 +976,9 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
         // to be in the correct folder, ie psx, to know what system that .iso is for.
         for (const auto& assoc : m_assoc_entries) {
             if (assoc.database.empty()) {
-                for (const auto& assoc_ext : assoc.ext) {
-                    if (assoc_ext == extension) {
-                        log_write("found ext: %s\n", assoc.path.s);
-                        out_entries.emplace_back(assoc);
-                    }
+                if (assoc.IsExtension(extension, internal_extension)) {
+                    log_write("found ext: %s\n", assoc.path.s);
+                    out_entries.emplace_back(assoc);
                 }
             }
         }
