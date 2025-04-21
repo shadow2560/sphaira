@@ -102,7 +102,15 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
             App::Push(std::make_shared<ui::ProgressBox>("Installing App"_i18n, [this](auto pbox) mutable -> bool {
                 log_write("inside progress box\n");
                 for (u32 i = 0; i < m_usb_count; i++) {
-                    const auto rc = yati::InstallFromSource(pbox, m_usb_source);
+                    std::string file_name;
+                    u64 file_size;
+                    if (R_FAILED(m_usb_source->GetFileInfo(file_name, file_size))) {
+                        return false;
+                    }
+
+                    log_write("got file name: %s size: %lX\n", file_name.c_str(), file_size);
+
+                    const auto rc = yati::InstallFromSource(pbox, m_usb_source, file_name);
                     if (R_FAILED(rc)) {
                         return false;
                     }
