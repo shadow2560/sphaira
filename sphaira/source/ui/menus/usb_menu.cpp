@@ -123,11 +123,11 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
             }, [this](bool result){
                 if (result) {
                     App::Notify("Usb install success!"_i18n);
+                    m_state = State::Done;
                 } else {
                     App::Notify("Usb install failed!"_i18n);
+                    m_state = State::Failed;
                 }
-                m_state = State::Done;
-                this->SetPop();
             }));
             break;
 
@@ -161,12 +161,11 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             break;
 
         case State::Done:
-            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Press B to Exit..."_i18n.c_str());
+            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Press B to exit..."_i18n.c_str());
             break;
 
         case State::Failed:
-            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Failed to init usb..."_i18n.c_str());
-            this->SetPop();
+            gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Failed to init usb, press B to exit..."_i18n.c_str());
             break;
     }
 }
