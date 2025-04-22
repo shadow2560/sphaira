@@ -544,7 +544,7 @@ auto App::GetThemeIndex() -> s64 {
     return g_app->m_theme_index;
 }
 
-auto App::GetDefaultImage(int* w, int* h) -> int {
+auto App::GetDefaultImage() -> int {
     return g_app->m_default_image;
 }
 
@@ -1392,8 +1392,33 @@ App::App(const char* argv0) {
         }
     }
 
-    // soon (tm)
-    // ui::bubble::Init();
+    struct EventDay {
+        u8 day;
+        u8 month;
+    };
+
+    static constexpr EventDay event_days[] = {
+        { .day = 1, .month = 1 }, // New years
+
+        { .day = 3, .month = 3 }, // March 3 (switch 1)
+        { .day = 10, .month = 5 }, // June 10 (switch 2)
+        { .day = 15, .month = 5 }, // June 15
+
+        { .day = 25, .month = 12 }, // Christmas
+        { .day = 26, .month = 12 },
+        { .day = 27, .month = 12 },
+        { .day = 28, .month = 12 },
+    };
+
+    const auto time = std::time(nullptr);
+    const auto tm = std::localtime(&time);
+
+    for (auto e : event_days) {
+        if (e.day == tm->tm_mday && e.month == (tm->tm_mon + 1)) {
+            ui::bubble::Init();
+            break;
+        }
+    }
 
     App::Push(std::make_shared<ui::menu::main::MainMenu>());
     log_write("finished app constructor\n");

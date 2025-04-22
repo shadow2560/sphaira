@@ -797,7 +797,6 @@ Result Yati::Setup() {
     config.allow_downgrade = App::GetApp()->m_allow_downgrade.Get();
     config.skip_if_already_installed = App::GetApp()->m_skip_if_already_installed.Get();
     config.ticket_only = App::GetApp()->m_ticket_only.Get();
-    config.patch_ticket = App::GetApp()->m_patch_ticket.Get();
     config.skip_base = App::GetApp()->m_skip_base.Get();
     config.skip_patch = App::GetApp()->m_skip_patch.Get();
     config.skip_addon = App::GetApp()->m_skip_addon.Get();
@@ -1078,7 +1077,7 @@ Result Yati::GetLatestVersion(const CnmtCollection& cnmt, u32& version_out, bool
     // TODO: fix this when gamecard is inserted as it will only return records
     // for the gamecard...
     // may have to use ncm directly to get the keys, then parse that.
-    u32 latest_version_num = cnmt.key.version;
+    version_out = cnmt.key.version;
     if (has_records) {
         s32 meta_count{};
         R_TRY(nsCountApplicationContentMeta(app_id, &meta_count));
@@ -1105,7 +1104,7 @@ Result Yati::GetLatestVersion(const CnmtCollection& cnmt, u32& version_out, bool
                     skip = true;
                 }
             } else {
-                latest_version_num = std::max(latest_version_num, record.key.version);
+                version_out = std::max(version_out, record.key.version);
             }
         }
     }
@@ -1142,9 +1141,7 @@ Result Yati::ImportTickets(std::span<TikCollection> tickets) {
                 log_write("WARNING: skipping ticket install, but it's required!\n");
             } else {
                 log_write("patching ticket\n");
-                if (config.patch_ticket) {
-                    R_TRY(es::PatchTicket(ticket.ticket, keys, false));
-                }
+                R_TRY(es::PatchTicket(ticket.ticket, keys));
                 log_write("installing ticket\n");
                 R_TRY(es::ImportTicket(std::addressof(es), ticket.ticket.data(), ticket.ticket.size(), ticket.cert.data(), ticket.cert.size()));
                 ticket.required = false;

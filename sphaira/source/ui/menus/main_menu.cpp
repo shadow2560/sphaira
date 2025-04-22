@@ -391,10 +391,6 @@ MainMenu::MainMenu() {
                         App::GetApp()->m_ticket_only.Set(enable);
                     }, "Enabled"_i18n, "Disabled"_i18n));
 
-                    options->Add(std::make_shared<SidebarEntryBool>("Patch ticket"_i18n, App::GetApp()->m_patch_ticket.Get(), [this](bool& enable){
-                        App::GetApp()->m_patch_ticket.Set(enable);
-                    }, "Enabled"_i18n, "Disabled"_i18n));
-
                     options->Add(std::make_shared<SidebarEntryBool>("Skip base"_i18n, App::GetApp()->m_skip_base.Get(), [this](bool& enable){
                         App::GetApp()->m_skip_base.Set(enable);
                     }, "Enabled"_i18n, "Disabled"_i18n));

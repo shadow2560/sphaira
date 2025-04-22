@@ -79,11 +79,6 @@ struct Config {
     // installs tickets only.
     bool ticket_only{};
 
-    // converts personalised tickets to common tickets, allows for offline play.
-    // this breaks ticket signature so es needs to be patched.
-    // modified common tickets are patched regardless of this setting.
-    bool patch_ticket{};
-
     // flags to enable / disable install of specific types.
     bool skip_base{};
     bool skip_patch{};

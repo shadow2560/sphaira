@@ -186,7 +186,7 @@ auto GetRomDatabaseFromPath(std::string_view path) -> RomDatabaseIndexs {
 }
 
 //
-auto GetRomIcon(fs::FsNative* fs, ProgressBox* pbox, std::string filename, std::string extension, const RomDatabaseIndexs& db_indexs, const NroEntry& nro) {
+auto GetRomIcon(fs::FsNative* fs, ProgressBox* pbox, std::string filename, const RomDatabaseIndexs& db_indexs, const NroEntry& nro) {
     // if no db entries, use nro icon
     if (db_indexs.empty()) {
         log_write("using nro image\n");
@@ -812,8 +812,7 @@ void Menu::InstallForwarder() {
                         return false;
                     }
                     log_write("got nro data\n");
-                    std::string file_name = GetEntry().GetInternalName();
-                    std::string extension = GetEntry().GetInternalExtension();
+                    auto file_name = assoc.use_base_name ? GetEntry().GetName() : GetEntry().GetInternalName();
 
                     if (auto pos = file_name.find_last_of('.'); pos != std::string::npos) {
                         log_write("got filename\n");
@@ -829,7 +828,7 @@ void Menu::InstallForwarder() {
                     config.name = nro.nacp.lang[0].name + std::string{" | "} + file_name;
                     // config.name = file_name;
                     config.nacp = nro.nacp;
-                    config.icon = GetRomIcon(m_fs.get(), pbox, file_name, extension, db_indexs, nro);
+                    config.icon = GetRomIcon(m_fs.get(), pbox, file_name, db_indexs, nro);
 
                     return R_SUCCEEDED(App::Install(pbox, config));
                 }));
@@ -1034,6 +1033,10 @@ void Menu::LoadAssocEntriesPath(const fs::FsPath& path) {
                             break;
                         }
                     }
+                }
+            } else if (!strcmp(Key, "use_base_name")) {
+                if (!strcmp(Value, "true") || !strcmp(Value, "1")) {
+                    assoc->use_base_name = true;
                 }
             }
             return 1;
