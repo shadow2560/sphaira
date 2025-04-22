@@ -44,6 +44,8 @@ public:
     ~App();
     void Loop();
 
+    static App* GetApp();
+
     static void Exit();
     static void ExitRestart();
     static auto GetVg() -> NVGcontext*;
@@ -78,7 +80,6 @@ public:
     static auto GetInstallEnable() -> bool;
     static auto GetInstallSdEnable() -> bool;
     static auto GetInstallPrompt() -> bool;
-    static auto GetThemeShuffleEnable() -> bool;
     static auto GetThemeMusicEnable() -> bool;
     static auto Get12HourTimeEnable() -> bool;
     static auto GetLanguage() -> long;
@@ -93,7 +94,6 @@ public:
     static void SetInstallEnable(bool enable);
     static void SetInstallSdEnable(bool enable);
     static void SetInstallPrompt(bool enable);
-    static void SetThemeShuffleEnable(bool enable);
     static void SetThemeMusicEnable(bool enable);
     static void Set12HourTimeEnable(bool enable);
     static void SetLanguage(long index);
@@ -177,13 +177,31 @@ public:
     option::OptionBool m_log_enabled{INI_SECTION, "log_enabled", false};
     option::OptionBool m_replace_hbmenu{INI_SECTION, "replace_hbmenu", false};
     option::OptionBool m_propose_updates_for_standard_paths{INI_SECTION, "propose_updates_for_standard_paths", false};
-    option::OptionBool m_install{INI_SECTION, "install", false};
-    option::OptionBool m_install_sd{INI_SECTION, "install_sd", true};
-    option::OptionLong m_install_prompt{INI_SECTION, "install_prompt", true};
-    option::OptionBool m_theme_shuffle{INI_SECTION, "theme_shuffle", false};
     option::OptionBool m_theme_music{INI_SECTION, "theme_music", true};
     option::OptionBool m_12hour_time{INI_SECTION, "12hour_time", false};
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto
+
+    // install options
+    option::OptionBool m_install{INI_SECTION, "install", false};
+    option::OptionBool m_install_sd{INI_SECTION, "install_sd", true};
+    option::OptionLong m_install_prompt{INI_SECTION, "install_prompt", true};
+    option::OptionBool m_allow_downgrade{INI_SECTION, "allow_downgrade", false};
+    option::OptionBool m_skip_if_already_installed{INI_SECTION, "skip_if_already_installed", true};
+    option::OptionBool m_ticket_only{INI_SECTION, "ticket_only", false};
+    option::OptionBool m_patch_ticket{INI_SECTION, "patch_ticket", true};
+    option::OptionBool m_skip_base{INI_SECTION, "skip_base", false};
+    option::OptionBool m_skip_patch{INI_SECTION, "skip_patch", false};
+    option::OptionBool m_skip_addon{INI_SECTION, "skip_addon", false};
+    option::OptionBool m_skip_data_patch{INI_SECTION, "skip_data_patch", false};
+    option::OptionBool m_skip_ticket{INI_SECTION, "skip_ticket", false};
+    option::OptionBool m_skip_nca_hash_verify{INI_SECTION, "skip_nca_hash_verify", false};
+    option::OptionBool m_skip_rsa_header_fixed_key_verify{INI_SECTION, "skip_rsa_header_fixed_key_verify", false};
+    option::OptionBool m_skip_rsa_npdm_fixed_key_verify{INI_SECTION, "skip_rsa_npdm_fixed_key_verify", false};
+    option::OptionBool m_ignore_distribution_bit{INI_SECTION, "ignore_distribution_bit", false};
+    option::OptionBool m_convert_to_standard_crypto{INI_SECTION, "convert_to_standard_crypto", false};
+    option::OptionBool m_lower_master_key{INI_SECTION, "lower_master_key", false};
+    option::OptionBool m_lower_system_version{INI_SECTION, "lower_system_version", false};
+
     // todo: move this into it's own menu
     option::OptionLong m_text_scroll_speed{"accessibility", "text_scroll_speed", 1}; // normal
 

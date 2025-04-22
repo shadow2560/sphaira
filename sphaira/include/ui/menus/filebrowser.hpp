@@ -122,6 +122,8 @@ struct Menu final : MenuBase {
 private:
     void SetIndex(s64 index);
     void InstallForwarder();
+    void InstallFile(const FileEntry& target);
+    void InstallFiles(const std::vector<FileEntry>& targets);
     auto Scan(const fs::FsPath& new_path, bool is_walk_up = false) -> Result;
 
     void LoadAssocEntriesPath(const fs::FsPath& path);

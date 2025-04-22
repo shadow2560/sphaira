@@ -132,9 +132,9 @@ void log_file_write(const char* msg) {
 }
 
 void log_file_fwrite(const char* fmt, ...) {
-    std::va_list v{};
+    va_list v{};
     va_start(v, fmt);
-    log_write_arg(fmt, v);
+    log_write_arg(fmt, &v);
     va_end(v);
 }
 
