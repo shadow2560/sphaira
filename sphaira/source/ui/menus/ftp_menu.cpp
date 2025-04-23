@@ -148,6 +148,13 @@ Menu::Menu() : MenuBase{"FTP Install (EXPERIMENTAL)"_i18n} {
 
     mutexInit(&m_mutex);
     ftpsrv::InitInstallMode(this, OnInstallStart, OnInstallWrite, OnInstallClose);
+
+    m_port = ftpsrv::GetPort();
+    m_anon = ftpsrv::IsAnon();
+    if (!m_anon) {
+        m_user = ftpsrv::GetUser();
+        m_pass = ftpsrv::GetPass();
+    }
 }
 
 Menu::~Menu() {
@@ -212,6 +219,53 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
     mutexLock(&m_mutex);
     ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
+
+    if (m_ip) {
+        if (m_type == NifmInternetConnectionType_WiFi) {
+            SetSubHeading("Connection Type: WiFi | Strength: "_i18n + std::to_string(m_strength));
+        } else {
+            SetSubHeading("Connection Type: Ethernet"_i18n);
+        }
+    } else {
+        SetSubHeading("Connection Type: None"_i18n);
+    }
+
+    const float start_x = 80;
+    const float font_size = 22;
+    const float spacing = 33;
+    float start_y = 125;
+    float bounds[4];
+
+    nvgFontSize(vg, font_size);
+
+    // note: textbounds strips spaces...todo: use nvgTextGlyphPositions() instead.
+    #define draw(key, ...) \
+        gfx::textBounds(vg, start_x, start_y, bounds, key.c_str()); \
+        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT), key.c_str()); \
+        gfx::drawTextArgs(vg, bounds[2], start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_SELECTED), __VA_ARGS__); \
+        start_y += spacing;
+
+    if (m_ip) {
+        draw("Host:"_i18n, " %u.%u.%u.%u", m_ip&0xFF, (m_ip>>8)&0xFF, (m_ip>>16)&0xFF, (m_ip>>24)&0xFF);
+        draw("Port:"_i18n, " %u", m_port);
+        if (!m_anon) {
+            draw("Username:"_i18n, " %s", m_user);
+            draw("Password:"_i18n, " %s", m_pass);
+        }
+
+        if (m_type == NifmInternetConnectionType_WiFi) {
+            NifmNetworkProfileData profile{};
+            if (R_SUCCEEDED(nifmGetCurrentNetworkProfile(&profile))) {
+                const auto& settings = profile.wireless_setting_data;
+                std::string passphrase;
+                std::transform(std::cbegin(settings.passphrase), std::cend(settings.passphrase), passphrase.begin(), toascii);
+                draw("SSID:"_i18n, " %.*s", settings.ssid_len, settings.ssid);
+                draw("Passphrase:"_i18n, " %s", passphrase.c_str());
+            }
+        }
+    }
+
+    #undef draw
 
     switch (m_state) {
         case State::None:

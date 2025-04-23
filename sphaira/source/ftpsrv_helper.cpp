@@ -389,6 +389,26 @@ void DisableInstallMode() {
     g_shared_data.enabled = false;
 }
 
+unsigned GetPort() {
+    std::scoped_lock lock{g_mutex};
+    return g_ftpsrv_config.port;
+}
+
+bool IsAnon() {
+    std::scoped_lock lock{g_mutex};
+    return g_ftpsrv_config.anon;
+}
+
+const char* GetUser() {
+    std::scoped_lock lock{g_mutex};
+    return g_ftpsrv_config.user;
+}
+
+const char* GetPass() {
+    std::scoped_lock lock{g_mutex};
+    return g_ftpsrv_config.pass;
+}
+
 } // namespace sphaira::ftpsrv
 
 extern "C" {

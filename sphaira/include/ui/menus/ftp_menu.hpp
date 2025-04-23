@@ -49,6 +49,11 @@ struct Menu final : MenuBase {
     Mutex m_mutex{};
     // the below are shared across threads, lock with the above mutex!
     State m_state{State::None};
+
+    const char* m_user{};
+    const char* m_pass{};
+    unsigned m_port{};
+    bool m_anon{};
 };
 
 } // namespace sphaira::ui::menu::ftp

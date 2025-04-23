@@ -14,4 +14,9 @@ using OnInstallClose = std::function<void(void* user)>;
 void InitInstallMode(void* user, OnInstallStart on_start, OnInstallWrite on_write, OnInstallClose on_close);
 void DisableInstallMode();
 
+unsigned GetPort();
+bool IsAnon();
+const char* GetUser();
+const char* GetPass();
+
 } // namespace sphaira::ftpsrv
