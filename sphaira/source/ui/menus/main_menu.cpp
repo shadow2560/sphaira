@@ -3,6 +3,7 @@
 #include "ui/menus/themezer.hpp"
 #include "ui/menus/ghdl.hpp"
 #include "ui/menus/usb_menu.hpp"
+#include "ui/menus/ftp_menu.hpp"
 #include "ui/menus/gc_menu.hpp"
 
 #include "ui/sidebar.hpp"
@@ -321,6 +322,12 @@ MainMenu::MainMenu() {
                 }
 
                 if (App::GetApp()->m_install.Get()) {
+                    if (App::GetFtpEnable()) {
+                        options->Add(std::make_shared<SidebarEntryCallback>("Ftp Install"_i18n, [](){
+                            App::Push(std::make_shared<menu::ftp::Menu>());
+                        }));
+                    }
+
                     options->Add(std::make_shared<SidebarEntryCallback>("Usb Install"_i18n, [](){
                         App::Push(std::make_shared<menu::usb::Menu>());
                     }));
@@ -382,10 +389,6 @@ MainMenu::MainMenu() {
 
                     options->Add(std::make_shared<SidebarEntryBool>("Ticket only"_i18n, App::GetApp()->m_ticket_only.Get(), [this](bool& enable){
                         App::GetApp()->m_ticket_only.Set(enable);
-                    }, "Enabled"_i18n, "Disabled"_i18n));
-
-                    options->Add(std::make_shared<SidebarEntryBool>("Patch ticket"_i18n, App::GetApp()->m_patch_ticket.Get(), [this](bool& enable){
-                        App::GetApp()->m_patch_ticket.Set(enable);
                     }, "Enabled"_i18n, "Disabled"_i18n));
 
                     options->Add(std::make_shared<SidebarEntryBool>("Skip base"_i18n, App::GetApp()->m_skip_base.Get(), [this](bool& enable){

@@ -186,7 +186,7 @@ auto GetRomDatabaseFromPath(std::string_view path) -> RomDatabaseIndexs {
 }
 
 //
-auto GetRomIcon(fs::FsNative* fs, ProgressBox* pbox, std::string filename, std::string extension, const RomDatabaseIndexs& db_indexs, const NroEntry& nro) {
+auto GetRomIcon(fs::FsNative* fs, ProgressBox* pbox, std::string filename, const RomDatabaseIndexs& db_indexs, const NroEntry& nro) {
     // if no db entries, use nro icon
     if (db_indexs.empty()) {
         log_write("using nro image\n");
@@ -812,8 +812,7 @@ void Menu::InstallForwarder() {
                         return false;
                     }
                     log_write("got nro data\n");
-                    std::string file_name = GetEntry().GetInternalName();
-                    std::string extension = GetEntry().GetInternalExtension();
+                    auto file_name = assoc.use_base_name ? GetEntry().GetName() : GetEntry().GetInternalName();
 
                     if (auto pos = file_name.find_last_of('.'); pos != std::string::npos) {
                         log_write("got filename\n");
@@ -829,7 +828,7 @@ void Menu::InstallForwarder() {
                     config.name = nro.nacp.lang[0].name + std::string{" | "} + file_name;
                     // config.name = file_name;
                     config.nacp = nro.nacp;
-                    config.icon = GetRomIcon(m_fs.get(), pbox, file_name, extension, db_indexs, nro);
+                    config.icon = GetRomIcon(m_fs.get(), pbox, file_name, db_indexs, nro);
 
                     return R_SUCCEEDED(App::Install(pbox, config));
                 }));
@@ -942,14 +941,12 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
     // only support roms in correctly named folders, sorry!
     const auto db_indexs = GetRomDatabaseFromPath(m_path);
     const auto& entry = GetEntry();
-    const auto extension = entry.internal_extension.empty() ? entry.extension : entry.internal_extension;
-    if (extension.empty()) {
+    const auto extension = entry.extension;
+    const auto internal_extension = entry.internal_extension.empty() ? entry.extension : entry.internal_extension;
+    if (extension.empty() && internal_extension.empty()) {
         // log_write("failed to get extension for db: %s path: %s\n", database_entry.c_str(), m_path);
         return {};
     }
-
-    // log_write("got extension for db: %s path: %s\n", database_entry.c_str(), m_path);
-
 
     std::vector<FileAssocEntry> out_entries;
     if (!db_indexs.empty()) {
@@ -960,15 +957,14 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
                 // if (assoc_db == PATHS[db_idx].folder || assoc_db == PATHS[db_idx].database) {
                 for (auto db_idx : db_indexs) {
                     if (PATHS[db_idx].IsDatabase(assoc_db)) {
-                        for (const auto& assoc_ext : assoc.ext) {
-                            if (assoc_ext == extension) {
-                                log_write("found ext: %s assoc_ext: %s assoc.ext: %s\n", assoc.path.s, assoc_ext.c_str(), extension.c_str());
-                                out_entries.emplace_back(assoc);
-                            }
+                        if (assoc.IsExtension(extension, internal_extension)) {
+                            out_entries.emplace_back(assoc);
+                            goto jump;
                         }
                     }
                 }
             }
+            jump:
         }
     } else {
         // otherwise, if not in a valid folder, find an entry that doesn't
@@ -979,11 +975,9 @@ auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
         // to be in the correct folder, ie psx, to know what system that .iso is for.
         for (const auto& assoc : m_assoc_entries) {
             if (assoc.database.empty()) {
-                for (const auto& assoc_ext : assoc.ext) {
-                    if (assoc_ext == extension) {
-                        log_write("found ext: %s\n", assoc.path.s);
-                        out_entries.emplace_back(assoc);
-                    }
+                if (assoc.IsExtension(extension, internal_extension)) {
+                    log_write("found ext: %s\n", assoc.path.s);
+                    out_entries.emplace_back(assoc);
                 }
             }
         }
@@ -1039,6 +1033,10 @@ void Menu::LoadAssocEntriesPath(const fs::FsPath& path) {
                             break;
                         }
                     }
+                }
+            } else if (!strcmp(Key, "use_base_name")) {
+                if (!strcmp(Value, "true") || !strcmp(Value, "1")) {
+                    assoc->use_base_name = true;
                 }
             }
             return 1;

@@ -64,7 +64,7 @@ public:
     static void SetTheme(s64 theme_index);
     static auto GetThemeIndex() -> s64;
 
-    static auto GetDefaultImage(int* w = nullptr, int* h = nullptr) -> int;
+    static auto GetDefaultImage() -> int;
 
     // returns argv[0]
     static auto GetExePath() -> fs::FsPath;
@@ -185,7 +185,6 @@ public:
     option::OptionBool m_allow_downgrade{INI_SECTION, "allow_downgrade", false};
     option::OptionBool m_skip_if_already_installed{INI_SECTION, "skip_if_already_installed", true};
     option::OptionBool m_ticket_only{INI_SECTION, "ticket_only", false};
-    option::OptionBool m_patch_ticket{INI_SECTION, "patch_ticket", true};
     option::OptionBool m_skip_base{INI_SECTION, "skip_base", false};
     option::OptionBool m_skip_patch{INI_SECTION, "skip_patch", false};
     option::OptionBool m_skip_addon{INI_SECTION, "skip_addon", false};
