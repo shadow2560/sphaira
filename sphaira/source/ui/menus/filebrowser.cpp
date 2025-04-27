@@ -279,26 +279,6 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 m_selected_count--;
             }
         }}),
-        std::make_pair(Button::DOWN, Action{[this](){
-            if (m_list->ScrollDown(m_index, 1, m_entries_current.size())) {
-                SetIndex(m_index);
-            }
-        }}),
-        std::make_pair(Button::UP, Action{[this](){
-            if (m_list->ScrollUp(m_index, 1, m_entries_current.size())) {
-                SetIndex(m_index);
-            }
-        }}),
-        std::make_pair(Button::DPAD_RIGHT, Action{[this](){
-            if (m_list->ScrollDown(m_index, 8, m_entries_current.size())) {
-                SetIndex(m_index);
-            }
-        }}),
-        std::make_pair(Button::DPAD_LEFT, Action{[this](){
-            if (m_list->ScrollUp(m_index, 8, m_entries_current.size())) {
-                SetIndex(m_index);
-            }
-        }}),
         std::make_pair(Button::A, Action{"Open"_i18n, [this](){
             if (m_entries_current.empty()) {
                 return;
@@ -626,8 +606,8 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
-    m_list->OnUpdate(controller, touch, m_entries_current.size(), [this](auto i) {
-        if (m_index == i) {
+    m_list->OnUpdate(controller, touch, m_index, m_entries_current.size(), [this](bool touch, auto i) {
+        if (touch && m_index == i) {
             FireAction(Button::A);
         } else {
             App::PlaySoundEffect(SoundEffect_Focus);
@@ -802,7 +782,7 @@ void Menu::InstallForwarder() {
             if (op_index) {
                 const auto assoc = assoc_list[*op_index];
                 log_write("pushing it\n");
-                App::Push(std::make_shared<ProgressBox>("Installing Forwarder"_i18n, [assoc, this](auto pbox) -> bool {
+                App::Push(std::make_shared<ProgressBox>(0, "Installing Forwarder"_i18n, GetEntry().name, [assoc, this](auto pbox) -> bool {
                     log_write("inside callback\n");
 
                     NroEntry nro{};
@@ -829,6 +809,7 @@ void Menu::InstallForwarder() {
                     // config.name = file_name;
                     config.nacp = nro.nacp;
                     config.icon = GetRomIcon(m_fs.get(), pbox, file_name, db_indexs, nro);
+                    pbox->SetImageDataConst(config.icon);
 
                     return R_SUCCEEDED(App::Install(pbox, config));
                 }));
@@ -849,7 +830,7 @@ void Menu::InstallFiles(const std::vector<FileEntry>& targets) {
         if (op_index && *op_index) {
             App::PopToMenu();
 
-            App::Push(std::make_shared<ui::ProgressBox>("Installing App"_i18n, [this, targets](auto pbox) mutable -> bool {
+            App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this, targets](auto pbox) mutable -> bool {
                 for (auto& e : targets) {
                     const auto rc = yati::InstallFromFile(pbox, &m_fs->m_fs, GetNewPath(e));
                     if (rc == yati::Result_Cancelled) {
@@ -1226,7 +1207,7 @@ void Menu::OnDeleteCallback() {
         Scan(m_path);
         log_write("did delete\n");
     } else {
-        App::Push(std::make_shared<ProgressBox>("Deleting"_i18n, [this](auto pbox){
+        App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox){
             FsDirCollections collections;
 
             // build list of dirs / files
@@ -1319,7 +1300,7 @@ void Menu::OnPasteCallback() {
         Scan(m_path);
         log_write("did paste\n");
     } else {
-        App::Push(std::make_shared<ProgressBox>("Pasting"_i18n, [this](auto pbox){
+        App::Push(std::make_shared<ProgressBox>(0, "Pasting"_i18n, "", [this](auto pbox){
 
             if (m_selected_type == SelectedType::Cut) {
                 for (const auto& p : m_selected_files) {

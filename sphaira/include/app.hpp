@@ -102,6 +102,13 @@ public:
 
     static void PlaySoundEffect(SoundEffect effect);
 
+    static void DisplayThemeOptions(bool left_side = true);
+    // todo:
+    static void DisplayNetworkOptions(bool left_side = true);
+    static void DisplayMiscOptions(bool left_side = true);
+    static void DisplayAdvancedOptions(bool left_side = true);
+    static void DisplayInstallOptions(bool left_side = true);
+
     void Draw();
     void Update();
     void Poll();

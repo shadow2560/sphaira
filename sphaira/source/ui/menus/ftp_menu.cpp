@@ -146,6 +146,10 @@ Menu::Menu() : MenuBase{"FTP Install (EXPERIMENTAL)"_i18n} {
         SetPop();
     }});
 
+    SetAction(Button::X, Action{"Options"_i18n, [this](){
+        App::DisplayInstallOptions(false);
+    }});
+
     mutexInit(&m_mutex);
     ftpsrv::InitInstallMode(this, OnInstallStart, OnInstallWrite, OnInstallClose);
 
@@ -183,7 +187,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
             log_write("set to progress\n");
             m_state = State::Progress;
             log_write("got connection\n");
-            App::Push(std::make_shared<ui::ProgressBox>("Installing App"_i18n, [this](auto pbox) mutable -> bool {
+            App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this](auto pbox) mutable -> bool {
                 log_write("inside progress box\n");
                 const auto rc = yati::InstallFromSource(pbox, m_source, m_source->m_path);
                 if (R_FAILED(rc)) {
