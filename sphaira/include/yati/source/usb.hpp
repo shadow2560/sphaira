@@ -2,7 +2,9 @@
 
 #include "base.hpp"
 #include "fs.hpp"
+
 #include <vector>
+#include <string>
 #include <new>
 #include <switch.h>
 
@@ -26,8 +28,9 @@ struct Usb final : Base {
     Result Finished();
 
     Result Init();
-    Result WaitForConnection(u64 timeout, u32& speed, u32& count);
-    Result GetFileInfo(std::string& name_out, u64& size_out);
+    Result IsUsbConnected(u64 timeout) const;
+    Result WaitForConnection(u64 timeout, std::vector<std::string>& out_names);
+    void SetFileNameForTranfser(const std::string& name);
 
 public:
     // custom allocator for std::vector that respects alignment.
@@ -62,10 +65,9 @@ private:
         UsbSessionEndpoint_Out = 1,
     };
 
-    Result SendCommand(s64 off, s64 size);
-    Result InternalRead(void* buf, s64 off, s64 size);
+    Result SendCmdHeader(u32 cmdId, size_t dataSize);
+    Result SendFileRangeCmd(u64 offset, u64 size);
 
-    bool GetConfigured() const;
     Event *GetCompletionEvent(UsbSessionEndpoint ep) const;
     Result WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) const;
     Result TransferAsync(UsbSessionEndpoint ep, void *buffer, u32 size, u32 *out_urb_id) const;
@@ -80,6 +82,7 @@ private:
     // aligned buffer that transfer data is copied to and from.
     // a vector is used to avoid multiple alloc within the transfer loop.
     PageAlignedVector m_aligned{};
+    std::string m_transfer_file_name{};
 };
 
 } // namespace sphaira::yati::source

@@ -14,22 +14,50 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Most of the usb transfer code was taken from Haze.
+// The USB transfer code was taken from Haze (part of Atmosphere).
+// The USB protocol was taken from Tinfoil, by Adubbz.
+
 #include "yati/source/usb.hpp"
 #include "log.hpp"
+#include <ranges>
 
 namespace sphaira::yati::source {
 namespace {
 
-constexpr u32 MAGIC = 0x53504841;
-constexpr u32 VERSION = 2;
-
-struct RecvHeader {
-    u32 magic;
-    u32 version;
-    u32 bcdUSB;
-    u32 count;
+enum USBCmdType : u8 {
+    REQUEST = 0,
+    RESPONSE = 1
 };
+
+enum USBCmdId : u32 {
+    EXIT = 0,
+    FILE_RANGE = 1
+};
+
+struct NX_PACKED USBCmdHeader {
+    u32 magic;
+    USBCmdType type;
+    u8 padding[0x3] = {0};
+    u32 cmdId;
+    u64 dataSize;
+    u8 reserved[0xC] = {0};
+};
+
+struct FileRangeCmdHeader {
+    u64 size;
+    u64 offset;
+    u64 nspNameLen;
+    u64 padding;
+};
+
+struct TUSHeader {
+    u32 magic; // TUL0 (Tinfoil Usb List 0)
+    u32 nspListSize;
+    u64 padding;
+};
+
+static_assert(sizeof(TUSHeader) == 0x10, "TUSHeader must be 0x10!");
+static_assert(sizeof(USBCmdHeader) == 0x20, "USBCmdHeader must be 0x20!");
 
 } // namespace
 
@@ -50,6 +78,11 @@ Result Usb::Init() {
     log_write("doing USB init\n");
     R_TRY(m_open_result);
 
+    SetSysSerialNumber serial_number;
+    R_TRY(setsysInitialize());
+    ON_SCOPE_EXIT(setsysExit());
+    R_TRY(setsysGetSerialNumber(&serial_number));
+
     u8 iManufacturer, iProduct, iSerialNumber;
     static const u16 supported_langs[1] = {0x0409};
     // Send language descriptor
@@ -59,7 +92,7 @@ Result Usb::Init() {
     // Send product
     R_TRY(usbDsAddUsbStringDescriptor(&iProduct, "Nintendo Switch"));
     // Send serial number
-    R_TRY(usbDsAddUsbStringDescriptor(&iSerialNumber, "SerialNumber"));
+    R_TRY(usbDsAddUsbStringDescriptor(&iSerialNumber, serial_number.number));
 
     // Send device descriptors
     struct usb_device_descriptor device_descriptor = {
@@ -128,13 +161,11 @@ Result Usb::Init() {
         .bInterfaceProtocol = USB_CLASS_VENDOR_SPEC,
     };
 
-
     struct usb_endpoint_descriptor endpoint_descriptor_in = {
         .bLength = USB_DT_ENDPOINT_SIZE,
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = USB_ENDPOINT_IN,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
-        .wMaxPacketSize = 0x40,
     };
 
     struct usb_endpoint_descriptor endpoint_descriptor_out = {
@@ -142,7 +173,6 @@ Result Usb::Init() {
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = USB_ENDPOINT_OUT,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
-        .wMaxPacketSize = 0x40,
     };
 
     const struct usb_ss_endpoint_companion_descriptor endpoint_companion = {
@@ -160,6 +190,8 @@ Result Usb::Init() {
     endpoint_descriptor_out.bEndpointAddress += interface_descriptor.bInterfaceNumber + 1;
 
     // Full Speed Config
+    endpoint_descriptor_in.wMaxPacketSize = 0x40;
+    endpoint_descriptor_out.wMaxPacketSize = 0x40;
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Full, &interface_descriptor, USB_DT_INTERFACE_SIZE));
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Full, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE));
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Full, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE));
@@ -191,49 +223,38 @@ Result Usb::Init() {
     R_SUCCEED();
 }
 
-Result Usb::WaitForConnection(u64 timeout, u32& speed, u32& count) {
-    struct {
-        u32 magic;
-        u32 version;
-    } send_header{MAGIC, VERSION};
+Result Usb::IsUsbConnected(u64 timeout) const {
+    return usbDsWaitReady(timeout);
+}
 
-    // send header.
-    R_TRY(TransferAll(false, &send_header, sizeof(send_header), timeout));
+Result Usb::WaitForConnection(u64 timeout, std::vector<std::string>& out_names) {
+    TUSHeader header;
+    R_TRY(TransferAll(true, &header, sizeof(header), timeout));
+    R_UNLESS(header.magic == 0x304C5554, Result_BadMagic);
+    R_UNLESS(header.nspListSize > 0, Result_BadCount);
+    log_write("USB got header\n");
 
-    // receive header.
-    struct RecvHeader recv_header;
-    R_TRY(TransferAll(true, &recv_header, sizeof(recv_header), timeout));
+    std::vector<char> names(header.nspListSize);
+    R_TRY(TransferAll(true, names.data(), names.size(), timeout));
 
-    // validate received header.
-    R_UNLESS(recv_header.magic == MAGIC, Result_BadMagic);
-    R_UNLESS(recv_header.version == VERSION, Result_BadVersion);
-    R_UNLESS(recv_header.count > 0, Result_BadCount);
+    out_names.clear();
+    for (const auto& name : std::views::split(names, '\n')) {
+        if (!name.empty()) {
+            out_names.emplace_back(name.data(), name.size());
+        }
+    }
 
-    count = recv_header.count;
-    speed = recv_header.bcdUSB;
+    for (auto& name : out_names) {
+        log_write("got name: %s\n", name.c_str());
+    }
+
+    R_UNLESS(!out_names.empty(), Result_BadCount);
+    log_write("USB SUCCESS\n");
     R_SUCCEED();
 }
 
-Result Usb::GetFileInfo(std::string& name_out, u64& size_out) {
-    struct {
-        u64 size;
-        u64 name_length;
-    } file_info_meta;
-
-    // receive meta.
-    R_TRY(TransferAll(true, &file_info_meta, sizeof(file_info_meta), m_transfer_timeout));
-
-    name_out.resize(file_info_meta.name_length);
-    R_TRY(TransferAll(true, name_out.data(), file_info_meta.name_length, m_transfer_timeout));
-
-    size_out = file_info_meta.size;
-    R_SUCCEED();
-}
-
-bool Usb::GetConfigured() const {
-    UsbState usb_state;
-    usbDsGetState(std::addressof(usb_state));
-    return usb_state == UsbState_Configured;
+void Usb::SetFileNameForTranfser(const std::string& name) {
+    m_transfer_file_name = name;
 }
 
 Event *Usb::GetCompletionEvent(UsbSessionEndpoint ep) const {
@@ -270,12 +291,7 @@ Result Usb::TransferPacketImpl(bool read, void *page, u32 size, u32 *out_size_tr
     u32 urb_id;
 
     /* If we're not configured yet, wait to become configured first. */
-    // R_TRY(usbDsWaitReady(timeout));
-    if (!GetConfigured()) {
-        R_TRY(eventWait(usbDsGetStateChangeEvent(), timeout));
-        R_TRY(eventClear(usbDsGetStateChangeEvent()));
-        R_THROW(0xEA01);
-    }
+    R_TRY(IsUsbConnected(timeout));
 
     /* Select the appropriate endpoint and begin a transfer. */
     const auto ep = read ? UsbSessionEndpoint_Out : UsbSessionEndpoint_In;
@@ -319,30 +335,42 @@ Result Usb::TransferAll(bool read, void *data, u32 size, u64 timeout) {
     R_SUCCEED();
 }
 
-Result Usb::SendCommand(s64 off, s64 size) {
-    struct {
-        u32 hash;
-        u32 magic;
-        s64 off;
-        s64 size;
-    } meta{0, 0, off, size};
+Result Usb::SendCmdHeader(u32 cmdId, size_t dataSize) {
+    USBCmdHeader header{
+        .magic = 0x30435554, // TUC0 (Tinfoil USB Command 0)
+        .type = USBCmdType::REQUEST,
+        .cmdId = cmdId,
+        .dataSize = dataSize,
+    };
 
-    return TransferAll(false, &meta, sizeof(meta), m_transfer_timeout);
+    return TransferAll(false, &header, sizeof(header), m_transfer_timeout);
+}
+
+Result Usb::SendFileRangeCmd(u64 off, u64 size) {
+    FileRangeCmdHeader fRangeHeader;
+    fRangeHeader.size = size;
+    fRangeHeader.offset = off;
+    fRangeHeader.nspNameLen = m_transfer_file_name.size();
+    fRangeHeader.padding = 0;
+
+    R_TRY(SendCmdHeader(USBCmdId::FILE_RANGE, sizeof(fRangeHeader) + fRangeHeader.nspNameLen));
+    R_TRY(TransferAll(false, &fRangeHeader, sizeof(fRangeHeader), m_transfer_timeout));
+    R_TRY(TransferAll(false, m_transfer_file_name.data(), m_transfer_file_name.size(), m_transfer_timeout));
+
+    USBCmdHeader responseHeader;
+    R_TRY(TransferAll(true, &responseHeader, sizeof(responseHeader), m_transfer_timeout));
+
+    R_SUCCEED();
 }
 
 Result Usb::Finished() {
-    return SendCommand(0, 0);
-}
-
-Result Usb::InternalRead(void* buf, s64 off, s64 size) {
-    R_TRY(SendCommand(off, size));
-    R_TRY(TransferAll(true, buf, size, m_transfer_timeout));
-    R_SUCCEED();
+    return SendCmdHeader(USBCmdId::EXIT, 0);
 }
 
 Result Usb::Read(void* buf, s64 off, s64 size, u64* bytes_read) {
     R_TRY(GetOpenResult());
-    R_TRY(InternalRead(buf, off, size));
+    R_TRY(SendFileRangeCmd(off, size));
+    R_TRY(TransferAll(true, buf, size, m_transfer_timeout));
     *bytes_read = size;
     R_SUCCEED();
 }
