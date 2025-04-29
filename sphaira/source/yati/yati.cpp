@@ -987,7 +987,7 @@ Result Yati::InstallCnmtNca(std::span<TikCollection> tickets, CnmtCollection& cn
         R_UNLESS(it != collections.cend(), Result_NcaNotFound);
 
         log_write("found: %s\n", str.str);
-        cnmt.infos.emplace_back(info);
+        cnmt.infos.emplace_back(packed_info);
         auto& nca = cnmt.ncas.emplace_back(*it);
         nca.type = info.content_type;
     }
