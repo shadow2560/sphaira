@@ -208,7 +208,7 @@ MainMenu::MainMenu() {
 
     this->SetActions(
         std::make_pair(Button::START, Action{App::Exit}),
-        std::make_pair(Button::SELECT, Action{[this](){
+        std::make_pair(Button::SELECT, Action{"Misc"_i18n, [this](){
             App::DisplayMiscOptions();
         }}),
         std::make_pair(Button::Y, Action{"Menu"_i18n, [this](){
