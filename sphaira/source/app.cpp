@@ -1540,17 +1540,21 @@ void App::DisplayInstallOptions(bool left_side) {
     install_items.push_back("System memory"_i18n);
     install_items.push_back("microSD card"_i18n);
 
-    options->Add(std::make_shared<ui::SidebarEntryBool>("Enable"_i18n, App::GetInstallEnable(), [](bool& enable){
-        App::SetInstallEnable(enable);
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Enable"_i18n, App::GetApp()->m_install.Get(), [](bool& enable){
+        App::GetApp()->m_install.Set(enable);
     }, "Enabled"_i18n, "Disabled"_i18n));
 
-    options->Add(std::make_shared<ui::SidebarEntryBool>("Show install warning"_i18n, App::GetInstallPrompt(), [](bool& enable){
-        App::SetInstallPrompt(enable);
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Show install warning"_i18n, App::GetApp()->m_install_prompt.Get(), [](bool& enable){
+        App::GetApp()->m_install_prompt.Set(enable);
     }, "Enabled"_i18n, "Disabled"_i18n));
 
     options->Add(std::make_shared<ui::SidebarEntryArray>("Install location"_i18n, install_items, [](s64& index_out){
         App::SetInstallSdEnable(index_out);
     }, (s64)App::GetInstallSdEnable()));
+
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Boost CPU clock"_i18n, App::GetApp()->m_boost_mode.Get(), [](bool& enable){
+        App::GetApp()->m_boost_mode.Set(enable);
+    }, "Enabled"_i18n, "Disabled"_i18n));
 
     options->Add(std::make_shared<ui::SidebarEntryBool>("Allow downgrade"_i18n, App::GetApp()->m_allow_downgrade.Get(), [](bool& enable){
         App::GetApp()->m_allow_downgrade.Set(enable);
@@ -1568,11 +1572,11 @@ void App::DisplayInstallOptions(bool left_side) {
         App::GetApp()->m_skip_base.Set(enable);
     }, "Enabled"_i18n, "Disabled"_i18n));
 
-    options->Add(std::make_shared<ui::SidebarEntryBool>("Skip Patch"_i18n, App::GetApp()->m_skip_patch.Get(), [](bool& enable){
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Skip patch"_i18n, App::GetApp()->m_skip_patch.Get(), [](bool& enable){
         App::GetApp()->m_skip_patch.Set(enable);
     }, "Enabled"_i18n, "Disabled"_i18n));
 
-    options->Add(std::make_shared<ui::SidebarEntryBool>("Skip addon"_i18n, App::GetApp()->m_skip_addon.Get(), [](bool& enable){
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Skip dlc"_i18n, App::GetApp()->m_skip_addon.Get(), [](bool& enable){
         App::GetApp()->m_skip_addon.Set(enable);
     }, "Enabled"_i18n, "Disabled"_i18n));
 
