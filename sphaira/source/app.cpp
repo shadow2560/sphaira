@@ -44,8 +44,33 @@ extern "C" {
 namespace sphaira {
 namespace {
 
+constexpr fs::FsPath DEFAULT_MUSIC_PATH = "/config/sphaira/themes/default_music.bfstm";
+constexpr const char* DEFAULT_MUSIC_URL = "https://files.catbox.moe/1ovji1.bfstm";
+// constexpr const char* DEFAULT_MUSIC_URL = "https://raw.githubusercontent.com/ITotalJustice/sphaira/refs/heads/master/assets/default_music.bfstm";
+
+void download_default_music() {
+    App::Push(std::make_shared<ui::ProgressBox>(0, "Downloading "_i18n, "default_music.bfstm", [](auto pbox){
+        const auto result = curl::Api().ToFile(
+            curl::Url{DEFAULT_MUSIC_URL},
+            curl::Path{DEFAULT_MUSIC_PATH},
+            curl::OnProgress{pbox->OnDownloadProgressCallback()}
+        );
+
+        return result.success;
+    }, [](bool success){
+        if (success) {
+            App::Notify("Downloaded "_i18n + "default_music.bfstm");
+            App::SetTheme(App::GetThemeIndex());
+        } else {
+            App::Push(std::make_shared<ui::ErrorBox>(
+                "Failed to download default_music.bfstm, please try again"_i18n
+            ));
+        }
+    }));
+}
+
 struct ThemeData {
-    fs::FsPath music_path{"/config/sphaira/themes/default_music.bfstm"};
+    fs::FsPath music_path{DEFAULT_MUSIC_PATH};
     std::string elements[ThemeEntryID_MAX]{};
 };
 
@@ -1114,7 +1139,6 @@ void App::CloseTheme() {
     if (m_sound_ids[SoundEffect_Music]) {
         plsrPlayerFree(m_sound_ids[SoundEffect_Music]);
         m_sound_ids[SoundEffect_Music] = nullptr;
-        plsrBFSTMClose(&m_theme.music);
     }
 
     for (auto& e : m_theme.elements) {
@@ -1144,10 +1168,12 @@ void App::LoadTheme(const ThemeMeta& meta) {
 
         // load music
         if (!theme_data.music_path.empty()) {
-            if (R_SUCCEEDED(plsrBFSTMOpen(theme_data.music_path, &m_theme.music))) {
-                if (R_SUCCEEDED(plsrPlayerLoadStream(&m_theme.music, &m_sound_ids[SoundEffect_Music]))) {
+            PLSR_BFSTM music_stream;
+            if (R_SUCCEEDED(plsrBFSTMOpen(theme_data.music_path, &music_stream))) {
+                if (R_SUCCEEDED(plsrPlayerLoadStream(&music_stream, &m_sound_ids[SoundEffect_Music]))) {
                     PlaySoundEffect(SoundEffect_Music);
                 }
+                plsrBFSTMClose(&music_stream);
             }
         }
     }
@@ -1453,7 +1479,7 @@ void App::DisplayThemeOptions(bool left_side) {
     auto options = std::make_shared<ui::Sidebar>("Theme Options"_i18n, left_side ? ui::Sidebar::Side::LEFT : ui::Sidebar::Side::RIGHT);
     ON_SCOPE_EXIT(App::Push(options));
 
-    options->Add(std::make_shared<ui::SidebarEntryArray>("Select Theme"_i18n, theme_items, [theme_items](s64& index_out){
+    options->Add(std::make_shared<ui::SidebarEntryArray>("Select Theme"_i18n, theme_items, [](s64& index_out){
         App::SetTheme(index_out);
     }, App::GetThemeIndex()));
 
@@ -1464,6 +1490,23 @@ void App::DisplayThemeOptions(bool left_side) {
     options->Add(std::make_shared<ui::SidebarEntryBool>("12 Hour Time"_i18n, App::Get12HourTimeEnable(), [](bool& enable){
         App::Set12HourTimeEnable(enable);
     }, "Enabled"_i18n, "Disabled"_i18n));
+
+    options->Add(std::make_shared<ui::SidebarEntryCallback>("Download Default Music"_i18n, [](){
+        // check if we already have music
+        if (fs::FileExists(DEFAULT_MUSIC_PATH)) {
+            App::Push(std::make_shared<ui::OptionBox>(
+                "Overwrite current default music?"_i18n,
+                "No"_i18n, "Yes"_i18n, 0, [](auto op_index){
+                    if (op_index && *op_index) {
+                        download_default_music();
+                    }
+                }
+            ));
+
+        } else {
+            download_default_music();
+        }
+    }));
 }
 
 void App::DisplayNetworkOptions(bool left_side) {
