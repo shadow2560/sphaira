@@ -7,7 +7,6 @@
 #include "ui/error_box.hpp"
 
 #include "ui/menus/main_menu.hpp"
-#include "ui/menus/irs_menu.hpp"
 #include "ui/menus/themezer.hpp"
 #include "ui/menus/ghdl.hpp"
 #include "ui/menus/usb_menu.hpp"
@@ -1477,10 +1476,6 @@ void App::DisplayMiscOptions(bool left_side) {
 
     options->Add(std::make_shared<ui::SidebarEntryCallback>("GitHub"_i18n, [](){
         App::Push(std::make_shared<ui::menu::gh::Menu>());
-    }));
-
-    options->Add(std::make_shared<ui::SidebarEntryCallback>("Irs"_i18n, [](){
-        App::Push(std::make_shared<ui::menu::irs::Menu>());
     }));
 
     if (App::IsApplication()) {
