@@ -195,6 +195,8 @@ private:
         } else {
             const auto update_entry = [this, &hash_key](const char* tag, const std::string& value) {
                 if (value.empty()) {
+                    // workaround for appstore accepting etags but not returning them.
+                    yyjson_mut_obj_remove_str(hash_key, tag);
                     return true;
                 } else {
                     auto key = yyjson_mut_obj_get(hash_key, tag);
