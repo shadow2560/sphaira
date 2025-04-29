@@ -24,11 +24,6 @@ namespace {
 constexpr u32 MAGIC = 0x53504841;
 constexpr u32 VERSION = 2;
 
-struct SendHeader {
-    u32 magic;
-    u32 version;
-};
-
 struct RecvHeader {
     u32 magic;
     u32 version;
@@ -41,6 +36,8 @@ struct RecvHeader {
 Usb::Usb(u64 transfer_timeout) {
     m_open_result = usbDsInitialize();
     m_transfer_timeout = transfer_timeout;
+    // this avoids allocations during transfers.
+    m_aligned.reserve(1024 * 1024 * 16);
 }
 
 Usb::~Usb() {
@@ -195,24 +192,17 @@ Result Usb::Init() {
 }
 
 Result Usb::WaitForConnection(u64 timeout, u32& speed, u32& count) {
-    const SendHeader send_header{
-        .magic = MAGIC,
-        .version = VERSION,
-    };
-
-    alignas(0x1000) u8 aligned[0x1000]{};
-    std::memcpy(aligned, std::addressof(send_header), sizeof(send_header));
+    struct {
+        u32 magic;
+        u32 version;
+    } send_header{MAGIC, VERSION};
 
     // send header.
-    u32 transferredSize;
-    R_TRY(TransferPacketImpl(false, aligned, sizeof(send_header), &transferredSize, timeout));
+    R_TRY(TransferAll(false, &send_header, sizeof(send_header), timeout));
 
     // receive header.
-    struct RecvHeader recv_header{};
-    R_TRY(TransferPacketImpl(true, aligned, sizeof(recv_header), &transferredSize, timeout));
-
-    // copy data into header struct.
-    std::memcpy(&recv_header, aligned, sizeof(recv_header));
+    struct RecvHeader recv_header;
+    R_TRY(TransferAll(true, &recv_header, sizeof(recv_header), timeout));
 
     // validate received header.
     R_UNLESS(recv_header.magic == MAGIC, Result_BadMagic);
@@ -230,17 +220,11 @@ Result Usb::GetFileInfo(std::string& name_out, u64& size_out) {
         u64 name_length;
     } file_info_meta;
 
-    alignas(0x1000) u8 aligned[0x1000]{};
-
     // receive meta.
-    u32 transferredSize;
-    R_TRY(TransferPacketImpl(true, aligned, sizeof(file_info_meta), &transferredSize, m_transfer_timeout));
-    std::memcpy(&file_info_meta, aligned, sizeof(file_info_meta));
-    R_UNLESS(file_info_meta.name_length < sizeof(aligned), 0x1);
+    R_TRY(TransferAll(true, &file_info_meta, sizeof(file_info_meta), m_transfer_timeout));
 
-    R_TRY(TransferPacketImpl(true, aligned, file_info_meta.name_length, &transferredSize, m_transfer_timeout));
     name_out.resize(file_info_meta.name_length);
-    std::memcpy(name_out.data(), aligned, name_out.size());
+    R_TRY(TransferAll(true, name_out.data(), file_info_meta.name_length, m_transfer_timeout));
 
     size_out = file_info_meta.size;
     R_SUCCEED();
@@ -304,7 +288,38 @@ Result Usb::TransferPacketImpl(bool read, void *page, u32 size, u32 *out_size_tr
     return GetTransferResult(ep, urb_id, nullptr, out_size_transferred);
 }
 
-Result Usb::SendCommand(s64 off, s64 size) const {
+// while it may seem like a bad idea to transfer data to a buffer and copy it
+// in practice, this has no impact on performance.
+// the switch is *massively* bottlenecked by slow io (nand and sd).
+// so making usb transfers zero-copy provides no benefit other than increased
+// code complexity and the increase of future bugs if/when sphaira is forked
+// an changes are made.
+// yati already goes to great lengths to be zero-copy during installing
+// by swapping buffers and inflating in-place.
+Result Usb::TransferAll(bool read, void *data, u32 size, u64 timeout) {
+    auto buf = static_cast<u8*>(data);
+    m_aligned.resize((size + 0xFFF) & ~0xFFF);
+
+    while (size) {
+        if (!read) {
+            std::memcpy(m_aligned.data(), buf, size);
+        }
+
+        u32 out_size_transferred;
+        R_TRY(TransferPacketImpl(read, m_aligned.data(), size, &out_size_transferred, timeout));
+
+        if (read) {
+            std::memcpy(buf, m_aligned.data(), out_size_transferred);
+        }
+
+        buf += out_size_transferred;
+        size -= out_size_transferred;
+    }
+
+    R_SUCCEED();
+}
+
+Result Usb::SendCommand(s64 off, s64 size) {
     struct {
         u32 hash;
         u32 magic;
@@ -312,64 +327,16 @@ Result Usb::SendCommand(s64 off, s64 size) const {
         s64 size;
     } meta{0, 0, off, size};
 
-    alignas(0x1000) static u8 aligned[0x1000]{};
-    std::memcpy(aligned, std::addressof(meta), sizeof(meta));
-
-    u32 transferredSize;
-    return TransferPacketImpl(false, aligned, sizeof(meta), &transferredSize, m_transfer_timeout);
+    return TransferAll(false, &meta, sizeof(meta), m_transfer_timeout);
 }
 
-Result Usb::Finished() const {
+Result Usb::Finished() {
     return SendCommand(0, 0);
 }
 
-Result Usb::InternalRead(void* _buf, s64 off, s64 size) const {
-    u8* buf = (u8*)_buf;
-    alignas(0x1000) u8 aligned[0x1000]{};
-    const auto stored_size = size;
-    s64 total = 0;
-
-    while (size) {
-        auto read_size = size;
-        auto read_buf = buf;
-
-        if (u64(buf) & 0xFFF) {
-            read_size = std::min<u64>(size, sizeof(aligned) - (u64(buf) & 0xFFF));
-            read_buf = aligned;
-            log_write("unaligned read %zd %zd read_size: %zd align: %zd\n", off, size, read_size, u64(buf) & 0xFFF);
-        } else if (read_size & 0xFFF) {
-            if (read_size <= 0xFFF) {
-                log_write("unaligned small read %zd %zd read_size: %zd align: %zd\n", off, size, read_size, u64(buf) & 0xFFF);
-                read_buf = aligned;
-            } else {
-                log_write("unaligned big read %zd %zd read_size: %zd align: %zd\n", off, size, read_size, u64(buf) & 0xFFF);
-                // read as much as possible into buffer, the rest will
-                // be handled in a second read which will be aligned size aligned.
-                read_size = read_size & ~0xFFF;
-            }
-        }
-
-        R_TRY(SendCommand(off, read_size));
-
-        u32 transferredSize{};
-        R_TRY(TransferPacketImpl(true, read_buf, read_size, &transferredSize, m_transfer_timeout));
-        R_UNLESS(transferredSize <= read_size, Result_BadTransferSize);
-
-        if (read_buf == aligned) {
-            std::memcpy(buf, aligned, transferredSize);
-        }
-
-        if (transferredSize < read_size) {
-            log_write("reading less than expected! %u vs %zd stored: %zd\n", transferredSize, read_size, stored_size);
-        }
-
-        off += transferredSize;
-        buf += transferredSize;
-        size -= transferredSize;
-        total += transferredSize;
-    }
-
-    R_UNLESS(total == stored_size, Result_BadTotalSize);
+Result Usb::InternalRead(void* buf, s64 off, s64 size) {
+    R_TRY(SendCommand(off, size));
+    R_TRY(TransferAll(true, buf, size, m_transfer_timeout));
     R_SUCCEED();
 }
 

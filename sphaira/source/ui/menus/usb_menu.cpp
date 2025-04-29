@@ -128,6 +128,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
                 if (result) {
                     App::Notify("Usb install success!"_i18n);
                     m_state = State::Done;
+                    SetPop();
                 } else {
                     App::Notify("Usb install failed!"_i18n);
                     m_state = State::Failed;
