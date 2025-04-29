@@ -453,6 +453,9 @@ Result Menu::GcOnEvent() {
         if (m_mounted) {
             log_write("trying to mount\n");
             m_mounted = R_SUCCEEDED(GcMount());
+            if (m_mounted) {
+                App::PlaySoundEffect(SoundEffect::SoundEffect_Startup);
+            }
         } else {
             log_write("trying to unmount\n");
             GcUnmount();

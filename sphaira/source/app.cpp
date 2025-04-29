@@ -1310,16 +1310,21 @@ App::App(const char* argv0) {
         if (R_SUCCEEDED(plsrBFSAROpen("qlaunch:/sound/qlaunch.bfsar", &qlaunch_bfsar))) {
             ON_SCOPE_EXIT(plsrBFSARClose(&qlaunch_bfsar));
 
-            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconFocus", &m_sound_ids[SoundEffect_Focus]);
-            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconScroll", &m_sound_ids[SoundEffect_Scroll]);
-            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconLimit", &m_sound_ids[SoundEffect_Limit]);
-            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeStartupMenu_game", &m_sound_ids[SoundEffect_Startup]);
-            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeGameIconAdd", &m_sound_ids[SoundEffect_Install]);
-            plsrPlayerLoadSoundByName(&qlaunch_bfsar, "SeInsertError", &m_sound_ids[SoundEffect_Error]);
+            const auto load_sound = [&](const char* name, u32 id) {
+                if (R_FAILED(plsrPlayerLoadSoundByName(&qlaunch_bfsar, name, &m_sound_ids[id]))) {
+                    log_write("[PLSR] failed to load sound effect: %s\n", name);
+                }
+            };
+
+            load_sound("SeGameIconFocus", SoundEffect_Focus);
+            load_sound("SeGameIconScroll", SoundEffect_Scroll);
+            load_sound("SeGameIconLimit", SoundEffect_Limit);
+            load_sound("StartupMenu_Game", SoundEffect_Startup);
+            load_sound("SeGameIconAdd", SoundEffect_Install);
+            load_sound("SeInsertError", SoundEffect_Error);
 
             plsrPlayerSetVolume(m_sound_ids[SoundEffect_Limit], 2.0f);
             plsrPlayerSetVolume(m_sound_ids[SoundEffect_Focus], 0.5f);
-            PlaySoundEffect(SoundEffect_Startup);
         }
     } else {
         log_write("failed to mount romfs 0x0100000000001000\n");
