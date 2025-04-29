@@ -18,7 +18,6 @@
 #include "i18n.hpp"
 #include "log.hpp"
 
-#include <new>
 #include <zstd.h>
 #include <minIni.h>
 
@@ -29,37 +28,6 @@ constexpr NcmStorageId NCM_STORAGE_IDS[]{
     NcmStorageId_BuiltInUser,
     NcmStorageId_SdCard,
 };
-
-// custom allocator for std::vector that respects alignment.
-// https://en.cppreference.com/w/cpp/named_req/Allocator
-template <typename T, std::size_t Align>
-struct CustomVectorAllocator {
-public:
-    // https://en.cppreference.com/w/cpp/memory/new/operator_new
-    auto allocate(std::size_t n) -> T* {
-        // log_write("allocating ptr size: %zu\n", n);
-        return new(align) T[n];
-    }
-
-    // https://en.cppreference.com/w/cpp/memory/new/operator_delete
-    auto deallocate(T* p, std::size_t n) noexcept -> void {
-        // log_write("deleting ptr size: %zu\n", n);
-        ::operator delete[] (p, n, align);
-    }
-
-private:
-    static constexpr inline std::align_val_t align{Align};
-};
-
-template <typename T>
-struct PageAllocator : CustomVectorAllocator<T, 0x1000> {
-    using value_type = T; // used by std::vector
-};
-
-template<class T, class U>
-bool operator==(const PageAllocator <T>&, const PageAllocator <U>&) { return true; }
-
-using PageAlignedVector = std::vector<u8, PageAllocator<u8>>;
 
 constexpr u32 KEYGEN_LIMIT = 0x20;
 
@@ -110,7 +78,7 @@ struct ThreadBuffer {
         buf.reserve(INFLATE_BUFFER_MAX);
     }
 
-    PageAlignedVector buf;
+    std::vector<u8> buf;
     s64 off;
 };
 
@@ -140,7 +108,7 @@ public:
         return ringbuf_capacity() - ringbuf_size();
     }
 
-    void ringbuf_push(PageAlignedVector& buf_in, s64 off_in) {
+    void ringbuf_push(std::vector<u8>& buf_in, s64 off_in) {
         auto& value = this->buf[this->w_index % ringbuf_capacity()];
         value.off = off_in;
         std::swap(value.buf, buf_in);
@@ -148,7 +116,7 @@ public:
         this->w_index = (this->w_index + 1U) % (ringbuf_capacity() * 2U);
     }
 
-    void ringbuf_pop(PageAlignedVector& buf_out, s64& off_out) {
+    void ringbuf_pop(std::vector<u8>& buf_out, s64& off_out) {
         auto& value = this->buf[this->r_index % ringbuf_capacity()];
         off_out = value.off;
         std::swap(value.buf, buf_out);
@@ -181,7 +149,7 @@ struct ThreadData {
 
     Result Read(void* buf, s64 size, u64* bytes_read);
 
-    Result SetDecompressBuf(PageAlignedVector& buf, s64 off, s64 size) {
+    Result SetDecompressBuf(std::vector<u8>& buf, s64 off, s64 size) {
         buf.resize(size);
 
         mutexLock(std::addressof(read_mutex));
@@ -195,7 +163,7 @@ struct ThreadData {
         return condvarWakeOne(std::addressof(can_decompress));
     }
 
-    Result GetDecompressBuf(PageAlignedVector& buf_out, s64& off_out) {
+    Result GetDecompressBuf(std::vector<u8>& buf_out, s64& off_out) {
         mutexLock(std::addressof(read_mutex));
         if (!read_buffers.ringbuf_size()) {
             R_TRY(condvarWait(std::addressof(can_decompress), std::addressof(read_mutex)));
@@ -207,7 +175,7 @@ struct ThreadData {
         return condvarWakeOne(std::addressof(can_read));
     }
 
-    Result SetWriteBuf(PageAlignedVector& buf, s64 size, bool skip_verify) {
+    Result SetWriteBuf(std::vector<u8>& buf, s64 size, bool skip_verify) {
         buf.resize(size);
         if (!skip_verify) {
             sha256ContextUpdate(std::addressof(sha256), buf.data(), buf.size());
@@ -224,7 +192,7 @@ struct ThreadData {
         return condvarWakeOne(std::addressof(can_write));
     }
 
-    Result GetWriteBuf(PageAlignedVector& buf_out, s64& off_out) {
+    Result GetWriteBuf(std::vector<u8>& buf_out, s64& off_out) {
         mutexLock(std::addressof(write_mutex));
         if (!write_buffers.ringbuf_size()) {
             R_TRY(condvarWait(std::addressof(can_write), std::addressof(write_mutex)));
@@ -364,11 +332,11 @@ HashStr hexIdToStr(auto id) {
 // parsing ncz headers, sections and reading ncz blocks
 Result Yati::readFuncInternal(ThreadData* t) {
     // the main buffer which data is read into.
-    PageAlignedVector buf;
+    std::vector<u8> buf;
     // workaround ncz block reading ahead. if block isn't found, we usually
     // would seek back to the offset, however this is not possible in stream
     // mode, so we instead store the data to the temp buffer and pre-pend it.
-    PageAlignedVector temp_buf;
+    std::vector<u8> temp_buf;
     buf.reserve(t->max_buffer_size);
     temp_buf.reserve(t->max_buffer_size);
 
@@ -456,12 +424,12 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
 
     s64 inflate_offset{};
     Aes128CtrContext ctx{};
-    PageAlignedVector inflate_buf{};
+    std::vector<u8> inflate_buf{};
     inflate_buf.reserve(t->max_buffer_size);
 
     s64 written{};
     s64 decompress_buf_off{};
-    PageAlignedVector buf{};
+    std::vector<u8> buf{};
     buf.reserve(t->max_buffer_size);
 
     // encrypts the nca and passes the buffer to the write thread.
@@ -474,7 +442,7 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
         // the remaining data.
         // rather that copying the entire vector to the write thread,
         // only copy (store) the remaining amount.
-        PageAlignedVector temp_vector{};
+        std::vector<u8> temp_vector{};
         if (size < inflate_offset) {
             temp_vector.resize(inflate_offset - size);
             std::memcpy(temp_vector.data(), inflate_buf.data() + size, temp_vector.size());
@@ -715,7 +683,7 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
 
 // write thread writes data to the nca placeholder.
 Result Yati::writeFuncInternal(ThreadData* t) {
-    PageAlignedVector buf;
+    std::vector<u8> buf;
     buf.reserve(t->max_buffer_size);
 
     while (t->write_offset < t->write_size && R_SUCCEEDED(t->GetResults())) {
