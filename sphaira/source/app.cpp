@@ -25,7 +25,6 @@
 #include "defines.hpp"
 #include "i18n.hpp"
 #include "ftpsrv_helper.hpp"
-#include "web.hpp"
 
 #include <nanovg_dk.h>
 #include <minIni.h>
@@ -1477,12 +1476,6 @@ void App::DisplayMiscOptions(bool left_side) {
     options->Add(std::make_shared<ui::SidebarEntryCallback>("GitHub"_i18n, [](){
         App::Push(std::make_shared<ui::menu::gh::Menu>());
     }));
-
-    if (App::IsApplication()) {
-        options->Add(std::make_shared<ui::SidebarEntryCallback>("Web"_i18n, [](){
-            WebShow("https://lite.duckduckgo.com/lite");
-        }));
-    }
 
     if (App::GetApp()->m_install.Get()) {
         if (App::GetFtpEnable()) {
