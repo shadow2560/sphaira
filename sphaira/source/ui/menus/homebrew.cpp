@@ -84,7 +84,7 @@ Menu::Menu() : MenuBase{"Homebrew"_i18n} {
                                     SetIndex(m_index ? m_index - 1 : 0);
                                 }
                             }
-                        }
+                        }, m_entries[m_index].image
                     ));
                 }, true));
 
@@ -97,7 +97,7 @@ Menu::Menu() : MenuBase{"Homebrew"_i18n} {
                                     if (op_index && *op_index) {
                                         InstallHomebrew();
                                     }
-                                }
+                                }, m_entries[m_index].image
                             ));
                         } else {
                             InstallHomebrew();
