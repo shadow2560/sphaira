@@ -41,6 +41,7 @@ add_executable(sphaira
     source/ui/menus/file_viewer.cpp
     source/ui/menus/filebrowser.cpp
     source/ui/menus/homebrew.cpp
+    source/ui/menus/irs_menu.cpp
     source/ui/menus/main_menu.cpp
     source/ui/menus/menu_base.cpp
     source/ui/menus/themezer.cpp

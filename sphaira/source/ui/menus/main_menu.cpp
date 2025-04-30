@@ -11,6 +11,7 @@
 #include "download.hpp"
 #include "defines.hpp"
 #include "i18n.hpp"
+#include "ui/menus/usb_menu.hpp"
 
 #include <cstring>
 #include <minizip/unzip.h>
