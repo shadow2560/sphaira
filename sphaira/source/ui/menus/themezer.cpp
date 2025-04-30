@@ -537,7 +537,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         auto& e = page.m_packList[pos];
 
         auto text_id = ThemeEntryID_TEXT;
-        if (pos == m_index) {
+        const auto selected = pos == m_index;
+        if (selected) {
             text_id = ThemeEntryID_TEXT_SELECTED;
             gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
@@ -607,11 +608,14 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             gfx::drawImage(vg, x + xoff, y, 320, 180, image.image ? image.image : App::GetDefaultImage(), 15);
         }
 
+        const auto text_x = x + xoff;
+        const auto text_clip_w = w - 30.f - xoff;
         nvgSave(vg);
-        nvgIntersectScissor(vg, x, y, w - 30.f, h); // clip
+        nvgIntersectScissor(vg, text_x, y, text_clip_w, h); // clip
         {
-            gfx::drawTextArgs(vg, x + xoff, y + 180 + 20, 18, NVG_ALIGN_LEFT, theme->GetColour(text_id), "%s", e.details.name.c_str());
-            gfx::drawTextArgs(vg, x + xoff, y + 180 + 55, 18, NVG_ALIGN_LEFT, theme->GetColour(text_id), "%s", e.creator.display_name.c_str());
+            const float font_size = 18;
+            m_scroll_name.Draw(vg, selected, text_x, y + 180 + 20, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.details.name.c_str());
+            m_scroll_author.Draw(vg, selected, text_x, y + 180 + 55, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.creator.display_name.c_str());
         }
         nvgRestore(vg);
     });

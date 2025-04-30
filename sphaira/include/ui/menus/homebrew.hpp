@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/menus/menu_base.hpp"
+#include "ui/scrolling_text.hpp"
 #include "ui/list.hpp"
 #include "nro.hpp"
 #include "fs.hpp"
@@ -55,6 +56,10 @@ private:
     std::vector<NroEntry> m_entries{};
     s64 m_index{}; // where i am in the array
     std::unique_ptr<List> m_list{};
+
+    ScrollingText m_scroll_name{};
+    ScrollingText m_scroll_author{};
+    ScrollingText m_scroll_version{};
 
     option::OptionLong m_sort{INI_SECTION, "sort", SortType::SortType_AlphabeticalStar};
     option::OptionLong m_order{INI_SECTION, "order", OrderType::OrderType_Descending};

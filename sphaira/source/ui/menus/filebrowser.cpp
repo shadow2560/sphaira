@@ -734,7 +734,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         auto text_id = ThemeEntryID_TEXT;
-        if (m_index == i) {
+        const auto selected = m_index == i;
+        if (selected) {
             text_id = ThemeEntryID_TEXT_SELECTED;
             gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {

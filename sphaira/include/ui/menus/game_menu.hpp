@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/menus/menu_base.hpp"
+#include "ui/scrolling_text.hpp"
 #include "ui/list.hpp"
 #include "fs.hpp"
 #include "option.hpp"
@@ -57,6 +58,10 @@ private:
     std::vector<Entry> m_entries{};
     s64 m_index{}; // where i am in the array
     std::unique_ptr<List> m_list{};
+
+    ScrollingText m_scroll_name{};
+    ScrollingText m_scroll_author{};
+    ScrollingText m_scroll_version{};
 };
 
 } // namespace sphaira::ui::menu::game

@@ -133,23 +133,6 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
                         }, m_entries[m_index].image
                     ));
                 }, true));
-
-                #if 0
-                options->Add(std::make_shared<SidebarEntryCallback>("Enable auto delete"_i18n, [this](){
-                    const auto rc = nsEnableApplicationAutoDelete(m_entries[m_index].app_id);
-                    Notify(rc, "Failed to enable auto delete");
-                }));
-
-                options->Add(std::make_shared<SidebarEntryCallback>("Disable auto delete"_i18n, [this](){
-                    const auto rc = nsDisableApplicationAutoDelete(m_entries[m_index].app_id);
-                    Notify(rc, "Failed to disable auto delete");
-                }));
-
-                options->Add(std::make_shared<SidebarEntryCallback>("Withdraw update request"_i18n, [this](){
-                    const auto rc = nsWithdrawApplicationUpdateRequest(m_entries[m_index].app_id);
-                    Notify(rc, "Failed to withdraw update request");
-                }));
-                #endif
             }
         }})
     );
@@ -200,7 +183,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         auto text_id = ThemeEntryID_TEXT;
-        if (pos == m_index) {
+        const auto selected = pos == m_index;
+        if (selected) {
             text_id = ThemeEntryID_TEXT_SELECTED;
             gfx::drawRectOutline(vg, theme, 4.f, v);
         } else {
@@ -210,13 +194,16 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         const float image_size = 115;
         gfx::drawImage(vg, x + 20, y + 20, image_size, image_size, e.image ? e.image : App::GetDefaultImage(), 5);
 
+        const auto text_off = 148;
+        const auto text_x = x + text_off;
+        const auto text_clip_w = w - 30.f - text_off;
         nvgSave(vg);
-        nvgIntersectScissor(vg, x, y, w - 30.f, h); // clip
+        nvgIntersectScissor(vg, text_x, y, text_clip_w, h); // clip
         {
             const float font_size = 18;
-            gfx::drawTextArgs(vg, x + 148, y + 45, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetName());
-            gfx::drawTextArgs(vg, x + 148, y + 80, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetAuthor());
-            gfx::drawTextArgs(vg, x + 148, y + 115, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetDisplayVersion());
+            m_scroll_name.Draw(vg, selected, text_x, y + 45, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetName());
+            m_scroll_author.Draw(vg, selected, text_x, y + 80, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetAuthor());
+            m_scroll_version.Draw(vg, selected, text_x, y + 115, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetDisplayVersion());
         }
         nvgRestore(vg);
     });
@@ -235,7 +222,6 @@ void Menu::SetIndex(s64 index) {
         m_list->SetYoff(0);
     }
 
-    // todo: set subheadering.
     char title_id[33];
     std::snprintf(title_id, sizeof(title_id), "%016lX", m_entries[m_index].app_id);
     SetTitleSubHeading(title_id);
