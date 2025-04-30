@@ -30,22 +30,24 @@ struct Menu final : MenuBase {
     void Draw(NVGcontext* vg, Theme* theme) override;
     void OnFocusGained() override;
 
+    auto GetHomebrewList() const -> const std::vector<NroEntry>& {
+        return m_entries;
+    }
+
+    static Result InstallHomebrew(const fs::FsPath& path, const NacpStruct& nacp, const std::vector<u8>& icon);
+    static Result InstallHomebrewFromPath(const fs::FsPath& path);
+
+private:
     void SetIndex(s64 index);
     void InstallHomebrew();
     void ScanHomebrew();
     void Sort();
     void SortAndFindLastFile();
-
-    auto GetHomebrewList() const -> const std::vector<NroEntry>& {
-        return m_entries;
-    }
+    void FreeEntries();
 
     auto IsStarEnabled() -> bool {
         return m_sort.Get() >= SortType_UpdatedStar;
     }
-
-    static Result InstallHomebrew(const fs::FsPath& path, const NacpStruct& nacp, const std::vector<u8>& icon);
-    static Result InstallHomebrewFromPath(const fs::FsPath& path);
 
 private:
     static constexpr inline const char* INI_SECTION = "homebrew";

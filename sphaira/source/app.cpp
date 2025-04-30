@@ -13,6 +13,7 @@
 #include "ui/menus/usb_menu.hpp"
 #include "ui/menus/ftp_menu.hpp"
 #include "ui/menus/gc_menu.hpp"
+#include "ui/menus/game_menu.hpp"
 
 #include "app.hpp"
 #include "log.hpp"
@@ -1517,6 +1518,10 @@ void App::DisplayNetworkOptions(bool left_side) {
 void App::DisplayMiscOptions(bool left_side) {
     auto options = std::make_shared<ui::Sidebar>("Misc Options"_i18n, left_side ? ui::Sidebar::Side::LEFT : ui::Sidebar::Side::RIGHT);
     ON_SCOPE_EXIT(App::Push(options));
+
+    options->Add(std::make_shared<ui::SidebarEntryCallback>("Games"_i18n, [](){
+        App::Push(std::make_shared<ui::menu::game::Menu>());
+    }));
 
     options->Add(std::make_shared<ui::SidebarEntryCallback>("Themezer"_i18n, [](){
         App::Push(std::make_shared<ui::menu::themezer::Menu>());
