@@ -171,7 +171,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         }
 
         const float image_size = 115;
-        gfx::drawImage(vg, x + 20, y + 20, image_size, image_size, e.image ? e.image : App::GetDefaultImage(), 15);
+        gfx::drawImage(vg, x + 20, y + 20, image_size, image_size, e.image ? e.image : App::GetDefaultImage(), 5);
 
         const auto text_off = 148;
         const auto text_x = x + text_off;

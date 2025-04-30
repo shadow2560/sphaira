@@ -236,7 +236,7 @@ void DrawIcon(NVGcontext* vg, const LazyImage& l, const LazyImage& d, float x, f
     bool crop = false;
     if (iw < w || ih < h) {
         rounded_image = false;
-        gfx::drawRect(vg, x, y, w, h, nvgRGB(i.first_pixel[0], i.first_pixel[1], i.first_pixel[2]), rounded ? 15 : 0);
+        gfx::drawRect(vg, x, y, w, h, nvgRGB(i.first_pixel[0], i.first_pixel[1], i.first_pixel[2]), rounded ? 5 : 0);
     }
     if (iw > w || ih > h) {
         crop = true;
@@ -244,7 +244,7 @@ void DrawIcon(NVGcontext* vg, const LazyImage& l, const LazyImage& d, float x, f
         nvgIntersectScissor(vg, x, y, w, h);
     }
 
-    gfx::drawImage(vg, ix, iy, iw, ih, i.image, rounded_image ? 15 : 0);
+    gfx::drawImage(vg, ix, iy, iw, ih, i.image, rounded_image ? 5 : 0);
     if (crop) {
         nvgRestore(vg);
     }

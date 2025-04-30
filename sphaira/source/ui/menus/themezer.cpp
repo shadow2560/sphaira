@@ -605,7 +605,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 }
             }
 
-            gfx::drawImage(vg, x + xoff, y, 320, 180, image.image ? image.image : App::GetDefaultImage(), 15);
+            gfx::drawImage(vg, x + xoff, y, 320, 180, image.image ? image.image : App::GetDefaultImage(), 5);
         }
 
         const auto text_x = x + xoff;
