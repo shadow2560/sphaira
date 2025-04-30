@@ -42,7 +42,7 @@ void ScrollingText::Draw(NVGcontext* vg, bool focus, float x, float y, float w, 
 
             if (!m_text_xoff) {
                 m_tick++;
-                if (m_tick >= 90) {
+                if (m_tick >= 60) {
                     m_tick = 0;
                     m_text_xoff += scroll_amount;
                 }
