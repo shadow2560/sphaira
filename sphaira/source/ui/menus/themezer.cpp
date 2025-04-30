@@ -306,6 +306,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
             }
 
             const auto file_path = fs::AppendPath(dir_path, name);
+            pbox->NewTransfer(name);
 
             Result rc;
             if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
