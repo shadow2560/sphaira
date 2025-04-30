@@ -512,6 +512,25 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 }
             }
 
+            if (m_fs_type == FsType::Sd && m_entries_current.size()) {
+                if (App::GetInstallEnable() && HasTypeInSelectedEntries(FsDirEntryType_File) && !m_selected_count && (GetEntry().GetExtension() == "nro" || !FindFileAssocFor().empty())) {
+                    options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
+                        if (App::GetInstallPrompt()) {
+                            App::Push(std::make_shared<OptionBox>(
+                                "WARNING: Installing forwarders will lead to a ban!"_i18n,
+                                "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
+                                    if (op_index && *op_index) {
+                                        InstallForwarder();
+                                    }
+                                }
+                            ));
+                        } else {
+                            InstallForwarder();
+                        }
+                    }));
+                }
+            }
+
             if (m_entries_current.size()) {
                 if (check_all_ext(ZIP_EXTENSIONS)) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Extract"_i18n, [this](){
@@ -617,25 +636,6 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     options->Add(std::make_shared<SidebarEntryCallback>("View as text (unfinished)"_i18n, [this](){
                         App::Push(std::make_shared<fileview::Menu>(GetNewPathCurrent()));
                     }));
-                }
-
-                if (m_fs_type == FsType::Sd && m_entries_current.size()) {
-                    if (App::GetInstallEnable() && HasTypeInSelectedEntries(FsDirEntryType_File) && !m_selected_count && (GetEntry().GetExtension() == "nro" || !FindFileAssocFor().empty())) {
-                        options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
-                            if (App::GetInstallPrompt()) {
-                                App::Push(std::make_shared<OptionBox>(
-                                    "WARNING: Installing forwarders will lead to a ban!"_i18n,
-                                    "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
-                                        if (op_index && *op_index) {
-                                            InstallForwarder();
-                                        }
-                                    }
-                                ));
-                            } else {
-                                InstallForwarder();
-                            }
-                        }));
-                    }
                 }
 
                 options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_ignore_read_only.Get(), [this](bool& v_out){
