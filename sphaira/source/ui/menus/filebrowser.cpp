@@ -276,6 +276,25 @@ auto GetRomIcon(fs::FsNative* fs, ProgressBox* pbox, std::string filename, const
 
 Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i18n}, m_nro_entries{nro_entries} {
     this->SetActions(
+        std::make_pair(Button::L2, Action{[this](){
+            if (!m_selected_files.empty()) {
+                ResetSelection();
+            }
+
+            const auto set = m_selected_count != m_entries_current.size();
+
+            for (const auto& i : m_entries_current) {
+                auto& e = GetEntry(i);
+                if (e.selected != set) {
+                    e.selected = set;
+                    if (set) {
+                        m_selected_count++;
+                    } else {
+                        m_selected_count--;
+                    }
+                }
+            }
+        }}),
         std::make_pair(Button::R2, Action{[this](){
             if (!m_selected_files.empty()) {
                 ResetSelection();
