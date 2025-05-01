@@ -203,7 +203,7 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
                 options->Add(std::make_shared<SidebarEntryBool>("Hide forwarders"_i18n, m_hide_forwarders.Get(), [this](bool& v_out){
                     m_hide_forwarders.Set(v_out);
                     m_dirty = true;
-                }, "Yes"_i18n, "No"_i18n));
+                }));
             }
         }})
     );

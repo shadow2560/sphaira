@@ -412,17 +412,17 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 options->Add(std::make_shared<SidebarEntryBool>("Show Hidden"_i18n, m_show_hidden.Get(), [this](bool& v_out){
                     m_show_hidden.Set(v_out);
                     SortAndFindLastFile();
-                }, "Yes"_i18n, "No"_i18n));
+                }));
 
                 options->Add(std::make_shared<SidebarEntryBool>("Folders First"_i18n, m_folders_first.Get(), [this](bool& v_out){
                     m_folders_first.Set(v_out);
                     SortAndFindLastFile();
-                }, "Yes"_i18n, "No"_i18n));
+                }));
 
                 options->Add(std::make_shared<SidebarEntryBool>("Hidden Last"_i18n, m_hidden_last.Get(), [this](bool& v_out){
                     m_hidden_last.Set(v_out);
                     SortAndFindLastFile();
-                }, "Yes"_i18n, "No"_i18n));
+                }));
             }));
 
             if (m_entries_current.size()) {
@@ -673,7 +673,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_ignore_read_only.Get(), [this](bool& v_out){
                     m_ignore_read_only.Set(v_out);
                     m_fs->SetIgnoreReadOnly(v_out);
-                }, "Yes"_i18n, "No"_i18n));
+                }));
 
                 SidebarEntryArray::Items mount_items;
                 mount_items.push_back("Sd"_i18n);
