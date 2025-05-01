@@ -415,7 +415,7 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
             options->Add(std::make_shared<SidebarEntryBool>("Nsfw"_i18n, m_nsfw.Get(), [this](bool& v_out){
                 m_nsfw.Set(v_out);
                 InvalidateAllPages();
-            }, "Enabled"_i18n, "Disabled"_i18n));
+            }));
 
             options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
                 if (m_sort.Get() != index_out) {

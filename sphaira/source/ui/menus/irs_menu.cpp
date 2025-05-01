@@ -176,7 +176,7 @@ Menu::Menu() : MenuBase{"Irs"_i18n} {
             options->Add(std::make_shared<SidebarEntryBool>("External Light Filter"_i18n, m_config.is_external_light_filter_enabled, [this](bool& enable){
                 m_config.is_external_light_filter_enabled = enable;
                 UpdateConfig(&m_config);
-            }, "Enabled"_i18n, "Disabled"_i18n));
+            }));
         }
 
         options->Add(std::make_shared<SidebarEntryCallback>("Load Default"_i18n, [this](){

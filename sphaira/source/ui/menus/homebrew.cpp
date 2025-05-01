@@ -69,7 +69,7 @@ Menu::Menu() : MenuBase{"Homebrew"_i18n} {
 
                     options->Add(std::make_shared<SidebarEntryBool>("Hide Sphaira"_i18n, m_hide_sphaira.Get(), [this](bool& enable){
                         m_hide_sphaira.Set(enable);
-                    }, "Enabled"_i18n, "Disabled"_i18n));
+                    }));
                 }));
 
                 #if 0

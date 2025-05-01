@@ -274,15 +274,15 @@ MainMenu::MainMenu() {
 
                 options->Add(std::make_shared<SidebarEntryBool>("Ftp"_i18n, App::GetFtpEnable(), [](bool& enable){
                     App::SetFtpEnable(enable);
-                }, "Enabled"_i18n, "Disabled"_i18n));
+                }));
 
                 options->Add(std::make_shared<SidebarEntryBool>("Mtp"_i18n, App::GetMtpEnable(), [](bool& enable){
                     App::SetMtpEnable(enable);
-                }, "Enabled"_i18n, "Disabled"_i18n));
+                }));
 
                 options->Add(std::make_shared<SidebarEntryBool>("Nxlink"_i18n, App::GetNxlinkEnable(), [](bool& enable){
                     App::SetNxlinkEnable(enable);
-                }, "Enabled"_i18n, "Disabled"_i18n));
+                }));
 
                 if (m_update_state == UpdateState::Update) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Download update: "_i18n + m_update_version, [this](){
