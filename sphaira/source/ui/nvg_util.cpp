@@ -1,4 +1,5 @@
 #include "ui/nvg_util.hpp"
+#include "log.hpp"
 #include <cstddef>
 #include <cstdio>
 #include <cstdarg>
@@ -9,6 +10,9 @@
 
 namespace sphaira::ui::gfx {
 namespace {
+
+constexpr auto ALIGN_HOR = NVG_ALIGN_LEFT|NVG_ALIGN_CENTER|NVG_ALIGN_RIGHT;
+constexpr auto ALIGN_VER = NVG_ALIGN_TOP|NVG_ALIGN_MIDDLE|NVG_ALIGN_BOTTOM|NVG_ALIGN_BASELINE;
 
 constexpr std::array buttons = {
     std::pair{Button::A, "\uE0E0"},
@@ -33,8 +37,29 @@ constexpr std::array buttons = {
     std::pair{Button::R3, "\uE105"},
 };
 
+// software based clipping, saves a few cpu cycles.
+bool ClipRect(float x, float y) {
+    return x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT;
+}
+
+bool ClipText(float x, float y, int align) {
+    if ((!(align & ALIGN_HOR) || (align & NVG_ALIGN_LEFT)) && x >= SCREEN_WIDTH) {
+        return true;
+    }
+
+    if ((!(align & ALIGN_VER) || (align & NVG_ALIGN_TOP)) && y >= SCREEN_HEIGHT) {
+        return true;
+    }
+
+    return false;
+}
+
 // NEW ---------------------
 void drawRectIntenal(NVGcontext* vg, const Vec4& v, const NVGcolor& c, float rounded) {
+    if (ClipRect(v.x, v.y)) {
+        return;
+    }
+
     nvgBeginPath(vg);
     nvgRoundedRect(vg, v.x, v.y, v.w, v.h, rounded);
     nvgFillColor(vg, c);
@@ -42,6 +67,10 @@ void drawRectIntenal(NVGcontext* vg, const Vec4& v, const NVGcolor& c, float rou
 }
 
 void drawRectIntenal(NVGcontext* vg, const Vec4& v, const NVGpaint& p, float rounded) {
+    if (ClipRect(v.x, v.y)) {
+        return;
+    }
+
     nvgBeginPath(vg);
     nvgRoundedRect(vg, v.x, v.y, v.w, v.h, rounded);
     nvgFillPaint(vg, p);
@@ -120,6 +149,10 @@ void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, con
 }
 
 void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, const Vec4& v, const NVGcolor& c) {
+    if (ClipRect(v.x, v.y)) {
+        return;
+    }
+
     const auto corner_radius = 0.5;
     drawRectOutlineInternal(vg, theme, size, v);
     nvgBeginPath(vg);
@@ -129,6 +162,10 @@ void drawRectOutlineInternal(NVGcontext* vg, const Theme* theme, float size, con
 }
 
 void drawTextIntenal(NVGcontext* vg, const Vec2& v, float size, const char* str, const char* end, int align, const NVGcolor& c) {
+    if (ClipText(v.x, v.y, align)) {
+        return;
+    }
+
     nvgBeginPath(vg);
     nvgFontSize(vg, size);
     nvgTextAlign(vg, align);
@@ -166,6 +203,10 @@ void drawImage(NVGcontext* vg, float x, float y, float w, float h, int texture, 
 }
 
 void drawTextBox(NVGcontext* vg, float x, float y, float size, float bound, const NVGcolor& c, const char* str, int align, const char* end) {
+    if (ClipText(x, y, align)) {
+        return;
+    }
+
     nvgBeginPath(vg);
     nvgFontSize(vg, size);
     nvgTextAlign(vg, align);
