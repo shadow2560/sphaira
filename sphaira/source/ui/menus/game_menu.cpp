@@ -6,15 +6,19 @@
 #include "ui/error_box.hpp"
 #include "ui/option_box.hpp"
 #include "ui/progress_box.hpp"
+#include "ui/popup_list.hpp"
 #include "ui/nvg_util.hpp"
 #include "defines.hpp"
 #include "i18n.hpp"
+#include "yati/nx/ncm.hpp"
 
 #include <utility>
 #include <cstring>
 
 namespace sphaira::ui::menu::game {
 namespace {
+
+using MetaEntries = std::vector<NsApplicationContentMetaStatus>;
 
 Result Notify(Result rc, const std::string& error_message) {
     if (R_FAILED(rc)) {
@@ -26,6 +30,17 @@ Result Notify(Result rc, const std::string& error_message) {
     }
 
     return rc;
+}
+
+Result GetMetaEntries(const Entry& e, MetaEntries& out) {
+    s32 count;
+    R_TRY(nsCountApplicationContentMeta(e.app_id, &count));
+
+    out.resize(count);
+    R_TRY(nsListApplicationContentMetaStatus(e.app_id, 0, out.data(), out.size(), &count));
+
+    out.resize(count);
+    R_SUCCEED();
 }
 
 // also sets the status to error.
@@ -89,10 +104,13 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
             SetPop();
         }}),
         std::make_pair(Button::A, Action{"Launch"_i18n, [this](){
+            if (m_entries.empty()) {
+                return;
+            }
             LaunchEntry(m_entries[m_index]);
         }}),
         std::make_pair(Button::X, Action{"Options"_i18n, [this](){
-            auto options = std::make_shared<Sidebar>("Homebrew Options"_i18n, Sidebar::Side::RIGHT);
+            auto options = std::make_shared<Sidebar>("Game Options"_i18n, Sidebar::Side::RIGHT);
             ON_SCOPE_EXIT(App::Push(options));
 
             if (m_entries.size()) {
@@ -117,6 +135,40 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
                     ));
                 }));
 
+                options->Add(std::make_shared<SidebarEntryCallback>("List meta records"_i18n, [this](){
+                    MetaEntries meta_entries;
+                    const auto rc = GetMetaEntries(m_entries[m_index], meta_entries);
+                    if (R_FAILED(rc)) {
+                        App::Push(std::make_shared<ui::ErrorBox>(rc,
+                            i18n::get("Failed to list application meta entries")
+                        ));
+                        return;
+                    }
+
+                    if (meta_entries.empty()) {
+                        App::Notify("No meta entries found...\n");
+                        return;
+                    }
+
+                    PopupList::Items items;
+                    for (auto& e : meta_entries) {
+                        char buf[256];
+                        std::snprintf(buf, sizeof(buf), "Type: %s Storage: %s [%016lX][v%u]", ncm::GetMetaTypeStr(e.meta_type), ncm::GetStorageIdStr(e.storageID), e.application_id, e.version);
+                        items.emplace_back(buf);
+                    }
+
+                    App::Push(std::make_shared<PopupList>(
+                        "Entries", items, [this, meta_entries](auto op_index){
+                            #if 0
+                            if (op_index) {
+                                const auto& e = meta_entries[*op_index];
+                            }
+                            #endif
+                        }
+                    ));
+                }));
+
+                // completely deletes the application record and all data.
                 options->Add(std::make_shared<SidebarEntryCallback>("Delete"_i18n, [this](){
                     const auto buf = "Are you sure you want to delete "_i18n + m_entries[m_index].GetName() + "?";
                     App::Push(std::make_shared<OptionBox>(
@@ -129,6 +181,20 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
                                     m_entries.erase(m_entries.begin() + m_index);
                                     SetIndex(m_index ? m_index - 1 : 0);
                                 }
+                            }
+                        }, m_entries[m_index].image
+                    ));
+                }, true));
+
+                // removes installed data but keeps the record, basically archiving.
+                options->Add(std::make_shared<SidebarEntryCallback>("Delete entity"_i18n, [this](){
+                    const auto buf = "Are you sure you want to delete "_i18n + m_entries[m_index].GetName() + "?";
+                    App::Push(std::make_shared<OptionBox>(
+                        buf,
+                        "Back"_i18n, "Delete"_i18n, 0, [this](auto op_index){
+                            if (op_index && *op_index) {
+                                const auto rc = nsDeleteApplicationEntity(m_entries[m_index].app_id);
+                                Notify(rc, "Failed to delete application");
                             }
                         }, m_entries[m_index].image
                     ));
@@ -197,15 +263,10 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         const auto text_off = 148;
         const auto text_x = x + text_off;
         const auto text_clip_w = w - 30.f - text_off;
-        nvgSave(vg);
-        nvgIntersectScissor(vg, text_x, y, text_clip_w, h); // clip
-        {
-            const float font_size = 18;
-            m_scroll_name.Draw(vg, selected, text_x, y + 45, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetName());
-            m_scroll_author.Draw(vg, selected, text_x, y + 80, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetAuthor());
-            m_scroll_version.Draw(vg, selected, text_x, y + 115, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetDisplayVersion());
-        }
-        nvgRestore(vg);
+        const float font_size = 18;
+        m_scroll_name.Draw(vg, selected, text_x, y + 45, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetName());
+        m_scroll_author.Draw(vg, selected, text_x, y + 80, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetAuthor());
+        m_scroll_version.Draw(vg, selected, text_x, y + 115, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetDisplayVersion());
     });
 }
 
@@ -249,7 +310,20 @@ void Menu::ScanHomebrew() {
         }
 
         for (s32 i = 0; i < record_count; i++) {
-            // log_write("ID: %016lx got type: %u\n", record_list[i].application_id, record_list[i].type);
+            #if 0
+            u8 unk_x09 = record_list[i].unk_x09;
+            u64 unk_x0a;// = record_list[i].unk_x0a;
+            u8 unk_x10 = record_list[i].unk_x10;
+            u64 unk_x11;// = record_list[i].unk_x11;
+            memcpy(&unk_x0a, record_list[i].unk_x0a, sizeof(record_list[i].unk_x0a));
+            memcpy(&unk_x11, record_list[i].unk_x11, sizeof(record_list[i].unk_x11));
+            log_write("ID: %016lx got type: %u unk_x09: %u unk_x0a: %zu unk_x10: %u unk_x11: %zu\n", record_list[i].application_id, record_list[i].type,
+                unk_x09,
+                unk_x0a,
+                unk_x10,
+                unk_x11
+            );
+            #endif
             m_entries.emplace_back(record_list[i].application_id);
         }
 
