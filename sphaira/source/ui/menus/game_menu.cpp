@@ -199,6 +199,11 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
                         }, m_entries[m_index].image
                     ));
                 }, true));
+
+                options->Add(std::make_shared<SidebarEntryBool>("Hide forwarders"_i18n, m_hide_forwarders.Get(), [this](bool& v_out){
+                    m_hide_forwarders.Set(v_out);
+                    m_dirty = true;
+                }, "Yes"_i18n, "No"_i18n));
             }
         }})
     );
@@ -272,7 +277,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
 void Menu::OnFocusGained() {
     MenuBase::OnFocusGained();
-    if (m_entries.empty()) {
+    if (m_dirty || m_entries.empty()) {
         ScanHomebrew();
     }
 }
@@ -291,6 +296,7 @@ void Menu::SetIndex(s64 index) {
 
 void Menu::ScanHomebrew() {
     constexpr auto ENTRY_CHUNK_COUNT = 1000;
+    const auto hide_forwarders = m_hide_forwarders.Get();
     TimeStamp ts;
 
     FreeEntries();
@@ -310,26 +316,32 @@ void Menu::ScanHomebrew() {
         }
 
         for (s32 i = 0; i < record_count; i++) {
+            const auto& e = record_list[i];
             #if 0
-            u8 unk_x09 = record_list[i].unk_x09;
-            u64 unk_x0a;// = record_list[i].unk_x0a;
-            u8 unk_x10 = record_list[i].unk_x10;
-            u64 unk_x11;// = record_list[i].unk_x11;
-            memcpy(&unk_x0a, record_list[i].unk_x0a, sizeof(record_list[i].unk_x0a));
-            memcpy(&unk_x11, record_list[i].unk_x11, sizeof(record_list[i].unk_x11));
-            log_write("ID: %016lx got type: %u unk_x09: %u unk_x0a: %zu unk_x10: %u unk_x11: %zu\n", record_list[i].application_id, record_list[i].type,
+            u8 unk_x09 = e.unk_x09;
+            u64 unk_x0a;// = e.unk_x0a;
+            u8 unk_x10 = e.unk_x10;
+            u64 unk_x11;// = e.unk_x11;
+            memcpy(&unk_x0a, e.unk_x0a, sizeof(e.unk_x0a));
+            memcpy(&unk_x11, e.unk_x11, sizeof(e.unk_x11));
+            log_write("ID: %016lx got type: %u unk_x09: %u unk_x0a: %zu unk_x10: %u unk_x11: %zu\n", e.application_id, e.type,
                 unk_x09,
                 unk_x0a,
                 unk_x10,
                 unk_x11
             );
             #endif
-            m_entries.emplace_back(record_list[i].application_id);
+            if (hide_forwarders && (e.application_id & 0x0500000000000000) == 0x0500000000000000) {
+                continue;
+            }
+
+            m_entries.emplace_back(e.application_id);
         }
 
         offset += record_count;
     }
 
+    m_dirty = false;
     log_write("games found: %zu time_taken: %.2f seconds %zu ms %zu ns\n", m_entries.size(), ts.GetSecondsD(), ts.GetMs(), ts.GetNs());
     SetIndex(0);
 }

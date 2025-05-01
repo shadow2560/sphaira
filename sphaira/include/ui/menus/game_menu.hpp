@@ -56,13 +56,18 @@ private:
     void FreeEntries();
 
 private:
+    static constexpr inline const char* INI_SECTION = "games";
+
     std::vector<Entry> m_entries{};
     s64 m_index{}; // where i am in the array
     std::unique_ptr<List> m_list{};
+    bool m_dirty{};
 
     ScrollingText m_scroll_name{};
     ScrollingText m_scroll_author{};
     ScrollingText m_scroll_version{};
+
+    option::OptionBool m_hide_forwarders{INI_SECTION, "hide_forwarders", false};
 };
 
 } // namespace sphaira::ui::menu::game
