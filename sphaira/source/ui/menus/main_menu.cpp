@@ -6,12 +6,20 @@
 #include "ui/progress_box.hpp"
 #include "ui/error_box.hpp"
 
+#include "ui/menus/irs_menu.hpp"
+#include "ui/menus/themezer.hpp"
+#include "ui/menus/ghdl.hpp"
+#include "ui/menus/usb_menu.hpp"
+#include "ui/menus/ftp_menu.hpp"
+#include "ui/menus/gc_menu.hpp"
+#include "ui/menus/game_menu.hpp"
+#include "ui/menus/appstore.hpp"
+
 #include "app.hpp"
 #include "log.hpp"
 #include "download.hpp"
 #include "defines.hpp"
 #include "i18n.hpp"
-#include "ui/menus/usb_menu.hpp"
 
 #include <cstring>
 #include <minizip/unzip.h>
@@ -138,6 +146,30 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
 
     log_write("finished update :)\n");
     return true;
+}
+
+auto CreateRightSideMenu() -> std::shared_ptr<MenuBase> {
+    const auto name = App::GetApp()->m_right_side_menu.Get();
+
+    if ("Games" == name) {
+        return std::make_shared<ui::menu::game::Menu>();
+    }/*else if ("Themezer" == name) {
+        return std::make_shared<ui::menu::themezer::Menu>();
+    }*/else if ("GitHub" == name) {
+        return std::make_shared<ui::menu::gh::Menu>();
+    } else if ("IRS" == name) {
+        return std::make_shared<ui::menu::irs::Menu>();
+    } else if (App::GetInstallEnable()) {
+        // if ("FTP" == name) {
+        //     return std::make_shared<ui::menu::ftp::Menu>();
+        // } else if ("USB" == name) {
+        //     return std::make_shared<ui::menu::usb::Menu>();
+        // } else if ("GameCard" == name) {
+        //     return std::make_shared<ui::menu::gc::Menu>();
+        // }
+    }
+
+    return std::make_shared<ui::menu::appstore::Menu>();
 }
 
 } // namespace
@@ -289,7 +321,7 @@ MainMenu::MainMenu() {
 
     m_homebrew_menu = std::make_shared<homebrew::Menu>();
     m_filebrowser_menu = std::make_shared<filebrowser::Menu>(m_homebrew_menu->GetHomebrewList());
-    m_app_store_menu = std::make_shared<appstore::Menu>(m_homebrew_menu->GetHomebrewList());
+    m_right_side_menu = CreateRightSideMenu();
     m_current_menu = m_homebrew_menu;
 
     AddOnLRPress();
@@ -340,16 +372,16 @@ void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
 
 void MainMenu::AddOnLRPress() {
     if (m_current_menu != m_filebrowser_menu) {
-        const auto label = m_current_menu == m_homebrew_menu ? "Files" : "Apps";
+        const auto label = m_current_menu == m_homebrew_menu ? m_filebrowser_menu->GetShortTitle() : m_homebrew_menu->GetShortTitle();
         SetAction(Button::L, Action{i18n::get(label), [this]{
             OnLRPress(m_filebrowser_menu, Button::L);
         }});
     }
 
-    if (m_current_menu != m_app_store_menu) {
-        const auto label = m_current_menu == m_homebrew_menu ? "Store" : "Apps";
+    if (m_current_menu != m_right_side_menu) {
+        const auto label = m_current_menu == m_homebrew_menu ? m_right_side_menu->GetShortTitle() : m_homebrew_menu->GetShortTitle();
         SetAction(Button::R, Action{i18n::get(label), [this]{
-            OnLRPress(m_app_store_menu, Button::R);
+            OnLRPress(m_right_side_menu, Button::R);
         }});
     }
 }

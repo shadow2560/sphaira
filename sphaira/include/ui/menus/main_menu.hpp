@@ -3,7 +3,6 @@
 #include "ui/widget.hpp"
 #include "ui/menus/homebrew.hpp"
 #include "ui/menus/filebrowser.hpp"
-#include "ui/menus/appstore.hpp"
 
 namespace sphaira::ui::menu::main {
 
@@ -39,7 +38,7 @@ private:
 private:
     std::shared_ptr<homebrew::Menu> m_homebrew_menu{};
     std::shared_ptr<filebrowser::Menu> m_filebrowser_menu{};
-    std::shared_ptr<appstore::Menu> m_app_store_menu{};
+    std::shared_ptr<MenuBase> m_right_side_menu{};
     std::shared_ptr<MenuBase> m_current_menu{};
 
     std::string m_update_url{};

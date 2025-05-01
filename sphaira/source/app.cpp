@@ -14,6 +14,7 @@
 #include "ui/menus/ftp_menu.hpp"
 #include "ui/menus/gc_menu.hpp"
 #include "ui/menus/game_menu.hpp"
+#include "ui/menus/appstore.hpp"
 
 #include "app.hpp"
 #include "log.hpp"
@@ -1519,37 +1520,24 @@ void App::DisplayMiscOptions(bool left_side) {
     auto options = std::make_shared<ui::Sidebar>("Misc Options"_i18n, left_side ? ui::Sidebar::Side::LEFT : ui::Sidebar::Side::RIGHT);
     ON_SCOPE_EXIT(App::Push(options));
 
-    options->Add(std::make_shared<ui::SidebarEntryCallback>("Games"_i18n, [](){
-        App::Push(std::make_shared<ui::menu::game::Menu>());
-    }));
-
-    options->Add(std::make_shared<ui::SidebarEntryCallback>("Themezer"_i18n, [](){
-        App::Push(std::make_shared<ui::menu::themezer::Menu>());
-    }));
-
-    options->Add(std::make_shared<ui::SidebarEntryCallback>("GitHub"_i18n, [](){
-        App::Push(std::make_shared<ui::menu::gh::Menu>());
-    }));
-
-    if (App::GetApp()->m_install.Get()) {
-        if (App::GetFtpEnable()) {
-            options->Add(std::make_shared<ui::SidebarEntryCallback>("Ftp Install"_i18n, [](){
-                App::Push(std::make_shared<ui::menu::ftp::Menu>());
+    const auto push_if_not_same = [&]<typename T>(const char* name, const char* title){
+        if (g_app->m_right_side_menu.Get() != name) {
+            options->Add(std::make_shared<ui::SidebarEntryCallback>(i18n::get(title), [](){
+                App::Push(std::make_shared<T>());
             }));
         }
+    };
 
-        options->Add(std::make_shared<ui::SidebarEntryCallback>("Usb Install"_i18n, [](){
-            App::Push(std::make_shared<ui::menu::usb::Menu>());
-        }));
-
-        options->Add(std::make_shared<ui::SidebarEntryCallback>("GameCard Install"_i18n, [](){
-            App::Push(std::make_shared<ui::menu::gc::Menu>());
-        }));
+    push_if_not_same.template operator()<ui::menu::appstore::Menu>("Appstore", "Appstore");
+    push_if_not_same.template operator()<ui::menu::game::Menu>("Games", "Games");
+    push_if_not_same.template operator()<ui::menu::themezer::Menu>("Themezer", "Themezer");
+    push_if_not_same.template operator()<ui::menu::gh::Menu>("GitHub", "GitHub");
+    if (App::GetInstallEnable()) {
+        push_if_not_same.template operator()<ui::menu::ftp::Menu>("FTP", "FTP Install");
+        push_if_not_same.template operator()<ui::menu::usb::Menu>("USB", "USB Install");
+        push_if_not_same.template operator()<ui::menu::gc::Menu>("GameCard", "GameCard Install");
     }
-
-    options->Add(std::make_shared<ui::SidebarEntryCallback>("Irs (Infrared Joycon Camera)"_i18n, [](){
-        App::Push(std::make_shared<ui::menu::irs::Menu>());
-    }));
+    push_if_not_same.template operator()<ui::menu::irs::Menu>("IRS", "IRS (Infrared Joycon Camera)");
 }
 
 void App::DisplayAdvancedOptions(bool left_side) {
@@ -1561,6 +1549,25 @@ void App::DisplayAdvancedOptions(bool left_side) {
     text_scroll_speed_items.push_back("Normal"_i18n);
     text_scroll_speed_items.push_back("Fast"_i18n);
 
+    ui::SidebarEntryArray::Items right_side_menu_items;
+    right_side_menu_items.push_back("Appstore"_i18n);
+    right_side_menu_items.push_back("Games"_i18n);
+    // not valid as themezer uses l/r for swapping pages.
+    // right_side_menu_items.push_back("Themezer"_i18n);
+    right_side_menu_items.push_back("GitHub"_i18n);
+    right_side_menu_items.push_back("IRS"_i18n);
+    if (0 && App::GetInstallEnable()) {
+        // not supported yet
+        // right_side_menu_items.push_back("FTP"_i18n);
+        // right_side_menu_items.push_back("USB"_i18n);
+        // right_side_menu_items.push_back("GameCard"_i18n);
+    }
+
+    const auto it = std::find(right_side_menu_items.cbegin(), right_side_menu_items.cend(), g_app->m_right_side_menu.Get());
+    if (it == right_side_menu_items.cend()) {
+        g_app->m_right_side_menu.Set(right_side_menu_items[0]);
+    }
+
     options->Add(std::make_shared<ui::SidebarEntryBool>("Logging"_i18n, App::GetLogEnable(), [](bool& enable){
         App::SetLogEnable(enable);
     }, "Enabled"_i18n, "Disabled"_i18n));
@@ -1571,7 +1578,19 @@ void App::DisplayAdvancedOptions(bool left_side) {
 
     options->Add(std::make_shared<ui::SidebarEntryArray>("Text scroll speed"_i18n, text_scroll_speed_items, [](s64& index_out){
         App::SetTextScrollSpeed(index_out);
-    }, (s64)App::GetTextScrollSpeed()));
+    }, App::GetTextScrollSpeed()));
+
+    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, right_side_menu_items, [right_side_menu_items](s64& index_out){
+        const auto e = right_side_menu_items[index_out];
+        if (g_app->m_right_side_menu.Get() != e) {
+            g_app->m_right_side_menu.Set(e);
+            App::Push(std::make_shared<ui::OptionBox>(
+                "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
+                    App::ExitRestart();
+                }
+            ));
+        }
+    }, g_app->m_right_side_menu.Get()));
 
     options->Add(std::make_shared<ui::SidebarEntryCallback>("Install options"_i18n, [left_side](){
         App::DisplayInstallOptions(left_side);
