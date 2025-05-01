@@ -1549,23 +1549,21 @@ void App::DisplayAdvancedOptions(bool left_side) {
     text_scroll_speed_items.push_back("Normal"_i18n);
     text_scroll_speed_items.push_back("Fast"_i18n);
 
+    static const char* menu_names[]{
+        "Appstore",
+        "Games",
+        "GitHub",
+        "IRS",
+    };
+
     ui::SidebarEntryArray::Items right_side_menu_items;
-    right_side_menu_items.push_back("Appstore"_i18n);
-    right_side_menu_items.push_back("Games"_i18n);
-    // not valid as themezer uses l/r for swapping pages.
-    // right_side_menu_items.push_back("Themezer"_i18n);
-    right_side_menu_items.push_back("GitHub"_i18n);
-    right_side_menu_items.push_back("IRS"_i18n);
-    if (0 && App::GetInstallEnable()) {
-        // not supported yet
-        // right_side_menu_items.push_back("FTP"_i18n);
-        // right_side_menu_items.push_back("USB"_i18n);
-        // right_side_menu_items.push_back("GameCard"_i18n);
+    for (auto& str : menu_names) {
+        right_side_menu_items.push_back(i18n::get(str));
     }
 
     const auto it = std::find(right_side_menu_items.cbegin(), right_side_menu_items.cend(), g_app->m_right_side_menu.Get());
     if (it == right_side_menu_items.cend()) {
-        g_app->m_right_side_menu.Set(right_side_menu_items[0]);
+        g_app->m_right_side_menu.Set(menu_names[0]);
     }
 
     options->Add(std::make_shared<ui::SidebarEntryBool>("Logging"_i18n, App::GetLogEnable(), [](bool& enable){
@@ -1580,8 +1578,8 @@ void App::DisplayAdvancedOptions(bool left_side) {
         App::SetTextScrollSpeed(index_out);
     }, App::GetTextScrollSpeed()));
 
-    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, right_side_menu_items, [right_side_menu_items](s64& index_out){
-        const auto e = right_side_menu_items[index_out];
+    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, right_side_menu_items, [](s64& index_out){
+        const auto e = menu_names[index_out];
         if (g_app->m_right_side_menu.Get() != e) {
             g_app->m_right_side_menu.Set(e);
             App::Push(std::make_shared<ui::OptionBox>(
