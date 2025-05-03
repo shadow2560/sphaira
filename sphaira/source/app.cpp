@@ -1549,7 +1549,7 @@ void App::DisplayAdvancedOptions(bool left_side) {
     text_scroll_speed_items.push_back("Normal"_i18n);
     text_scroll_speed_items.push_back("Fast"_i18n);
 
-    static const char* menu_names[]{
+    static constexpr std::array menu_names{
         "Appstore",
         "Games",
         "GitHub",
@@ -1561,8 +1561,8 @@ void App::DisplayAdvancedOptions(bool left_side) {
         right_side_menu_items.push_back(i18n::get(str));
     }
 
-    const auto it = std::find(right_side_menu_items.cbegin(), right_side_menu_items.cend(), g_app->m_right_side_menu.Get());
-    if (it == right_side_menu_items.cend()) {
+    const auto it = std::find(menu_names.cbegin(), menu_names.cend(), g_app->m_right_side_menu.Get());
+    if (it == menu_names.cend()) {
         g_app->m_right_side_menu.Set(menu_names[0]);
     }
 
@@ -1588,7 +1588,7 @@ void App::DisplayAdvancedOptions(bool left_side) {
                 }
             ));
         }
-    }, g_app->m_right_side_menu.Get()));
+    }, i18n::get(g_app->m_right_side_menu.Get().c_str())));
 
     options->Add(std::make_shared<ui::SidebarEntryCallback>("Install options"_i18n, [left_side](){
         App::DisplayInstallOptions(left_side);
