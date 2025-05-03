@@ -7,14 +7,6 @@
 #include "ui/error_box.hpp"
 
 #include "ui/menus/main_menu.hpp"
-#include "ui/menus/irs_menu.hpp"
-#include "ui/menus/themezer.hpp"
-#include "ui/menus/ghdl.hpp"
-#include "ui/menus/usb_menu.hpp"
-#include "ui/menus/ftp_menu.hpp"
-#include "ui/menus/gc_menu.hpp"
-#include "ui/menus/game_menu.hpp"
-#include "ui/menus/appstore.hpp"
 
 #include "app.hpp"
 #include "log.hpp"
@@ -1520,24 +1512,19 @@ void App::DisplayMiscOptions(bool left_side) {
     auto options = std::make_shared<ui::Sidebar>("Misc Options"_i18n, left_side ? ui::Sidebar::Side::LEFT : ui::Sidebar::Side::RIGHT);
     ON_SCOPE_EXIT(App::Push(options));
 
-    const auto push_if_not_same = [&]<typename T>(const char* name, const char* title){
-        if (g_app->m_right_side_menu.Get() != name) {
-            options->Add(std::make_shared<ui::SidebarEntryCallback>(i18n::get(title), [](){
-                App::Push(std::make_shared<T>());
-            }));
+    for (auto& e : ui::menu::main::GetMiscMenuEntries()) {
+        if (e.name == g_app->m_right_side_menu.Get()) {
+            continue;
         }
-    };
 
-    push_if_not_same.template operator()<ui::menu::appstore::Menu>("Appstore", "Appstore");
-    push_if_not_same.template operator()<ui::menu::game::Menu>("Games", "Games");
-    push_if_not_same.template operator()<ui::menu::themezer::Menu>("Themezer", "Themezer");
-    push_if_not_same.template operator()<ui::menu::gh::Menu>("GitHub", "GitHub");
-    if (App::GetInstallEnable()) {
-        push_if_not_same.template operator()<ui::menu::ftp::Menu>("FTP", "FTP Install");
-        push_if_not_same.template operator()<ui::menu::usb::Menu>("USB", "USB Install");
-        push_if_not_same.template operator()<ui::menu::gc::Menu>("GameCard", "GameCard Install");
+        if (e.IsInstall() && !App::GetInstallEnable()) {
+            continue;
+        }
+
+        options->Add(std::make_shared<ui::SidebarEntryCallback>(i18n::get(e.title), [e](){
+            App::Push(e.func());
+        }));
     }
-    push_if_not_same.template operator()<ui::menu::irs::Menu>("IRS", "IRS (Infrared Joycon Camera)");
 }
 
 void App::DisplayAdvancedOptions(bool left_side) {
@@ -1549,12 +1536,18 @@ void App::DisplayAdvancedOptions(bool left_side) {
     text_scroll_speed_items.push_back("Normal"_i18n);
     text_scroll_speed_items.push_back("Fast"_i18n);
 
-    static constexpr std::array menu_names{
-        "Appstore",
-        "Games",
-        "GitHub",
-        "IRS",
-    };
+    std::vector<const char*> menu_names;
+    for (auto& e : ui::menu::main::GetMiscMenuEntries()) {
+        if (!e.IsShortcut()) {
+            continue;
+        }
+
+        if (e.IsInstall() && !App::GetInstallEnable()) {
+            continue;
+        }
+
+        menu_names.emplace_back(e.name);
+    }
 
     ui::SidebarEntryArray::Items right_side_menu_items;
     for (auto& str : menu_names) {
@@ -1578,7 +1571,7 @@ void App::DisplayAdvancedOptions(bool left_side) {
         App::SetTextScrollSpeed(index_out);
     }, App::GetTextScrollSpeed()));
 
-    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, right_side_menu_items, [](s64& index_out){
+    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, right_side_menu_items, [menu_names](s64& index_out){
         const auto e = menu_names[index_out];
         if (g_app->m_right_side_menu.Get() != e) {
             g_app->m_right_side_menu.Set(e);

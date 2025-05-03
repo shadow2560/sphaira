@@ -453,7 +453,7 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
                 }
             }));
         }}),
-        std::make_pair(Button::R, Action{"Next Page"_i18n, [this](){
+        std::make_pair(Button::R2, Action{"Next"_i18n, [this](){
             m_page_index++;
             if (m_page_index >= m_page_index_max) {
                 m_page_index = m_page_index_max - 1;
@@ -461,7 +461,7 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
                 PackListDownload();
             }
         }}),
-        std::make_pair(Button::L, Action{"Prev Page"_i18n, [this](){
+        std::make_pair(Button::L2, Action{"Prev"_i18n, [this](){
             if (m_page_index) {
                 m_page_index--;
                 PackListDownload();
