@@ -20,6 +20,7 @@ enum class NacpLoadStatus {
 
 struct Entry {
     u64 app_id{};
+    s64 size{};
     char display_version[0x10]{};
     NacpLanguageEntry lang{};
     int image{};

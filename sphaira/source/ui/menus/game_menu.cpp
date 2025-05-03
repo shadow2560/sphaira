@@ -18,6 +18,21 @@
 namespace sphaira::ui::menu::game {
 namespace {
 
+// thank you Shchmue ^^
+struct ApplicationOccupiedSizeEntry {
+    u8 storageId;
+    u8 padding[0x7];
+    u64 sizeApplication;
+    u64 sizePatch;
+    u64 sizeAddOnContent;
+};
+
+struct ApplicationOccupiedSize {
+    ApplicationOccupiedSizeEntry entry[4];
+};
+
+static_assert(sizeof(ApplicationOccupiedSize) == sizeof(NsApplicationOccupiedSize));
+
 using MetaEntries = std::vector<NsApplicationContentMetaStatus>;
 
 Result Notify(Result rc, const std::string& error_message) {
@@ -357,7 +372,20 @@ void Menu::ScanHomebrew() {
                 continue;
             }
 
-            m_entries.emplace_back(e.application_id);
+            s64 size{};
+            // code for sorting by size, it's too slow however...
+            #if 0
+            ApplicationOccupiedSize occupied_size;
+            if (R_SUCCEEDED(nsCalculateApplicationOccupiedSize(e.application_id, (NsApplicationOccupiedSize*)&occupied_size))) {
+                for (auto& s : occupied_size.entry) {
+                    size += s.sizeApplication;
+                    size += s.sizePatch;
+                    size += s.sizeAddOnContent;
+                }
+            }
+            #endif
+
+            m_entries.emplace_back(e.application_id, size);
         }
 
         offset += record_count;
