@@ -224,8 +224,49 @@ Result Usb::Init() {
     R_SUCCEED();
 }
 
-Result Usb::IsUsbConnected(u64 timeout) const {
-    return usbDsWaitReady(timeout);
+// the blow code is taken from libnx, with the addition of a uevent to cancel.
+Result Usb::IsUsbConnected(u64 timeout) {
+    Result rc;
+    UsbState state = UsbState_Detached;
+
+    rc = usbDsGetState(&state);
+    if (R_FAILED(rc)) return rc;
+    if (state == UsbState_Configured) return 0;
+
+    bool has_timeout = timeout != UINT64_MAX;
+    u64 deadline = 0;
+
+    const std::array waiters{
+        waiterForEvent(usbDsGetStateChangeEvent()),
+        waiterForUEvent(GetCancelEvent()),
+    };
+
+    if (has_timeout)
+        deadline = armGetSystemTick() + armNsToTicks(timeout);
+
+    do {
+        if (has_timeout) {
+            s64 remaining = deadline - armGetSystemTick();
+            timeout = remaining > 0 ? armTicksToNs(remaining) : 0;
+        }
+
+        s32 idx;
+        rc = waitObjects(&idx, waiters.data(), waiters.size(), timeout);
+        eventClear(usbDsGetStateChangeEvent());
+
+        // check if we got one of the cancel events.
+        if (R_SUCCEEDED(rc) && idx != 0) {
+            rc = Result_Cancelled; // cancelled.
+            break;
+        }
+
+        rc = usbDsGetState(&state);
+    } while (R_SUCCEEDED(rc) && state != UsbState_Configured && timeout > 0);
+
+    if (R_SUCCEEDED(rc) && state != UsbState_Configured && timeout == 0)
+        return KERNELRESULT(TimedOut);
+
+    return rc;
 }
 
 Result Usb::WaitForConnection(u64 timeout, std::vector<std::string>& out_names) {
@@ -276,7 +317,7 @@ Result Usb::WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) {
     // check if we got one of the cancel events.
     if (R_SUCCEEDED(rc) && idx != 0) {
         log_write("got usb cancel event\n");
-        rc = 0xEC01; // cancelled.
+        rc = Result_Cancelled; // cancelled.
     }
 
     if (R_FAILED(rc)) {

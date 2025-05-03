@@ -22,6 +22,9 @@ void thread_func(void* user) {
         }
 
         const auto rc = app->m_usb_source->IsUsbConnected(CONNECTION_TIMEOUT);
+        if (rc == app->m_usb_source->Result_Cancelled) {
+            break;
+        }
 
         // set connected status
         mutexLock(&app->m_mutex);

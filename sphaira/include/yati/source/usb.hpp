@@ -19,6 +19,7 @@ struct Usb final : Base {
         Result_BadCount = MAKERESULT(USBModule, 2),
         Result_BadTransferSize = MAKERESULT(USBModule, 3),
         Result_BadTotalSize = MAKERESULT(USBModule, 4),
+        Result_Cancelled = MAKERESULT(USBModule, 11),
     };
 
     Usb(u64 transfer_timeout);
@@ -28,7 +29,7 @@ struct Usb final : Base {
     Result Finished();
 
     Result Init();
-    Result IsUsbConnected(u64 timeout) const;
+    Result IsUsbConnected(u64 timeout);
     Result WaitForConnection(u64 timeout, std::vector<std::string>& out_names);
     void SetFileNameForTranfser(const std::string& name);
 
