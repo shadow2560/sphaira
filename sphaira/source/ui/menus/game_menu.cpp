@@ -114,6 +114,33 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
             ON_SCOPE_EXIT(App::Push(options));
 
             if (m_entries.size()) {
+                options->Add(std::make_shared<SidebarEntryCallback>("Sort By"_i18n, [this](){
+                    auto options = std::make_shared<Sidebar>("Sort Options"_i18n, Sidebar::Side::RIGHT);
+                    ON_SCOPE_EXIT(App::Push(options));
+
+                    SidebarEntryArray::Items sort_items;
+                    sort_items.push_back("Updated"_i18n);
+
+                    SidebarEntryArray::Items order_items;
+                    order_items.push_back("Descending"_i18n);
+                    order_items.push_back("Ascending"_i18n);
+
+                    options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
+                        m_sort.Set(index_out);
+                        SortAndFindLastFile();
+                    }, m_sort.Get()));
+
+                    options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
+                        m_order.Set(index_out);
+                        SortAndFindLastFile();
+                    }, m_order.Get()));
+
+                    options->Add(std::make_shared<SidebarEntryBool>("Hide forwarders"_i18n, m_hide_forwarders.Get(), [this](bool& v_out){
+                        m_hide_forwarders.Set(v_out);
+                        m_dirty = true;
+                    }));
+                }));
+
                 #if 0
                 options->Add(std::make_shared<SidebarEntryCallback>("Info"_i18n, [this](){
 
@@ -199,11 +226,6 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
                         }, m_entries[m_index].image
                     ));
                 }, true));
-
-                options->Add(std::make_shared<SidebarEntryBool>("Hide forwarders"_i18n, m_hide_forwarders.Get(), [this](bool& v_out){
-                    m_hide_forwarders.Set(v_out);
-                    m_dirty = true;
-                }));
             }
         }})
     );
@@ -341,9 +363,52 @@ void Menu::ScanHomebrew() {
         offset += record_count;
     }
 
+    m_is_reversed = false;
     m_dirty = false;
     log_write("games found: %zu time_taken: %.2f seconds %zu ms %zu ns\n", m_entries.size(), ts.GetSecondsD(), ts.GetMs(), ts.GetNs());
+    this->Sort();
     SetIndex(0);
+}
+
+void Menu::Sort() {
+    // const auto sort = m_sort.Get();
+    const auto order = m_order.Get();
+
+    if (order == OrderType_Ascending) {
+        if (!m_is_reversed) {
+            std::reverse(m_entries.begin(), m_entries.end());
+            m_is_reversed = true;
+        }
+    } else {
+        if (m_is_reversed) {
+            std::reverse(m_entries.begin(), m_entries.end());
+            m_is_reversed = false;
+        }
+    }
+}
+
+void Menu::SortAndFindLastFile() {
+    const auto app_id = m_entries[m_index].app_id;
+    Sort();
+    SetIndex(0);
+
+    s64 index = -1;
+    for (u64 i = 0; i < m_entries.size(); i++) {
+        if (app_id == m_entries[i].app_id) {
+            index = i;
+            break;
+        }
+    }
+
+    if (index >= 0) {
+        // guesstimate where the position is
+        if (index >= 9) {
+            m_list->SetYoff((((index - 9) + 3) / 3) * m_list->GetMaxY());
+        } else {
+            m_list->SetYoff(0);
+        }
+        SetIndex(index);
+    }
 }
 
 void Menu::FreeEntries() {
