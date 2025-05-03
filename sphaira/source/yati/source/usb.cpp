@@ -64,6 +64,7 @@ static_assert(sizeof(USBCmdHeader) == 0x20, "USBCmdHeader must be 0x20!");
 Usb::Usb(u64 transfer_timeout) {
     m_open_result = usbDsInitialize();
     m_transfer_timeout = transfer_timeout;
+    ueventCreate(GetCancelEvent(), true);
     // this avoids allocations during transfers.
     m_aligned.reserve(1024 * 1024 * 16);
 }
@@ -261,9 +262,22 @@ Event *Usb::GetCompletionEvent(UsbSessionEndpoint ep) const {
     return std::addressof(m_endpoints[ep]->CompletionEvent);
 }
 
-Result Usb::WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) const {
+Result Usb::WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) {
     auto event = GetCompletionEvent(ep);
-    const auto rc = eventWait(event, timeout);
+
+    const std::array waiters{
+        waiterForEvent(event),
+        waiterForUEvent(GetCancelEvent()),
+    };
+
+    s32 idx;
+    auto rc = waitObjects(&idx, waiters.data(), waiters.size(), timeout);
+
+    // check if we got one of the cancel events.
+    if (R_SUCCEEDED(rc) && idx != 0) {
+        log_write("got usb cancel event\n");
+        rc = 0xEC01; // cancelled.
+    }
 
     if (R_FAILED(rc)) {
         R_TRY(usbDsEndpoint_Cancel(m_endpoints[ep]));
@@ -287,7 +301,7 @@ Result Usb::GetTransferResult(UsbSessionEndpoint ep, u32 urb_id, u32 *out_reques
     R_SUCCEED();
 }
 
-Result Usb::TransferPacketImpl(bool read, void *page, u32 size, u32 *out_size_transferred, u64 timeout) const {
+Result Usb::TransferPacketImpl(bool read, void *page, u32 size, u32 *out_size_transferred, u64 timeout) {
     u32 urb_id;
 
     /* If we're not configured yet, wait to become configured first. */
