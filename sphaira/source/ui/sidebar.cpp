@@ -44,10 +44,10 @@ SidebarEntryBool::SidebarEntryBool(std::string title, bool option, Callback cb, 
 , m_false_str{std::move(false_str)} {
 
     if (m_true_str == "On") {
-        m_true_str = i18n::get(m_true_str.c_str());
+        m_true_str = i18n::get(m_true_str);
     }
     if (m_false_str == "Off") {
-        m_false_str = i18n::get(m_false_str.c_str());
+        m_false_str = i18n::get(m_false_str);
     }
 
     SetAction(Button::A, Action{"OK"_i18n, [this](){

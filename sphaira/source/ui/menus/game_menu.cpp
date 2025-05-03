@@ -23,7 +23,7 @@ using MetaEntries = std::vector<NsApplicationContentMetaStatus>;
 Result Notify(Result rc, const std::string& error_message) {
     if (R_FAILED(rc)) {
         App::Push(std::make_shared<ui::ErrorBox>(rc,
-            i18n::get(error_message.c_str())
+            i18n::get(error_message)
         ));
     } else {
         App::Notify("Success");

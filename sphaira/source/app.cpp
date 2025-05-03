@@ -1588,7 +1588,7 @@ void App::DisplayAdvancedOptions(bool left_side) {
                 }
             ));
         }
-    }, i18n::get(g_app->m_right_side_menu.Get().c_str())));
+    }, i18n::get(g_app->m_right_side_menu.Get())));
 
     options->Add(std::make_shared<ui::SidebarEntryCallback>("Install options"_i18n, [left_side](){
         App::DisplayInstallOptions(left_side);
