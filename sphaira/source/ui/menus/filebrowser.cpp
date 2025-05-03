@@ -283,7 +283,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
             const auto set = m_selected_count != m_entries_current.size();
 
-            for (const auto& i : m_entries_current) {
+            for (u32 i = 0; i < m_entries_current.size(); i++) {
                 auto& e = GetEntry(i);
                 if (e.selected != set) {
                     e.selected = set;
