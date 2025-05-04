@@ -142,12 +142,12 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
 
                     options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
                         m_sort.Set(index_out);
-                        SortAndFindLastFile();
+                        SortAndFindLastFile(false);
                     }, m_sort.Get()));
 
                     options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
                         m_order.Set(index_out);
-                        SortAndFindLastFile();
+                        SortAndFindLastFile(false);
                     }, m_order.Get()));
 
                     options->Add(std::make_shared<SidebarEntryBool>("Hide forwarders"_i18n, m_hide_forwarders.Get(), [this](bool& v_out){
@@ -218,11 +218,7 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
                         "Back"_i18n, "Delete"_i18n, 0, [this](auto op_index){
                             if (op_index && *op_index) {
                                 const auto rc = nsDeleteApplicationCompletely(m_entries[m_index].app_id);
-                                if (R_SUCCEEDED(Notify(rc, "Failed to delete application"))) {
-                                    FreeEntry(App::GetVg(), m_entries[m_index]);
-                                    m_entries.erase(m_entries.begin() + m_index);
-                                    SetIndex(m_index ? m_index - 1 : 0);
-                                }
+                                Notify(rc, "Failed to delete application");
                             }
                         }, m_entries[m_index].image
                     ));
@@ -248,15 +244,28 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
     const Vec4 v{75, 110, 370, 155};
     const Vec2 pad{10, 10};
     m_list = std::make_unique<List>(3, 9, m_pos, v, pad);
+
     nsInitialize();
+    nsGetApplicationRecordUpdateSystemEvent(&m_event);
 }
 
 Menu::~Menu() {
     FreeEntries();
+    eventClose(&m_event);
     nsExit();
 }
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
+    if (R_SUCCEEDED(eventWait(&m_event, 0))) {
+        log_write("got ns event\n");
+        m_dirty = true;
+    }
+
+    if (m_dirty) {
+        App::Notify("Updating application record list");
+        SortAndFindLastFile(true);
+    }
+
     MenuBase::Update(controller, touch);
     m_list->OnUpdate(controller, touch, m_index, m_entries.size(), [this](bool touch, auto i) {
         if (touch && m_index == i) {
@@ -314,7 +323,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
 void Menu::OnFocusGained() {
     MenuBase::OnFocusGained();
-    if (m_dirty || m_entries.empty()) {
+    if (m_entries.empty()) {
         ScanHomebrew();
     }
 }
@@ -338,6 +347,10 @@ void Menu::ScanHomebrew() {
 
     FreeEntries();
     m_entries.reserve(ENTRY_CHUNK_COUNT);
+
+    // wait on event in order to clear it as this event will trigger when
+    // an application is launched, causing a double list.
+    eventWait(&m_event, 0);
 
     std::vector<NsApplicationRecord> record_list(ENTRY_CHUNK_COUNT);
     s32 offset{};
@@ -415,9 +428,13 @@ void Menu::Sort() {
     }
 }
 
-void Menu::SortAndFindLastFile() {
+void Menu::SortAndFindLastFile(bool scan) {
     const auto app_id = m_entries[m_index].app_id;
-    Sort();
+    if (scan) {
+        ScanHomebrew();
+    } else {
+        Sort();
+    }
     SetIndex(0);
 
     s64 index = -1;

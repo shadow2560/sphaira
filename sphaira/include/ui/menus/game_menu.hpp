@@ -64,7 +64,7 @@ private:
     void SetIndex(s64 index);
     void ScanHomebrew();
     void Sort();
-    void SortAndFindLastFile();
+    void SortAndFindLastFile(bool scan);
     void FreeEntries();
 
 private:
@@ -73,6 +73,7 @@ private:
     std::vector<Entry> m_entries{};
     s64 m_index{}; // where i am in the array
     std::unique_ptr<List> m_list{};
+    Event m_event{};
     bool m_is_reversed{};
     bool m_dirty{};
 
