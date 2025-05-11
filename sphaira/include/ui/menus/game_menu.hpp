@@ -1,7 +1,6 @@
 #pragma once
 
-#include "ui/menus/menu_base.hpp"
-#include "ui/scrolling_text.hpp"
+#include "ui/menus/grid_menu_base.hpp"
 #include "ui/list.hpp"
 #include "fs.hpp"
 #include "option.hpp"
@@ -51,7 +50,9 @@ enum OrderType {
     OrderType_Ascending,
 };
 
-struct Menu final : MenuBase {
+using LayoutType = grid::LayoutType;
+
+struct Menu final : grid::Menu {
     Menu();
     ~Menu();
 
@@ -66,6 +67,7 @@ private:
     void Sort();
     void SortAndFindLastFile(bool scan);
     void FreeEntries();
+    void OnLayoutChange();
 
 private:
     static constexpr inline const char* INI_SECTION = "games";
@@ -77,12 +79,9 @@ private:
     bool m_is_reversed{};
     bool m_dirty{};
 
-    ScrollingText m_scroll_name{};
-    ScrollingText m_scroll_author{};
-    ScrollingText m_scroll_version{};
-
     option::OptionLong m_sort{INI_SECTION, "sort", SortType::SortType_Updated};
     option::OptionLong m_order{INI_SECTION, "order", OrderType::OrderType_Descending};
+    option::OptionLong m_layout{INI_SECTION, "layout", LayoutType::LayoutType_GridDetail};
     option::OptionBool m_hide_forwarders{INI_SECTION, "hide_forwarders", false};
 };
 

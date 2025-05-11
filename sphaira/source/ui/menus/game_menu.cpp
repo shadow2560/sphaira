@@ -113,7 +113,7 @@ void LaunchEntry(const Entry& e) {
 
 } // namespace
 
-Menu::Menu() : MenuBase{"Games"_i18n} {
+Menu::Menu() : grid::Menu{"Games"_i18n} {
     this->SetActions(
         std::make_pair(Button::B, Action{"Back"_i18n, [this](){
             SetPop();
@@ -140,15 +140,25 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
                     order_items.push_back("Descending"_i18n);
                     order_items.push_back("Ascending"_i18n);
 
-                    options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
+                    SidebarEntryArray::Items layout_items;
+                    layout_items.push_back("List"_i18n);
+                    layout_items.push_back("Icon"_i18n);
+                    layout_items.push_back("Grid"_i18n);
+
+                    options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
                         m_sort.Set(index_out);
                         SortAndFindLastFile(false);
                     }, m_sort.Get()));
 
-                    options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
+                    options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
                         m_order.Set(index_out);
                         SortAndFindLastFile(false);
                     }, m_order.Get()));
+
+                    options->Add(std::make_shared<SidebarEntryArray>("Layout"_i18n, layout_items, [this](s64& index_out){
+                        m_layout.Set(index_out);
+                        OnLayoutChange();
+                    }, m_layout.Get()));
 
                     options->Add(std::make_shared<SidebarEntryBool>("Hide forwarders"_i18n, m_hide_forwarders.Get(), [this](bool& v_out){
                         m_hide_forwarders.Set(v_out);
@@ -241,9 +251,7 @@ Menu::Menu() : MenuBase{"Games"_i18n} {
         }})
     );
 
-    const Vec4 v{75, 110, 370, 155};
-    const Vec2 pad{10, 10};
-    m_list = std::make_unique<List>(3, 9, m_pos, v, pad);
+    OnLayoutChange();
 
     nsInitialize();
     nsGetApplicationRecordUpdateSystemEvent(&m_event);
@@ -285,7 +293,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     int image_load_count = 0;
 
     m_list->Draw(vg, theme, m_entries.size(), [this, &image_load_count](auto* vg, auto* theme, auto v, auto pos) {
-        const auto& [x, y, w, h] = v;
+        // const auto& [x, y, w, h] = v;
         auto& e = m_entries[pos];
 
         if (e.status == NacpLoadStatus::None) {
@@ -299,25 +307,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             }
         }
 
-        auto text_id = ThemeEntryID_TEXT;
         const auto selected = pos == m_index;
-        if (selected) {
-            text_id = ThemeEntryID_TEXT_SELECTED;
-            gfx::drawRectOutline(vg, theme, 4.f, v);
-        } else {
-            DrawElement(v, ThemeEntryID_GRID);
-        }
-
-        const float image_size = 115;
-        gfx::drawImage(vg, x + 20, y + 20, image_size, image_size, e.image ? e.image : App::GetDefaultImage(), 5);
-
-        const auto text_off = 148;
-        const auto text_x = x + text_off;
-        const auto text_clip_w = w - 30.f - text_off;
-        const float font_size = 18;
-        m_scroll_name.Draw(vg, selected, text_x, y + 45, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetName());
-        m_scroll_author.Draw(vg, selected, text_x, y + 80, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetAuthor());
-        m_scroll_version.Draw(vg, selected, text_x, y + 115, text_clip_w, font_size, NVG_ALIGN_LEFT, theme->GetColour(text_id), e.GetDisplayVersion());
+        DrawEntry(vg, theme, m_layout.Get(), v, selected, e.image, e.GetName(), e.GetAuthor(), e.GetDisplayVersion());
     });
 }
 
@@ -446,9 +437,11 @@ void Menu::SortAndFindLastFile(bool scan) {
     }
 
     if (index >= 0) {
+        const auto row = m_list->GetRow();
+        const auto page = m_list->GetPage();
         // guesstimate where the position is
-        if (index >= 9) {
-            m_list->SetYoff((((index - 9) + 3) / 3) * m_list->GetMaxY());
+        if (index >= page) {
+            m_list->SetYoff((((index - page) + row) / row) * m_list->GetMaxY());
         } else {
             m_list->SetYoff(0);
         }
@@ -464,6 +457,11 @@ void Menu::FreeEntries() {
     }
 
     m_entries.clear();
+}
+
+void Menu::OnLayoutChange() {
+    m_index = 0;
+    grid::Menu::OnLayoutChange(m_list, m_layout.Get());
 }
 
 } // namespace sphaira::ui::menu::game
