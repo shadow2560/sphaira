@@ -1,5 +1,4 @@
 #include "ui/option_box.hpp"
-#include "ui/bubbles.hpp"
 #include "ui/sidebar.hpp"
 #include "ui/popup_list.hpp"
 #include "ui/option_box.hpp"
@@ -1031,7 +1030,6 @@ void App::Draw() {
     }
 
     m_notif_manager.Draw(vg, &m_theme);
-    ui::bubble::Draw(vg, &m_theme);
 
     nvgResetTransform(vg);
     nvgEndFrame(this->vg);
@@ -1419,34 +1417,6 @@ App::App(const char* argv0) {
         }
     }
 
-    struct EventDay {
-        u8 day;
-        u8 month;
-    };
-
-    static constexpr EventDay event_days[] = {
-        { .day = 1, .month = 1 }, // New years
-
-        { .day = 3, .month = 3 }, // March 3 (switch 1)
-        { .day = 10, .month = 5 }, // June 10 (switch 2)
-        { .day = 15, .month = 5 }, // June 15
-
-        { .day = 25, .month = 12 }, // Christmas
-        { .day = 26, .month = 12 },
-        { .day = 27, .month = 12 },
-        { .day = 28, .month = 12 },
-    };
-
-    const auto time = std::time(nullptr);
-    const auto tm = std::localtime(&time);
-
-    for (auto e : event_days) {
-        if (e.day == tm->tm_mday && e.month == (tm->tm_mon + 1)) {
-            ui::bubble::Init();
-            break;
-        }
-    }
-
     App::Push(std::make_shared<ui::menu::main::MainMenu>());
     log_write("finished app constructor\n");
 }
@@ -1678,8 +1648,6 @@ App::~App() {
 
     i18n::exit();
     curl::Exit();
-
-    ui::bubble::Exit();
 
     // this has to be called before any cleanup to ensure the lifetime of
     // nvg is still active as some widgets may need to free images.

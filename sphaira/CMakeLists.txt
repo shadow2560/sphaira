@@ -62,7 +62,6 @@ add_executable(sphaira
     source/ui/sidebar.cpp
     source/ui/widget.cpp
     source/ui/list.cpp
-    source/ui/bubbles.cpp
     source/ui/scrolling_text.cpp
 
     source/app.cpp
