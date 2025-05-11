@@ -142,7 +142,7 @@ std::string get(std::string_view str) {
 
 namespace literals {
 
-std::string operator"" _i18n(const char* str, size_t len) {
+std::string operator""_i18n(const char* str, size_t len) {
     return sphaira::i18n::get_internal({str, len});
 }
 

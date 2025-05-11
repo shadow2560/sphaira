@@ -7,6 +7,7 @@
 #include "i18n.hpp"
 #include "ftpsrv_helper.hpp"
 #include <cstring>
+#include <algorithm>
 
 namespace sphaira::ui::menu::ftp {
 namespace {

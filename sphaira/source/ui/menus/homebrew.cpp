@@ -13,6 +13,7 @@
 
 #include <minIni.h>
 #include <utility>
+#include <algorithm>
 
 namespace sphaira::ui::menu::homebrew {
 namespace {

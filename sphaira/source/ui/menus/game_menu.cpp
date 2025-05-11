@@ -14,6 +14,7 @@
 
 #include <utility>
 #include <cstring>
+#include <algorithm>
 
 namespace sphaira::ui::menu::game {
 namespace {

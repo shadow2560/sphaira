@@ -7,6 +7,7 @@
 #include "ui/nvg_util.hpp"
 #include "i18n.hpp"
 #include <cstring>
+#include <algorithm>
 
 namespace sphaira::ui::menu::gc {
 namespace {

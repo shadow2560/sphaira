@@ -20,6 +20,7 @@
 
 #include <zstd.h>
 #include <minIni.h>
+#include <algorithm>
 
 namespace sphaira::yati {
 namespace {
