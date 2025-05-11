@@ -1071,16 +1071,16 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         float i_size = 22;
         switch (e.status) {
             case EntryStatus::Get:
-                gfx::drawImage(vg, x + w - 30.f, y + 110, i_size, i_size, m_get.image, 0);
+                gfx::drawImage(vg, x + w - 30.f, y + 110, i_size, i_size, m_get.image, 20);
                 break;
             case EntryStatus::Installed:
-                gfx::drawImage(vg, x + w - 30.f, y + 110, i_size, i_size, m_installed.image, 0);
+                gfx::drawImage(vg, x + w - 30.f, y + 110, i_size, i_size, m_installed.image, 20);
                 break;
             case EntryStatus::Local:
-                gfx::drawImage(vg, x + w - 30.f, y + 110, i_size, i_size, m_local.image, 0);
+                gfx::drawImage(vg, x + w - 30.f, y + 110, i_size, i_size, m_local.image, 20);
                 break;
             case EntryStatus::Update:
-                gfx::drawImage(vg, x + w - 30.f, y + 110, i_size, i_size, m_update.image, 0);
+                gfx::drawImage(vg, x + w - 30.f, y + 110, i_size, i_size, m_update.image, 20);
                 break;
         }
     });
