@@ -77,6 +77,8 @@ public:
     static auto GetLogEnable() -> bool;
     static auto GetReplaceHbmenuEnable() -> bool;
     static auto GetInstallEnable() -> bool;
+    static auto GetInstallSysmmcEnable() -> bool;
+    static auto GetInstallEmummcEnable() -> bool;
     static auto GetInstallSdEnable() -> bool;
     static auto GetInstallPrompt() -> bool;
     static auto GetThemeMusicEnable() -> bool;
@@ -89,7 +91,8 @@ public:
     static void SetNxlinkEnable(bool enable);
     static void SetLogEnable(bool enable);
     static void SetReplaceHbmenuEnable(bool enable);
-    static void SetInstallEnable(bool enable);
+    static void SetInstallSysmmcEnable(bool enable);
+    static void SetInstallEmummcEnable(bool enable);
     static void SetInstallSdEnable(bool enable);
     static void SetInstallPrompt(bool enable);
     static void SetThemeMusicEnable(bool enable);
@@ -142,6 +145,21 @@ public:
         return R_SUCCEEDED(pmdmntGetApplicationProcessId(&pid));
     }
 
+    static auto IsEmunand() -> bool {
+        struct EmummcPaths {
+            char unk[0x80];
+            char nintendo[0x80];
+        } paths{};
+
+        SecmonArgs args{};
+        args.X[0] = 0xF0000404; /* smcAmsGetEmunandConfig */
+        args.X[1] = 0; /* EXO_EMUMMC_MMC_NAND*/
+        args.X[2] = (u64)&paths; /* out path */
+        svcCallSecureMonitor(&args);
+
+        return (paths.unk[0] != '\0') || (paths.nintendo[0] != '\0');
+    }
+
 
 // private:
     static constexpr inline auto CONFIG_PATH = "/config/sphaira/config.ini";
@@ -187,7 +205,8 @@ public:
     option::OptionString m_right_side_menu{INI_SECTION, "right_side_menu", "Appstore"};
 
     // install options
-    option::OptionBool m_install{INI_SECTION, "install", false};
+    option::OptionBool m_install_sysmmc{INI_SECTION, "install_sysmmc", false};
+    option::OptionBool m_install_emummc{INI_SECTION, "install_emummc", false};
     option::OptionBool m_install_sd{INI_SECTION, "install_sd", true};
     option::OptionLong m_install_prompt{INI_SECTION, "install_prompt", true};
     option::OptionLong m_boost_mode{INI_SECTION, "boost_mode", false};

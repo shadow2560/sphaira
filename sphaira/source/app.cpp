@@ -598,7 +598,19 @@ auto App::GetReplaceHbmenuEnable() -> bool {
 }
 
 auto App::GetInstallEnable() -> bool {
-    return g_app->m_install.Get();
+    if (IsEmunand()) {
+        return GetInstallEmummcEnable();
+    } else {
+        return GetInstallSysmmcEnable();
+    }
+}
+
+auto App::GetInstallSysmmcEnable() -> bool {
+    return g_app->m_install_sysmmc.GetOr("install");
+}
+
+auto App::GetInstallEmummcEnable() -> bool {
+    return g_app->m_install_emummc.GetOr("install");
 }
 
 auto App::GetInstallSdEnable() -> bool {
@@ -754,8 +766,12 @@ void App::SetReplaceHbmenuEnable(bool enable) {
     }
 }
 
-void App::SetInstallEnable(bool enable) {
-    g_app->m_install.Set(enable);
+void App::SetInstallSysmmcEnable(bool enable) {
+    g_app->m_install_sysmmc.Set(enable);
+}
+
+void App::SetInstallEmummcEnable(bool enable) {
+    g_app->m_install_emummc.Set(enable);
 }
 
 void App::SetInstallSdEnable(bool enable) {
@@ -1566,8 +1582,12 @@ void App::DisplayInstallOptions(bool left_side) {
     install_items.push_back("System memory"_i18n);
     install_items.push_back("microSD card"_i18n);
 
-    options->Add(std::make_shared<ui::SidebarEntryBool>("Enable"_i18n, App::GetApp()->m_install.Get(), [](bool& enable){
-        App::GetApp()->m_install.Set(enable);
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Enable sysmmc"_i18n, App::GetInstallSysmmcEnable(), [](bool& enable){
+        App::SetInstallSysmmcEnable(enable);
+    }));
+
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Enable emummc"_i18n, App::GetInstallEmummcEnable(), [](bool& enable){
+        App::SetInstallEmummcEnable(enable);
     }));
 
     options->Add(std::make_shared<ui::SidebarEntryBool>("Show install warning"_i18n, App::GetApp()->m_install_prompt.Get(), [](bool& enable){
