@@ -779,7 +779,7 @@ void App::SetMtpEnable(bool enable) {
     if (App::GetMtpEnable() != enable) {
         g_app->m_mtp_enabled.Set(enable);
         if (enable) {
-            hazeInitialize(haze_callback);
+            hazeInitialize(haze_callback, 0x2C, 2);
         } else {
             hazeExit();
         }
@@ -1241,7 +1241,7 @@ App::App(const char* argv0) {
     }
 
     if (App::GetMtpEnable()) {
-        hazeInitialize(haze_callback);
+        hazeInitialize(haze_callback, 0x2C, 2);
     }
 
     if (App::GetFtpEnable()) {

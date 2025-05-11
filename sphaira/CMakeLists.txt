@@ -154,7 +154,7 @@ FetchContent_Declare(ftpsrv
 
 FetchContent_Declare(libhaze
     GIT_REPOSITORY https://github.com/ITotalJustice/libhaze.git
-    GIT_TAG 3244b9e
+    GIT_TAG 04f1526
 )
 
 FetchContent_Declare(libpulsar
@@ -277,31 +277,6 @@ if (USE_VFS_GC)
         ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_gc.c
     )
 endif()
-
-# todo: upstream cmake
-add_library(libhaze
-    ${libhaze_SOURCE_DIR}/source/async_usb_server.cpp
-    ${libhaze_SOURCE_DIR}/source/device_properties.cpp
-    ${libhaze_SOURCE_DIR}/source/event_reactor.cpp
-    ${libhaze_SOURCE_DIR}/source/haze.cpp
-    ${libhaze_SOURCE_DIR}/source/ptp_object_database.cpp
-    ${libhaze_SOURCE_DIR}/source/ptp_object_heap.cpp
-    ${libhaze_SOURCE_DIR}/source/ptp_responder_android_operations.cpp
-    ${libhaze_SOURCE_DIR}/source/ptp_responder_mtp_operations.cpp
-    ${libhaze_SOURCE_DIR}/source/ptp_responder_ptp_operations.cpp
-    ${libhaze_SOURCE_DIR}/source/ptp_responder.cpp
-    ${libhaze_SOURCE_DIR}/source/usb_session.cpp
-)
-target_include_directories(libhaze PUBLIC ${libhaze_SOURCE_DIR}/include)
-set_target_properties(libhaze PROPERTIES
-    C_STANDARD 11
-    C_EXTENSIONS ON
-    CXX_STANDARD 20
-    CXX_EXTENSIONS ON
-    # force optimisations in debug mode as otherwise vapor errors
-    # due to force_inline attribute failing...
-    COMPILE_OPTIONS "$<$<CONFIG:Debug>:-Os>"
-)
 
 add_library(stb INTERFACE)
 target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
