@@ -300,29 +300,32 @@ auto GetNroIcon(const std::vector<u8>& nro_icon) -> std::vector<u8> {
 auto LoadThemeMeta(const fs::FsPath& path, ThemeMeta& meta) -> bool {
     meta = {};
 
-    char buf[FS_MAX_PATH]{};
-    int len{};
-    len = ini_gets("meta", "name", "", buf, sizeof(buf) - 1, path);
-    if (len <= 1) {
+    auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
+        auto meta = static_cast<ThemeMeta*>(UserData);
+
+        if (!std::strcmp(Section, "meta")) {
+            if (!std::strcmp(Key, "name")) {
+                meta->name = Value;
+            } else if (!std::strcmp(Key, "author")) {
+                meta->author = Value;
+            } else if (!std::strcmp(Key, "version")) {
+                meta->version = Value;
+            } else if (!std::strcmp(Key, "inherit")) {
+                meta->inherit = Value;
+            }
+
+            return 1;
+        }
+
+        return 0;
+    };
+
+    if (!ini_browse(cb, &meta, path)) {
         return false;
     }
-    meta.name = buf;
 
-    len = ini_gets("meta", "author", "", buf, sizeof(buf) - 1, path);
-    if (len <= 1) {
+    if (meta.name.empty() || meta.author.empty() || meta.version.empty()) {
         return false;
-    }
-    meta.author = buf;
-
-    len = ini_gets("meta", "version", "", buf, sizeof(buf) - 1, path);
-    if (len <= 1) {
-        return false;
-    }
-    meta.version = buf;
-
-    len = ini_gets("meta", "inherit", "", buf, sizeof(buf) - 1, path);
-    if (len > 1) {
-        meta.inherit = buf;
     }
 
     log_write("loaded meta from: %s\n", path.s);
@@ -356,7 +359,7 @@ void LoadThemeInternal(ThemeMeta meta, ThemeData& theme_data, int inherit_level 
         }
     }
 
-    static constexpr auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
+    auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
         auto theme_data = static_cast<ThemeData*>(UserData);
 
         if (!std::strcmp(Section, "theme")) {
@@ -1226,11 +1229,14 @@ void App::ScanThemeEntries() {
         ScanThemes("romfs:/themes/");
         romfsExit();
     }
+
     // then load custom entries
     ScanThemes("/config/sphaira/themes/");
 }
 
 App::App(const char* argv0) {
+    TimeStamp ts;
+
     g_app = this;
     m_start_timestamp = armGetSystemTick();
     if (!std::strncmp(argv0, "sdmc:/", 6)) {
@@ -1400,6 +1406,10 @@ App::App(const char* argv0) {
     // padInitializeDefault(&m_pad);
     padInitializeAny(&m_pad);
 
+    // usbHsFsSetFileSystemMountFlags(UsbHsFsMountFlags_ReadOnly);
+    // usbHsFsSetPopulateCallback();
+    // usbHsFsInitialize(0);
+
     m_prev_timestamp = ini_getl("paths", "timestamp", 0, App::CONFIG_PATH);
     const auto last_launch_path_size = ini_gets("paths", "last_launch_path", "", m_prev_last_launch, sizeof(m_prev_last_launch), App::CONFIG_PATH);
     fs::FsPath last_launch_path;
@@ -1434,7 +1444,7 @@ App::App(const char* argv0) {
     }
 
     App::Push(std::make_shared<ui::menu::main::MainMenu>());
-    log_write("finished app constructor\n");
+    log_write("finished app constructor, time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
 }
 
 void App::PlaySoundEffect(SoundEffect effect) {
