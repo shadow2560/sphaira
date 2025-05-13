@@ -320,7 +320,7 @@ Result Menu::GcMount() {
         std::vector<u8> extended_header;
         std::vector<NcmPackagedContentInfo> infos;
         const auto path = BuildGcPath(e.name, &m_handle);
-        R_TRY(yati::ParseCnmtNca(path, 0, header, extended_header, infos));
+        R_TRY(nca::ParseCnmt(path, 0, header, extended_header, infos));
 
         u8 key_gen;
         FsRightsId rights_id;
@@ -511,7 +511,10 @@ void Menu::OnChangeIndex(s64 new_index) {
                     fsGetProgramId(&program_id, path, FsContentAttributes_All);
                 }
 
-                if (R_SUCCEEDED(yati::ParseControlNca(path, program_id, &nacp, sizeof(nacp), &icon))) {
+                TimeStamp ts;
+                if (R_SUCCEEDED(nca::ParseControl(path, program_id, &nacp, sizeof(nacp), &icon))) {
+                    log_write("\t\tnca::ParseControl(): %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+
                     log_write("managed to parse control nca %s\n", path.s);
                     NacpLanguageEntry* lang_entry{};
                     nacpGetLanguageEntry(&nacp, &lang_entry);

@@ -11,6 +11,7 @@
 #include "defines.hpp"
 #include "i18n.hpp"
 #include "yati/nx/ncm.hpp"
+#include "yati/nx/nca.hpp"
 
 #include <utility>
 #include <cstring>
@@ -19,20 +20,27 @@
 namespace sphaira::ui::menu::game {
 namespace {
 
-// thank you Shchmue ^^
-struct ApplicationOccupiedSizeEntry {
-    u8 storageId;
-    u8 padding[0x7];
-    u64 sizeApplication;
-    u64 sizePatch;
-    u64 sizeAddOnContent;
+constexpr NcmStorageId NCM_STORAGE_IDS[]{
+    NcmStorageId_BuiltInUser,
+    NcmStorageId_SdCard,
 };
 
-struct ApplicationOccupiedSize {
-    ApplicationOccupiedSizeEntry entry[4];
-};
+NcmContentStorage ncm_cs[2];
+NcmContentMetaDatabase ncm_db[2];
 
-static_assert(sizeof(ApplicationOccupiedSize) == sizeof(NsApplicationOccupiedSize));
+auto& GetNcmCs(u8 storage_id) {
+    if (storage_id == NcmStorageId_SdCard) {
+        return ncm_cs[1];
+    }
+    return ncm_cs[0];
+}
+
+auto& GetNcmDb(u8 storage_id) {
+    if (storage_id == NcmStorageId_SdCard) {
+        return ncm_db[1];
+    }
+    return ncm_db[0];
+}
 
 using MetaEntries = std::vector<NsApplicationContentMetaStatus>;
 
@@ -48,19 +56,23 @@ Result Notify(Result rc, const std::string& error_message) {
     return rc;
 }
 
-Result GetMetaEntries(const Entry& e, MetaEntries& out) {
+Result GetMetaEntries(u64 id, MetaEntries& out) {
     s32 count;
-    R_TRY(nsCountApplicationContentMeta(e.app_id, &count));
+    R_TRY(nsCountApplicationContentMeta(id, &count));
 
     out.resize(count);
-    R_TRY(nsListApplicationContentMetaStatus(e.app_id, 0, out.data(), out.size(), &count));
+    R_TRY(nsListApplicationContentMetaStatus(id, 0, out.data(), out.size(), &count));
 
     out.resize(count);
     R_SUCCEED();
 }
 
+Result GetMetaEntries(const Entry& e, MetaEntries& out) {
+    return GetMetaEntries(e.app_id, out);
+}
+
 // also sets the status to error.
-void FakeNacpEntry(Entry& e) {
+void FakeNacpEntry(ThreadResultData& e) {
     e.status = NacpLoadStatus::Error;
     // fake the nacp entry
     std::strcpy(e.lang.name, "Corrupted");
@@ -71,34 +83,113 @@ void FakeNacpEntry(Entry& e) {
 
 bool LoadControlImage(Entry& e) {
     if (!e.image && e.control) {
+        TimeStamp ts;
         const auto jpeg_size = e.control_size - sizeof(NacpStruct);
         e.image = nvgCreateImageMem(App::GetVg(), 0, e.control->icon, jpeg_size);
         e.control.reset();
+        log_write("\t\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
         return true;
     }
 
     return false;
 }
 
+Result LoadControlManual(u64 id, ThreadResultData& data) {
+    TimeStamp ts;
+
+    MetaEntries entries;
+    R_TRY(GetMetaEntries(id, entries));
+    R_UNLESS(!entries.empty(), 0x1);
+
+    const auto& ee = entries.back();
+    if (ee.storageID != NcmStorageId_SdCard && ee.storageID != NcmStorageId_BuiltInUser) {
+        return 0x1;
+    }
+
+    auto& db = GetNcmDb(ee.storageID);
+    auto& cs = GetNcmCs(ee.storageID);
+
+    NcmContentMetaKey key;
+    R_TRY(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, ee.application_id));
+
+    NcmContentId content_id;
+    R_TRY(ncmContentMetaDatabaseGetContentIdByType(&db, &content_id, &key, NcmContentType_Control));
+
+    u64 program_id;
+    R_TRY(ncmContentStorageGetProgramId(&cs, &program_id, &content_id, FsContentAttributes_All));
+
+    fs::FsPath path;
+    R_TRY(ncmContentStorageGetPath(&cs, path, sizeof(path), &content_id));
+
+    std::vector<u8> icon;
+    R_TRY(nca::ParseControl(path, program_id, &data.control->nacp, sizeof(data.control->nacp), &icon));
+    std::memcpy(data.control->icon, icon.data(), icon.size());
+
+    data.control_size = sizeof(data.control->nacp) + icon.size();
+    log_write("\t\t[manual control] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+
+    R_SUCCEED();
+}
+
+auto LoadControlEntry(u64 id) -> ThreadResultData {
+    ThreadResultData data{};
+    data.id = id;
+    data.control = std::make_shared<NsApplicationControlData>();
+    data.status = NacpLoadStatus::Error;
+
+    bool manual_load = false;
+    if (hosversionBefore(20,0,0)) {
+        TimeStamp ts;
+        if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, id, data.control.get(), sizeof(NsApplicationControlData), &data.control_size))) {
+            manual_load = false;
+            log_write("\t\t[ns control cache] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+        }
+    }
+
+    if (manual_load) {
+        manual_load = R_SUCCEEDED(LoadControlManual(id, data));
+    }
+
+    Result rc{};
+    if (!manual_load) {
+        TimeStamp ts;
+        rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, id, data.control.get(), sizeof(NsApplicationControlData), &data.control_size);
+        log_write("\t\t[ns control storage] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+    }
+
+    if (R_SUCCEEDED(rc)) {
+        NacpLanguageEntry* lang{};
+        if (R_SUCCEEDED(rc = nsGetApplicationDesiredLanguage(&data.control->nacp, &lang)) && lang) {
+            data.lang = *lang;
+            std::memcpy(data.display_version, data.control->nacp.display_version, sizeof(data.display_version));
+            data.status = NacpLoadStatus::Loaded;
+        }
+    }
+
+    if (R_FAILED(rc)) {
+        FakeNacpEntry(data);
+    }
+
+    return data;
+}
+
+void LoadResultIntoEntry(Entry& e, const ThreadResultData& result) {
+    e.status = result.status;
+    e.control = result.control;
+    e.control_size = result.control_size;
+    std::memcpy(e.display_version, result.display_version, sizeof(result.display_version));
+    e.lang = result.lang;
+    e.status = result.status;
+}
+
 void LoadControlEntry(Entry& e, bool force_image_load = false) {
     if (e.status == NacpLoadStatus::None) {
-        e.control = std::make_unique<NsApplicationControlData>();
-        if (R_FAILED(nsGetApplicationControlData(NsApplicationControlSource_Storage, e.app_id, e.control.get(), sizeof(NsApplicationControlData), &e.control_size))) {
-            FakeNacpEntry(e);
-        } else {
-            NacpLanguageEntry* lang{};
-            if (R_FAILED(nsGetApplicationDesiredLanguage(&e.control->nacp, &lang)) || !lang) {
-                FakeNacpEntry(e);
-            } else {
-                e.lang = *lang;
-                std::memcpy(e.display_version, e.control->nacp.display_version, sizeof(e.display_version));
-                e.status = NacpLoadStatus::Loaded;
+        const auto result = LoadControlEntry(e.app_id);
+        LoadResultIntoEntry(e, result);
+    }
 
-                if (force_image_load) {
-                    LoadControlImage(e);
-                }
-            }
-        }
+    if (force_image_load && e.status == NacpLoadStatus::Loaded) {
+        LoadControlImage(e);
     }
 }
 
@@ -112,7 +203,90 @@ void LaunchEntry(const Entry& e) {
     Notify(rc, "Failed to launch application");
 }
 
+void ThreadFunc(void* user) {
+    auto data = static_cast<ThreadData*>(user);
+
+    while (data->IsRunning()) {
+        data->Run();
+    }
+}
+
 } // namespace
+
+ThreadData::ThreadData() {
+    ueventCreate(&m_uevent, true);
+    mutexInit(&m_mutex_id);
+    mutexInit(&m_mutex_result);
+    m_running = true;
+}
+
+auto ThreadData::IsRunning() const -> bool {
+    return m_running;
+}
+
+void ThreadData::Run() {
+    while (IsRunning()) {
+        const auto waiter = waiterForUEvent(&m_uevent);
+        waitSingle(waiter, UINT64_MAX);
+
+        if (!IsRunning()) {
+            return;
+        }
+
+        std::vector<u64> ids;
+        {
+            mutexLock(&m_mutex_id);
+            ON_SCOPE_EXIT(mutexUnlock(&m_mutex_id));
+            std::swap(ids, m_ids);
+        }
+
+        for (u64 i = 0; i < std::size(ids); i++) {
+            if (!IsRunning()) {
+                return;
+            }
+
+            // sleep after every other entry loaded.
+            if (i) {
+                svcSleepThread(1e+6*2); // 2ms
+            }
+
+            const auto result = LoadControlEntry(ids[i]);
+            mutexLock(&m_mutex_result);
+            ON_SCOPE_EXIT(mutexUnlock(&m_mutex_result));
+            m_result.emplace_back(result);
+        }
+    }
+}
+
+void ThreadData::Close() {
+    m_running = false;
+    ueventSignal(&m_uevent);
+}
+
+void ThreadData::Push(u64 id) {
+    mutexLock(&m_mutex_id);
+    ON_SCOPE_EXIT(mutexUnlock(&m_mutex_id));
+
+    const auto it = std::find(m_ids.begin(), m_ids.end(), id);
+    if (it == m_ids.end()) {
+        m_ids.emplace_back(id);
+        ueventSignal(&m_uevent);
+    }
+}
+
+void ThreadData::Push(std::span<const Entry> entries) {
+    for (auto& e : entries) {
+        Push(e.app_id);
+    }
+}
+
+void ThreadData::Pop(std::vector<ThreadResultData>& out) {
+    mutexLock(&m_mutex_result);
+    ON_SCOPE_EXIT(mutexUnlock(&m_mutex_result));
+
+    std::swap(out, m_result);
+    m_result.clear();
+}
 
 Menu::Menu() : grid::Menu{"Games"_i18n} {
     this->SetActions(
@@ -256,12 +430,30 @@ Menu::Menu() : grid::Menu{"Games"_i18n} {
 
     nsInitialize();
     nsGetApplicationRecordUpdateSystemEvent(&m_event);
+
+    for (size_t i = 0; i < std::size(NCM_STORAGE_IDS); i++) {
+        ncmOpenContentMetaDatabase(std::addressof(ncm_db[i]), NCM_STORAGE_IDS[i]);
+        ncmOpenContentStorage(std::addressof(ncm_cs[i]), NCM_STORAGE_IDS[i]);
+    }
+
+    threadCreate(&m_thread, ThreadFunc, &m_thread_data, nullptr, 1024*32, 0x30, 1);
+    threadStart(&m_thread);
 }
 
 Menu::~Menu() {
+    m_thread_data.Close();
+
+    for (size_t i = 0; i < std::size(NCM_STORAGE_IDS); i++) {
+        ncmContentMetaDatabaseClose(std::addressof(ncm_db[i]));
+        ncmContentStorageClose(std::addressof(ncm_cs[i]));
+    }
+
     FreeEntries();
     eventClose(&m_event);
     nsExit();
+
+    threadWaitForExit(&m_thread);
+    threadClose(&m_thread);
 }
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
@@ -293,12 +485,26 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     const int image_load_max = 2;
     int image_load_count = 0;
 
+    std::vector<ThreadResultData> data;
+    m_thread_data.Pop(data);
+
+    for (const auto& d : data) {
+        const auto it = std::find_if(m_entries.begin(), m_entries.end(), [&d](auto& e) {
+            return e.app_id == d.id;
+        });
+
+        if (it != m_entries.end()) {
+            LoadResultIntoEntry(*it, d);
+        }
+    }
+
     m_list->Draw(vg, theme, m_entries.size(), [this, &image_load_count](auto* vg, auto* theme, auto v, auto pos) {
         // const auto& [x, y, w, h] = v;
         auto& e = m_entries[pos];
 
         if (e.status == NacpLoadStatus::None) {
-            LoadControlEntry(e);
+            m_thread_data.Push(e.app_id);
+            e.status = NacpLoadStatus::Progress;
         }
 
         // lazy load image
@@ -377,20 +583,7 @@ void Menu::ScanHomebrew() {
                 continue;
             }
 
-            s64 size{};
-            // code for sorting by size, it's too slow however...
-            #if 0
-            ApplicationOccupiedSize occupied_size;
-            if (R_SUCCEEDED(nsCalculateApplicationOccupiedSize(e.application_id, (NsApplicationOccupiedSize*)&occupied_size))) {
-                for (auto& s : occupied_size.entry) {
-                    size += s.sizeApplication;
-                    size += s.sizePatch;
-                    size += s.sizeAddOnContent;
-                }
-            }
-            #endif
-
-            m_entries.emplace_back(e.application_id, size);
+            m_entries.emplace_back(e.application_id);
         }
 
         offset += record_count;
@@ -401,6 +594,8 @@ void Menu::ScanHomebrew() {
     log_write("games found: %zu time_taken: %.2f seconds %zu ms %zu ns\n", m_entries.size(), ts.GetSecondsD(), ts.GetMs(), ts.GetNs());
     this->Sort();
     SetIndex(0);
+
+    // m_thread_data.Push(m_entries);
 }
 
 void Menu::Sort() {

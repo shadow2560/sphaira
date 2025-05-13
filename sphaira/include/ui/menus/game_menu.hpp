@@ -5,12 +5,15 @@
 #include "fs.hpp"
 #include "option.hpp"
 #include <memory>
+#include <vector>
 
 namespace sphaira::ui::menu::game {
 
 enum class NacpLoadStatus {
     // not yet attempted to be loaded.
     None,
+    // started loading.
+    Progress,
     // loaded, ready to parse.
     Loaded,
     // failed to load, do not attempt to load again!
@@ -19,12 +22,11 @@ enum class NacpLoadStatus {
 
 struct Entry {
     u64 app_id{};
-    s64 size{};
     char display_version[0x10]{};
     NacpLanguageEntry lang{};
     int image{};
 
-    std::unique_ptr<NsApplicationControlData> control{};
+    std::shared_ptr<NsApplicationControlData> control{};
     u64 control_size{};
     NacpLoadStatus status{NacpLoadStatus::None};
 
@@ -39,6 +41,38 @@ struct Entry {
     auto GetDisplayVersion() const -> const char* {
         return display_version;
     }
+};
+
+struct ThreadResultData {
+    u64 id{};
+    std::shared_ptr<NsApplicationControlData> control{};
+    u64 control_size{};
+    char display_version[0x10]{};
+    NacpLanguageEntry lang{};
+    NacpLoadStatus status{NacpLoadStatus::None};
+};
+
+struct ThreadData {
+    ThreadData();
+
+    auto IsRunning() const -> bool;
+    void Run();
+    void Close();
+    void Push(u64 id);
+    void Push(std::span<const Entry> entries);
+    void Pop(std::vector<ThreadResultData>& out);
+
+private:
+    UEvent m_uevent{};
+    Mutex m_mutex_id{};
+    Mutex m_mutex_result{};
+
+    // app_ids pushed to the queue, signal uevent when pushed.
+    std::vector<u64> m_ids{};
+    // control data pushed to the queue.
+    std::vector<ThreadResultData> m_result{};
+
+    std::atomic_bool m_running{};
 };
 
 enum SortType {
@@ -78,6 +112,9 @@ private:
     Event m_event{};
     bool m_is_reversed{};
     bool m_dirty{};
+
+    ThreadData m_thread_data{};
+    Thread m_thread{};
 
     option::OptionLong m_sort{INI_SECTION, "sort", SortType::SortType_Updated};
     option::OptionLong m_order{INI_SECTION, "order", OrderType::OrderType_Descending};
