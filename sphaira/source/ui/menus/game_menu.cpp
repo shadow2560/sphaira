@@ -137,7 +137,7 @@ auto LoadControlEntry(u64 id) -> ThreadResultData {
     data.control = std::make_shared<NsApplicationControlData>();
     data.status = NacpLoadStatus::Error;
 
-    bool manual_load = false;
+    bool manual_load = true;
     if (hosversionBefore(20,0,0)) {
         TimeStamp ts;
         if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, id, data.control.get(), sizeof(NsApplicationControlData), &data.control_size))) {
