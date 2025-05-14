@@ -244,6 +244,11 @@ void List::DrawHome(NVGcontext* vg, Theme* theme, s64 count, Callback callback) 
     nvgIntersectScissor(vg, GetX(), GetY(), GetW(), GetH());
 
     for (s64 i = 0; i < count; i++, v.x += v.w + m_pad.x) {
+        // skip anything not visible
+        if (v.x + v.w < GetX()) {
+            continue;
+        }
+
         if (v.x > GetX() + GetW()) {
             break;
         }
