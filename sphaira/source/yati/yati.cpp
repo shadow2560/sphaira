@@ -929,8 +929,10 @@ Result Yati::InstallNca(std::span<TikCollection> tickets, NcaCollection& nca) {
     } else if (nca.header.content_type == nca::ContentType_Control) {
         NacpLanguageEntry entry;
         std::vector<u8> icon;
-        R_TRY(nca::ParseControl(path, nca.header.program_id, &entry, sizeof(entry), &icon));
-        pbox->SetTitle(entry.name).SetImageData(icon);
+        // this may fail if tickets aren't installed and the nca uses title key crypto.
+        if (R_SUCCEEDED(nca::ParseControl(path, nca.header.program_id, &entry, sizeof(entry), &icon))) {
+            pbox->SetTitle(entry.name).SetImageData(icon);
+        }
     }
 
     R_SUCCEED();
