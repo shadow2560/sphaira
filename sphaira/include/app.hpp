@@ -8,6 +8,7 @@
 #include "owo.hpp"
 #include "option.hpp"
 #include "fs.hpp"
+#include "log.hpp"
 
 #include <switch.h>
 #include <vector>
@@ -146,7 +147,7 @@ public:
     }
 
     static auto IsEmunand() -> bool {
-        struct EmummcPaths {
+        alignas(0x1000) struct EmummcPaths {
             char unk[0x80];
             char nintendo[0x80];
         } paths{};
