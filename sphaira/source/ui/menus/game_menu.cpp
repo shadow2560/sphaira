@@ -1,6 +1,11 @@
 #include "app.hpp"
 #include "log.hpp"
 #include "fs.hpp"
+#include "download.hpp"
+#include "defines.hpp"
+#include "i18n.hpp"
+#include "location.hpp"
+
 #include "ui/menus/game_menu.hpp"
 #include "ui/sidebar.hpp"
 #include "ui/error_box.hpp"
@@ -8,8 +13,6 @@
 #include "ui/progress_box.hpp"
 #include "ui/popup_list.hpp"
 #include "ui/nvg_util.hpp"
-#include "defines.hpp"
-#include "i18n.hpp"
 
 #include "yati/nx/ncm.hpp"
 #include "yati/nx/nca.hpp"
@@ -22,6 +25,7 @@
 #include <utility>
 #include <cstring>
 #include <algorithm>
+#include <minIni.h>
 
 namespace sphaira::ui::menu::game {
 namespace {
@@ -157,7 +161,7 @@ struct NspEntry {
         // adjust offset.
         off -= nsp_data.size();
 
-        for (auto& collection : collections) {
+        for (const auto& collection : collections) {
             if (InRange(off, collection.offset, collection.size)) {
                 // adjust offset relative to the collection.
                 off -= collection.offset;
@@ -217,6 +221,30 @@ struct NspSource final : BaseSource {
         return m_entries;
     }
 
+    auto GetName(const std::string& path) const -> std::string {
+        const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
+            return path == e.path;
+        });
+
+        if (it != m_entries.end()) {
+            return it->application_name;
+        }
+
+        return {};
+    }
+
+    auto GetSize(const std::string& path) const -> s64 {
+        const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
+            return path == e.path;
+        });
+
+        if (it != m_entries.end()) {
+            return it->nsp_size;
+        }
+
+        return 0;
+    }
+
 private:
     std::span<NspEntry> m_entries{};
 };
@@ -230,11 +258,17 @@ struct UsbTest final : usb::upload::Usb {
     Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
         if (m_path != path) {
             m_path = path;
+            m_progress = 0;
+            m_size = m_source->GetSize(path);
+            m_pbox->SetTitle(m_source->GetName(path));
             m_pbox->NewTransfer(m_path);
         }
 
         R_TRY(m_source->Read(path, buf, off, size, bytes_read));
+
         m_offset += *bytes_read;
+        m_progress += *bytes_read;
+        m_pbox->UpdateTransfer(m_progress, m_size);
 
         R_SUCCEED();
     }
@@ -244,6 +278,8 @@ private:
     ProgressBox* m_pbox{};
     std::string m_path{};
     s64 m_offset{};
+    s64 m_size{};
+    s64 m_progress{};
 };
 
 Result DumpNspToFile(ProgressBox* pbox, std::span<NspEntry> entries) {
@@ -355,6 +391,50 @@ Result DumpNspToDevNull(ProgressBox* pbox, std::span<NspEntry> entries) {
             pbox->UpdateTransfer(offset, e.nsp_size);
             offset += bytes_read;
         }
+    }
+
+    R_SUCCEED();
+}
+
+Result DumpNspToNetwork(ProgressBox* pbox, const location::Entry& loc, std::span<NspEntry> entries) {
+    auto source = std::make_unique<NspSource>(entries);
+    for (const auto& e : entries) {
+        if (pbox->ShouldExit()) {
+            R_THROW(0xFFFF);
+        }
+
+        pbox->SetTitle(e.application_name);
+        pbox->NewTransfer(e.path);
+
+        s64 offset{};
+        const auto result = curl::Api().FromMemory(
+            curl::Url{loc.url},
+            curl::UserPass{loc.user, loc.pass},
+            curl::Bearer{loc.bearer},
+            curl::PubKey{loc.pub_key},
+            curl::PrivKey{loc.priv_key},
+            curl::Port(loc.port),
+            curl::OnProgress{pbox->OnDownloadProgressCallback()},
+            curl::UploadInfo{
+                e.path, e.nsp_size,
+                [&pbox, &e, &source, &offset](void *ptr, size_t size) -> size_t {
+                    u64 bytes_read{};
+                    if (R_FAILED(source->Read(e.path, ptr, offset, size, &bytes_read))) {
+                        // curl will request past the size of the file, causing an error.
+                        // only log the error if it failed in the middle of a transfer.
+                        if (offset != e.nsp_size) {
+                            log_write("failed to read in custom callback: %zd size: %zd\n", offset, e.nsp_size);
+                        }
+                        return 0;
+                    }
+
+                    offset += bytes_read;
+                    return bytes_read;
+                }
+            }
+        );
+
+        R_UNLESS(result.success, 0x1);
     }
 
     R_SUCCEED();
@@ -1215,7 +1295,7 @@ void Menu::OnLayoutChange() {
 }
 
 void Menu::DeleteGames() {
-    App::Push(std::make_shared<ProgressBox>(0, "Deleting Games"_i18n, "", [this](auto pbox) -> bool {
+    App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox) -> bool {
         auto targets = GetSelectedEntries();
 
         for (s64 i = 0; i < std::size(targets); i++) {
@@ -1242,18 +1322,24 @@ void Menu::DeleteGames() {
 
 void Menu::DumpGames(u32 flags) {
     PopupList::Items items;
+    const auto network_locations = location::Load();
+
+    for (const auto&p : network_locations) {
+        items.emplace_back(p.name);
+    }
+
     for (const auto&p : DUMP_LOCATIONS) {
-        items.emplace_back(p.display_name);
+        items.emplace_back(i18n::get(p.display_name));
     }
 
     App::Push(std::make_shared<PopupList>(
-        "Select dump location"_i18n, items, [this, flags](auto op_index){
+        "Select dump location"_i18n, items, [this, network_locations, flags](auto op_index){
             if (!op_index) {
                 return;
             }
 
             const auto index = *op_index;
-            App::Push(std::make_shared<ProgressBox>(0, "Dumping Games"_i18n, "", [this, index, flags](auto pbox) -> bool {
+            App::Push(std::make_shared<ProgressBox>(0, "Dumping"_i18n, "", [this, network_locations, index, flags](auto pbox) -> bool {
                 auto targets = GetSelectedEntries();
 
                 std::vector<NspEntry> nsp_entries;
@@ -1261,11 +1347,15 @@ void Menu::DumpGames(u32 flags) {
                     BuildNspEntries(e, flags, nsp_entries);
                 }
 
-                if (index == DumpLocationType_SdCard) {
+                const auto index2 = index - network_locations.size();
+
+                if (!network_locations.empty() && index < network_locations.size()) {
+                    return R_SUCCEEDED(DumpNspToNetwork(pbox, network_locations[index], nsp_entries));
+                } else if (index2 == DumpLocationType_SdCard) {
                     return R_SUCCEEDED(DumpNspToFile(pbox, nsp_entries));
-                } else if (index == DumpLocationType_UsbS2S) {
+                } else if (index2 == DumpLocationType_UsbS2S) {
                     return R_SUCCEEDED(DumpNspToUsbS2S(pbox, nsp_entries));
-                } else if (index == DumpLocationType_DevNull) {
+                } else if (index2 == DumpLocationType_DevNull) {
                     return R_SUCCEEDED(DumpNspToDevNull(pbox, nsp_entries));
                 }
 

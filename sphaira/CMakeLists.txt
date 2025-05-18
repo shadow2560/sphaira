@@ -70,6 +70,7 @@ add_executable(sphaira
     source/evman.cpp
     source/fs.cpp
     source/image.cpp
+    source/location.cpp
     source/log.cpp
     source/main.cpp
     source/nro.cpp
