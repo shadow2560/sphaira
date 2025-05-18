@@ -25,6 +25,7 @@ struct Entry {
     char display_version[0x10]{};
     NacpLanguageEntry lang{};
     int image{};
+    bool selected{};
 
     std::shared_ptr<NsApplicationControlData> control{};
     u64 control_size{};
@@ -103,11 +104,39 @@ private:
     void FreeEntries();
     void OnLayoutChange();
 
+    auto GetSelectedEntries() const {
+        std::vector<Entry> out;
+        for (auto& e : m_entries) {
+            if (e.selected) {
+                out.emplace_back(e);
+            }
+        }
+
+        if (!m_entries.empty() && out.empty()) {
+            out.emplace_back(m_entries[m_index]);
+        }
+
+        return out;
+    }
+
+    void ClearSelection() {
+        for (auto& e : m_entries) {
+            e.selected = false;
+        }
+
+        m_selected_count = 0;
+    }
+
+    void DeleteGames();
+    void DumpGames(u32 flags);
+
 private:
     static constexpr inline const char* INI_SECTION = "games";
+    static constexpr inline const char* INI_SECTION_DUMP = "dump";
 
     std::vector<Entry> m_entries{};
     s64 m_index{}; // where i am in the array
+    s64 m_selected_count{};
     std::unique_ptr<List> m_list{};
     Event m_event{};
     bool m_is_reversed{};

@@ -79,6 +79,11 @@ add_executable(sphaira
     source/i18n.cpp
     source/ftpsrv_helper.cpp
 
+    source/usb/base.cpp
+    source/usb/usbds.cpp
+    source/usb/usbhs.cpp
+    source/usb/usb_uploader.cpp
+
     source/yati/yati.cpp
     source/yati/container/nsp.cpp
     source/yati/container/xci.cpp
