@@ -79,6 +79,7 @@ struct UserPass {
 
 struct UploadInfo {
     UploadInfo() = default;
+    UploadInfo(const std::string& name) : m_name{name} {}
     UploadInfo(const std::string& name, s64 size, OnUploadCallback cb) : m_name{name}, m_size{size}, m_callback{cb} {}
     UploadInfo(const std::string& name, const std::vector<u8>& data) : m_name{name}, m_data{data} {}
     std::string m_name{};
@@ -118,6 +119,15 @@ struct DownloadEventData {
     ApiResult result;
     StopToken stoken;
 };
+
+// helper that generates the api using an location.
+#define CURL_LOCATION_TO_API(loc) \
+    curl::Url{loc.url}, \
+    curl::UserPass{loc.user, loc.pass}, \
+    curl::Bearer{loc.bearer}, \
+    curl::PubKey{loc.pub_key}, \
+    curl::PrivKey{loc.priv_key}, \
+    curl::Port(loc.port)
 
 auto Init() -> bool;
 void Exit();
@@ -213,6 +223,7 @@ struct Api {
     auto FromFile(Ts&&... ts) {
         static_assert(std::disjunction_v<std::is_same<Url, Ts>...>, "Url must be specified");
         static_assert(std::disjunction_v<std::is_same<Path, Ts>...>, "Path must be specified");
+        static_assert(std::disjunction_v<std::is_same<UploadInfo, Ts>...>, "UploadInfo must be specified");
         static_assert(!std::disjunction_v<std::is_same<OnComplete, Ts>...>, "OnComplete must not be specified");
         Api::set_option(std::forward<Ts>(ts)...);
         return curl::FromFile(*this);
@@ -253,6 +264,7 @@ struct Api {
     auto FromFileAsync(Ts&&... ts) {
         static_assert(std::disjunction_v<std::is_same<Url, Ts>...>, "Url must be specified");
         static_assert(std::disjunction_v<std::is_same<Path, Ts>...>, "Path must be specified");
+        static_assert(std::disjunction_v<std::is_same<UploadInfo, Ts>...>, "UploadInfo must be specified");
         static_assert(std::disjunction_v<std::is_same<OnComplete, Ts>...>, "OnComplete must be specified");
         static_assert(std::disjunction_v<std::is_same<StopToken, Ts>...>, "StopToken must be specified");
         Api::set_option(std::forward<Ts>(ts)...);

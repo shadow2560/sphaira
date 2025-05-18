@@ -33,6 +33,9 @@ constexpr int THREAD_CORE = 1;
 
 std::atomic_bool g_running{};
 CURLSH* g_curl_share{};
+// this is used for single threaded blocking installs.
+// avoids the needed for re-creating the handle each time.
+CURL* g_curl_single{};
 Mutex g_mutex_share[CURL_LOCK_DATA_LAST]{};
 
 struct UploadStruct {
@@ -690,8 +693,8 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
         return {};
     }
 
-    auto url = e.GetUrl();
     const auto& info = e.GetUploadInfo();
+    const auto url = e.GetUrl() + "/" + info.m_name;
     const bool has_file = !e.GetPath().empty() && e.GetPath() != "";
 
     UploadStruct chunk{};
@@ -717,8 +720,6 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
             upload_size = info.m_data.size();
             chunk.data = info.m_data;
         }
-
-        url += "/" + info.m_name;
     }
 
     if (url.starts_with("file://")) {
@@ -807,26 +808,6 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
     return {success, http_code, header_out, chunk_out.data};
 }
 
-auto DownloadInternal(const Api& e) -> ApiResult {
-    auto curl = curl_easy_init();
-    if (!curl) {
-        log_write("curl init failed\n");
-        return {};
-    }
-    ON_SCOPE_EXIT(curl_easy_cleanup(curl));
-    return DownloadInternal(curl, e);
-}
-
-auto UploadInternal(const Api& e) -> ApiResult {
-    auto curl = curl_easy_init();
-    if (!curl) {
-        log_write("curl init failed\n");
-        return {};
-    }
-    ON_SCOPE_EXIT(curl_easy_cleanup(curl));
-    return UploadInternal(curl, e);
-}
-
 void my_lock(CURL *handle, curl_lock_data data, curl_lock_access laccess, void *useptr) {
     mutexLock(&g_mutex_share[data]);
 }
@@ -848,12 +829,6 @@ void ThreadEntry::ThreadFunc(void* p) {
             continue;
         }
 
-        // ApiResult result;
-        // if (data->m_api.IsUpload()) {
-        //     result = UploadInternal(data->m_curl, data->m_api);
-        // } else {
-        //     result = DownloadInternal(data->m_curl, data->m_api);
-        // }
         const auto result = data->m_api.IsUpload() ? UploadInternal(data->m_curl, data->m_api) : DownloadInternal(data->m_curl, data->m_api);
         if (g_running && data->m_api.GetOnComplete() && !data->m_api.GetToken().stop_requested()) {
             evman::push(
@@ -956,6 +931,11 @@ auto Init() -> bool {
         }
     }
 
+    g_curl_single = curl_easy_init();
+    if (!g_curl_single) {
+        log_write("failed to create g_curl_single\n");
+    }
+
     log_write("finished creating threads\n");
 
     if (!g_cache.init()) {
@@ -969,6 +949,11 @@ void Exit() {
     g_running = false;
 
     g_thread_queue.Close();
+
+    if (g_curl_single) {
+        curl_easy_cleanup(g_curl_single);
+        g_curl_single = nullptr;
+    }
 
     for (auto& entry : g_threads) {
         entry.Close();
@@ -987,28 +972,28 @@ auto ToMemory(const Api& e) -> ApiResult {
     if (!e.GetPath().empty()) {
         return {};
     }
-    return DownloadInternal(e);
+    return DownloadInternal(g_curl_single, e);
 }
 
 auto ToFile(const Api& e) -> ApiResult {
     if (e.GetPath().empty()) {
         return {};
     }
-    return DownloadInternal(e);
+    return DownloadInternal(g_curl_single, e);
 }
 
 auto FromMemory(const Api& e) -> ApiResult {
     if (!e.GetPath().empty()) {
         return {};
     }
-    return UploadInternal(e);
+    return UploadInternal(g_curl_single, e);
 }
 
 auto FromFile(const Api& e) -> ApiResult {
     if (e.GetPath().empty()) {
         return {};
     }
-    return UploadInternal(e);
+    return UploadInternal(g_curl_single, e);
 }
 
 auto ToMemoryAsync(const Api& api) -> bool {

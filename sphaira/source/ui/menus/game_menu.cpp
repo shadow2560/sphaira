@@ -408,12 +408,7 @@ Result DumpNspToNetwork(ProgressBox* pbox, const location::Entry& loc, std::span
 
         s64 offset{};
         const auto result = curl::Api().FromMemory(
-            curl::Url{loc.url},
-            curl::UserPass{loc.user, loc.pass},
-            curl::Bearer{loc.bearer},
-            curl::PubKey{loc.pub_key},
-            curl::PrivKey{loc.priv_key},
-            curl::Port(loc.port),
+            CURL_LOCATION_TO_API(loc),
             curl::OnProgress{pbox->OnDownloadProgressCallback()},
             curl::UploadInfo{
                 e.path, e.nsp_size,
