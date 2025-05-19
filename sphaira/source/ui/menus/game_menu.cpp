@@ -664,7 +664,7 @@ auto BuildNspPath(const Entry& e, const NsApplicationContentMetaStatus& status) 
     }
 
     fs::FsPath path;
-    std::snprintf(path, sizeof(path), "%s %s[%016lX][v%u][%s].nsp", name_buf.s, version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type));
+    std::snprintf(path, sizeof(path), "%s/%s %s[%016lX][v%u][%s].nsp", name_buf.s, name_buf.s, version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type));
     return path;
 }
 

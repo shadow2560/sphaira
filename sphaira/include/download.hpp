@@ -13,10 +13,14 @@ namespace sphaira::curl {
 
 enum {
     Flag_None = 0,
+
     // requests to download send etag in the header.
     // the received etag is then saved on success.
     // this api is only available on downloading to file.
     Flag_Cache = 1 << 0,
+
+    // sets CURLOPT_NOBODY.
+    Flag_NoBody = 1 << 1,
 };
 
 enum class Priority {
@@ -68,6 +72,12 @@ struct Port {
     Port() = default;
     Port(u16 port) : m_port{port} {}
     u16 m_port{};
+};
+
+struct CustomRequest {
+    CustomRequest() = default;
+    CustomRequest(const std::string& str) : m_str{str} {}
+    std::string m_str;
 };
 
 struct UserPass {
@@ -281,6 +291,7 @@ struct Api {
     auto& GetFlags() const { return m_flags.m_flags; }
     auto& GetPath() const { return m_path; }
     auto& GetPort() const { return m_port.m_port; }
+    auto& GetCustomRequest() const { return m_custom_request.m_str; }
     auto& GetUserPass() const { return m_userpass; }
     auto& GetBearer() const { return m_bearer.m_str; }
     auto& GetPubKey() const { return m_pub_key.m_str; }
@@ -292,13 +303,13 @@ struct Api {
     auto& GetPriority() const { return m_prio; }
     auto& GetToken() const { return m_stoken; }
 
-private:
     void SetOption(Url&& v) { m_url = v; }
     void SetOption(Fields&& v) { m_fields = v; }
     void SetOption(Header&& v) { m_header = v; }
     void SetOption(Flags&& v) { m_flags = v; }
     void SetOption(Path&& v) { m_path = v; }
     void SetOption(Port&& v) { m_port = v; }
+    void SetOption(CustomRequest&& v) { m_custom_request = v; }
     void SetOption(UserPass&& v) { m_userpass = v; }
     void SetOption(Bearer&& v) { m_bearer = v; }
     void SetOption(PubKey&& v) { m_pub_key = v; }
@@ -322,12 +333,13 @@ private:
     }
 
 private:
-    Url m_url;
+    Url m_url{};
     Fields m_fields{};
     Header m_header{};
     Flags m_flags{};
     Path m_path{};
     Port m_port{};
+    CustomRequest m_custom_request{};
     UserPass m_userpass{};
     Bearer m_bearer{};
     PubKey m_pub_key{};
