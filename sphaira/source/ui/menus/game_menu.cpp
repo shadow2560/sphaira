@@ -288,7 +288,6 @@ Result DumpNspToFile(ProgressBox* pbox, std::span<NspEntry> entries) {
 
     fs::FsNativeSd fs{};
     R_TRY(fs.GetFsOpenResult());
-    fs.CreateDirectoryRecursively(DUMP_PATH);
 
     auto source = std::make_unique<NspSource>(entries);
     for (const auto& e : entries) {
@@ -296,6 +295,7 @@ Result DumpNspToFile(ProgressBox* pbox, std::span<NspEntry> entries) {
         pbox->NewTransfer(e.path);
 
         const auto temp_path = fs::AppendPath(DUMP_PATH, e.path + ".temp");
+        fs.CreateDirectoryRecursivelyWithPath(temp_path);
         fs.DeleteFile(temp_path);
 
         const auto flags = e.nsp_size >= BIG_FILE_SIZE ? FsCreateOption_BigFile : 0;
