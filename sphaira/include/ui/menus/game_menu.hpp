@@ -138,7 +138,6 @@ private:
     s64 m_index{}; // where i am in the array
     s64 m_selected_count{};
     std::unique_ptr<List> m_list{};
-    Event m_event{};
     bool m_is_reversed{};
     bool m_dirty{};
 

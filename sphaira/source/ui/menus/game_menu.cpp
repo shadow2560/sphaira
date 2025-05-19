@@ -1060,7 +1060,6 @@ Menu::Menu() : grid::Menu{"Games"_i18n} {
     OnLayoutChange();
 
     nsInitialize();
-    nsGetApplicationRecordUpdateSystemEvent(&m_event);
     es::Initialize();
 
     for (auto& e : ncm_entries) {
@@ -1079,7 +1078,6 @@ Menu::~Menu() {
     }
 
     FreeEntries();
-    eventClose(&m_event);
     nsExit();
     es::Exit();
 
@@ -1088,11 +1086,6 @@ Menu::~Menu() {
 }
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
-    if (R_SUCCEEDED(eventWait(&m_event, 0))) {
-        log_write("got ns event\n");
-        m_dirty = true;
-    }
-
     if (m_dirty) {
         App::Notify("Updating application record list");
         SortAndFindLastFile(true);
@@ -1181,10 +1174,6 @@ void Menu::ScanHomebrew() {
 
     FreeEntries();
     m_entries.reserve(ENTRY_CHUNK_COUNT);
-
-    // wait on event in order to clear it as this event will trigger when
-    // an application is launched, causing a double list.
-    eventWait(&m_event, 0);
 
     std::vector<NsApplicationRecord> record_list(ENTRY_CHUNK_COUNT);
     s32 offset{};
