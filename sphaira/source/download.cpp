@@ -41,6 +41,7 @@ Mutex g_mutex_share[CURL_LOCK_DATA_LAST]{};
 struct UploadStruct {
     std::span<const u8> data;
     s64 offset{};
+    s64 size{};
     FsFile f{};
 };
 
@@ -49,6 +50,11 @@ struct DataStruct {
     s64 offset{};
     FsFile f{};
     s64 file_offset{};
+};
+
+struct SeekCustomData {
+    OnUploadSeek cb{};
+    s64 size{};
 };
 
 auto generate_key_from_path(const fs::FsPath& path) -> std::string {
@@ -375,6 +381,46 @@ auto ProgressCallbackFunc2(void *clientp, curl_off_t dltotal, curl_off_t dlnow, 
     return 0;
 }
 
+auto SeekCallback(void *clientp, curl_off_t offset, int origin) -> int {
+    if (!g_running) {
+        return 0;
+    }
+
+    auto data_struct = static_cast<UploadStruct*>(clientp);
+
+    if (origin == SEEK_SET) {
+        offset = offset;
+    } else if (origin == SEEK_CUR) {
+        offset = data_struct->offset + offset;
+    } else if (origin == SEEK_END) {
+        offset = data_struct->size;
+    }
+
+    if (offset < 0 || offset > data_struct->size) {
+        return CURL_SEEKFUNC_CANTSEEK;
+    }
+
+    data_struct->offset = offset;
+    return CURL_SEEKFUNC_OK;
+}
+
+auto SeekCustomCallback(void *clientp, curl_off_t offset, int origin) -> int {
+    if (!g_running) {
+        return 0;
+    }
+
+    auto data_struct = static_cast<SeekCustomData*>(clientp);
+    if (origin != SEEK_SET || offset < 0 || offset > data_struct->size) {
+        return CURL_SEEKFUNC_CANTSEEK;
+    }
+
+    if (!data_struct->cb(offset)) {
+        return CURL_SEEKFUNC_CANTSEEK;
+    }
+
+    return CURL_SEEKFUNC_OK;
+}
+
 auto ReadFileCallback(char *ptr, size_t size, size_t nmemb, void *userp) -> size_t {
     if (!g_running) {
         return 0;
@@ -518,17 +564,20 @@ void SetCommonCurlOptions(CURL* curl, const Api& e) {
     // in most cases, this will use CURLAUTH_BASIC.
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_HTTPAUTH, (long)CURLAUTH_ANY);
 
+    // enable TE is server supports it.
+    CURL_EASY_SETOPT_LOG(curl, CURLOPT_TRANSFER_ENCODING, 1L);
+
     // set oath2 bearer.
-    if (!e.GetBearer().m_str.empty()) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XOAUTH2_BEARER, e.GetBearer().m_str.c_str());
+    if (!e.GetBearer().empty()) {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XOAUTH2_BEARER, e.GetBearer().c_str());
     }
 
     // set ssh pub/priv key file.
-    if (!e.GetPubKey().m_str.empty()) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_SSH_PUBLIC_KEYFILE, e.GetPubKey().m_str.c_str());
+    if (!e.GetPubKey().empty()) {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_SSH_PUBLIC_KEYFILE, e.GetPubKey().c_str());
     }
-    if (!e.GetPrivKey().m_str.empty()) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_SSH_PRIVATE_KEYFILE, e.GetPrivKey().m_str.c_str());
+    if (!e.GetPrivKey().empty()) {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_SSH_PRIVATE_KEYFILE, e.GetPrivKey().c_str());
     }
 
     // set auth.
@@ -540,11 +589,53 @@ void SetCommonCurlOptions(CURL* curl, const Api& e) {
     }
 
     // set port, if valid.
-    if (e.GetPort().m_port) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_PORT, (long)e.GetPort().m_port);
+    if (e.GetPort()) {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_PORT, (long)e.GetPort());
     }
 
+    // progress calls.
+    if (e.GetOnProgress()) {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFODATA, &e);
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc2);
+    } else {
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc1);
+    }
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_NOPROGRESS, 0L);
+}
+
+auto EscapeString(CURL* curl, const std::string& str) -> std::string {
+    char* s{};
+    if (!curl) {
+        s = curl_escape(str.data(), str.length());
+    } else {
+        s = curl_easy_escape(curl, str.data(), str.length());
+    }
+
+    if (!s) {
+        return str;
+    }
+
+    const std::string result = s;
+    curl_free(s);
+    return result;
+}
+
+auto EncodeUrl(const std::string& url) -> std::string {
+    auto clu = curl_url();
+    R_UNLESS(clu, url);
+    ON_SCOPE_EXIT(curl_url_cleanup(clu));
+
+    CURLUcode clu_code;
+    clu_code = curl_url_set(clu, CURLUPART_URL, url.c_str(), CURLU_URLENCODE);
+    R_UNLESS(clu_code == CURLUE_OK, url);
+
+    char* encoded_url;
+    clu_code = curl_url_get(clu, CURLUPART_URL, &encoded_url, 0);
+    R_UNLESS(clu_code == CURLUE_OK, url);
+
+    const std::string out = encoded_url;
+    curl_free(encoded_url);
+    return out;
 }
 
 auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
@@ -622,15 +713,6 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_HTTPHEADER, list);
     }
 
-    // progress calls.
-    if (e.GetOnProgress()) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFODATA, &e);
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc2);
-    } else {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc1);
-    }
-    CURL_EASY_SETOPT_LOG(curl, CURLOPT_NOPROGRESS, 0L);
-
     // write calls.
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_WRITEFUNCTION, has_file ? WriteFileCallback : WriteMemoryCallback);
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_WRITEDATA, &chunk);
@@ -699,10 +781,10 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
 
     UploadStruct chunk{};
     DataStruct chunk_out{};
+    SeekCustomData seek_data{};
     Header header_in = e.GetHeader();
     Header header_out;
     fs::FsNativeSd fs{};
-    s64 upload_size{};
 
     if (has_file) {
         if (R_FAILED(fs.OpenFile(e.GetPath(), FsOpenMode_Read, &chunk.f))) {
@@ -710,14 +792,14 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
             return {};
         }
 
-        fsFileGetSize(&chunk.f, &upload_size);
-        log_write("got chunk size: %zd\n", upload_size);
+        fsFileGetSize(&chunk.f, &chunk.size);
+        log_write("got chunk size: %zd\n", chunk.size);
     } else {
         if (info.m_callback) {
-            upload_size = info.m_size;
-            log_write("setting upload size: %zu\n", upload_size);
+            chunk.size = info.m_size;
+            log_write("setting upload size: %zu\n", chunk.size);
         } else {
-            upload_size = info.m_data.size();
+            chunk.size = info.m_data.size();
             chunk.data = info.m_data;
         }
     }
@@ -737,12 +819,20 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
     curl_easy_reset(curl);
     SetCommonCurlOptions(curl, e);
 
-    CURL_EASY_SETOPT_LOG(curl, CURLOPT_URL, url.c_str());
+    // encode url
+    auto clu = curl_url();
+    R_UNLESS(clu, {});
+    ON_SCOPE_EXIT(curl_url_cleanup(clu));
+
+    const auto clu_code = curl_url_set(clu, CURLUPART_URL, url.c_str(), CURLU_URLENCODE);
+    R_UNLESS(clu_code == CURLUE_OK, {});
+
+    CURL_EASY_SETOPT_LOG(curl, CURLOPT_CURLU, clu);
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_HEADERFUNCTION, header_callback);
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_HEADERDATA, &header_out);
 
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_UPLOAD, 1L);
-    CURL_EASY_SETOPT_LOG(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)upload_size);
+    CURL_EASY_SETOPT_LOG(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)chunk.size);
 
     // instruct libcurl to create ftp folders if they don't yet exist.
     CURL_EASY_SETOPT_LOG(curl, CURLOPT_FTP_CREATE_MISSING_DIRS, CURLFTP_CREATE_DIR_RETRY);
@@ -776,17 +866,20 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
     if (info.m_callback) {
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_READFUNCTION, ReadCustomCallback);
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_READDATA, &info);
+
+        if (e.GetOnUploadSeek()) {
+            seek_data.cb = e.GetOnUploadSeek();
+            seek_data.size = chunk.size;
+            CURL_EASY_SETOPT_LOG(curl, CURLOPT_SEEKFUNCTION, SeekCustomCallback);
+            CURL_EASY_SETOPT_LOG(curl, CURLOPT_SEEKDATA, &seek_data);
+        }
     } else {
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_READFUNCTION, has_file ? ReadFileCallback : ReadMemoryCallback);
         CURL_EASY_SETOPT_LOG(curl, CURLOPT_READDATA, &chunk);
-    }
 
-    // progress calls.
-    if (e.GetOnProgress()) {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFODATA, &e);
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc2);
-    } else {
-        CURL_EASY_SETOPT_LOG(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallbackFunc1);
+        // allow for seeking upon uploads, may be used for ftp and http.
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_SEEKFUNCTION, SeekCallback);
+        CURL_EASY_SETOPT_LOG(curl, CURLOPT_SEEKDATA, &chunk);
     }
 
     // write calls.
@@ -1013,13 +1106,7 @@ auto FromFileAsync(const Api& e) -> bool {
 }
 
 auto EscapeString(const std::string& str) -> std::string {
-    std::string result;
-    const auto s = curl_escape(str.data(), str.length());
-    if (s) {
-        result = s;
-        curl_free(s);
-    }
-    return result;
+    return EscapeString(nullptr, str);
 }
 
 } // namespace sphaira::curl

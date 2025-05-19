@@ -426,6 +426,12 @@ Result DumpNspToNetwork(ProgressBox* pbox, const location::Entry& loc, std::span
                     offset += bytes_read;
                     return bytes_read;
                 }
+            },
+            curl::OnUploadSeek{
+                [&e, &offset](s64 new_offset){
+                    offset = new_offset;
+                    return true;
+                }
             }
         );
 

@@ -31,6 +31,7 @@ using Path = fs::FsPath;
 using OnComplete = std::function<void(ApiResult& result)>;
 using OnProgress = std::function<bool(s64 dltotal, s64 dlnow, s64 ultotal, s64 ulnow)>;
 using OnUploadCallback = std::function<size_t(void *ptr, size_t size)>;
+using OnUploadSeek = std::function<bool(s64 offset)>;
 using StopToken = std::stop_token;
 
 struct Url {
@@ -271,105 +272,43 @@ struct Api {
         return curl::FromFileAsync(*this);
     }
 
-    void SetUpload(bool enable) {
-        m_is_upload = enable;
-    }
+    void SetUpload(bool enable) { m_is_upload = enable; }
 
-    auto IsUpload() const {
-        return m_is_upload;
-    }
-    auto& GetUrl() const {
-        return m_url.m_str;
-    }
-    auto& GetFields() const {
-        return m_fields.m_str;
-    }
-    auto& GetHeader() const {
-        return m_header;
-    }
-    auto& GetFlags() const {
-        return m_flags.m_flags;
-    }
-    auto& GetPath() const {
-        return m_path;
-    }
-    auto& GetPort() const {
-        return m_port;
-    }
-    auto& GetUserPass() const {
-        return m_userpass;
-    }
-    auto& GetBearer() const {
-        return m_bearer;
-    }
-    auto& GetPubKey() const {
-        return m_pub_key;
-    }
-    auto& GetPrivKey() const {
-        return m_priv_key;
-    }
-    auto& GetUploadInfo() const {
-        return m_info;
-    }
-    auto& GetOnComplete() const {
-        return m_on_complete;
-    }
-    auto& GetOnProgress() const {
-        return m_on_progress;
-    }
-    auto& GetPriority() const {
-        return m_prio;
-    }
-    auto& GetToken() const {
-        return m_stoken;
-    }
+    auto IsUpload() const { return m_is_upload; }
+    auto& GetUrl() const { return m_url.m_str; }
+    auto& GetFields() const { return m_fields.m_str; }
+    auto& GetHeader() const { return m_header; }
+    auto& GetFlags() const { return m_flags.m_flags; }
+    auto& GetPath() const { return m_path; }
+    auto& GetPort() const { return m_port.m_port; }
+    auto& GetUserPass() const { return m_userpass; }
+    auto& GetBearer() const { return m_bearer.m_str; }
+    auto& GetPubKey() const { return m_pub_key.m_str; }
+    auto& GetPrivKey() const { return m_priv_key.m_str; }
+    auto& GetUploadInfo() const { return m_info; }
+    auto& GetOnComplete() const { return m_on_complete; }
+    auto& GetOnProgress() const { return m_on_progress; }
+    auto& GetOnUploadSeek() const { return m_on_upload_seek; }
+    auto& GetPriority() const { return m_prio; }
+    auto& GetToken() const { return m_stoken; }
 
 private:
-    void SetOption(Url&& v) {
-        m_url = v;
-    }
-    void SetOption(Fields&& v) {
-        m_fields = v;
-    }
-    void SetOption(Header&& v) {
-        m_header = v;
-    }
-    void SetOption(Flags&& v) {
-        m_flags = v;
-    }
-    void SetOption(Path&& v) {
-        m_path = v;
-    }
-    void SetOption(Port&& v) {
-        m_port = v;
-    }
-    void SetOption(UserPass&& v) {
-        m_userpass = v;
-    }
-    void SetOption(Bearer&& v) {
-        m_bearer = v;
-    }
-    void SetOption(PubKey&& v) {
-        m_pub_key = v;
-    }
-    void SetOption(PrivKey&& v) {
-        m_priv_key = v;
-    }
-    void SetOption(UploadInfo&& v) {
-        m_info = v;
-    }
-    void SetOption(OnComplete&& v) {
-        m_on_complete = v;
-    }
-    void SetOption(OnProgress&& v) {
-        m_on_progress = v;
-    }
-    void SetOption(Priority&& v) {
-        m_prio = v;
-    }
-    void SetOption(StopToken&& v) {
-        m_stoken = v;
-    }
+    void SetOption(Url&& v) { m_url = v; }
+    void SetOption(Fields&& v) { m_fields = v; }
+    void SetOption(Header&& v) { m_header = v; }
+    void SetOption(Flags&& v) { m_flags = v; }
+    void SetOption(Path&& v) { m_path = v; }
+    void SetOption(Port&& v) { m_port = v; }
+    void SetOption(UserPass&& v) { m_userpass = v; }
+    void SetOption(Bearer&& v) { m_bearer = v; }
+    void SetOption(PubKey&& v) { m_pub_key = v; }
+    void SetOption(PrivKey&& v) { m_priv_key = v; }
+    void SetOption(UploadInfo&& v) { m_info = v; }
+    void SetOption(OnComplete&& v) { m_on_complete = v; }
+    void SetOption(OnProgress&& v) { m_on_progress = v; }
+    void SetOption(OnUploadSeek&& v) { m_on_upload_seek = v; }
+    void SetOption(Priority&& v) { m_prio = v; }
+    void SetOption(StopToken&& v) { m_stoken = v; }
 
     template <typename T>
     void set_option(T&& t) {
@@ -396,6 +335,7 @@ private:
     UploadInfo m_info{};
     OnComplete m_on_complete{};
     OnProgress m_on_progress{};
+    OnUploadSeek m_on_upload_seek{};
     Priority m_prio{Priority::High};
     std::stop_source m_stop_source{};
     StopToken m_stoken{m_stop_source.get_token()};

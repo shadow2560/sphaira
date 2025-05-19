@@ -105,6 +105,7 @@ add_executable(sphaira
 target_compile_definitions(sphaira PRIVATE
     -DAPP_VERSION="${sphaira_VERSION}"
     -DAPP_VERSION_HASH="${sphaira_VERSION_HASH}"
+    -DCURL_NO_OLDIES=1
 )
 
 target_compile_options(sphaira PRIVATE
