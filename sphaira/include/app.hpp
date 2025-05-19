@@ -127,6 +127,10 @@ public:
     void ScanThemes(const std::string& path);
     void ScanThemeEntries();
 
+    // helper that converts 1.2.3 to a u32 used for comparisons.
+    static auto GetVersionFromString(const char* str) -> u32;
+    static auto IsVersionNewer(const char* current, const char* new_version) -> u32;
+
     static auto IsApplication() -> bool {
         const auto type = appletGetAppletType();
         return type == AppletType_Application || type == AppletType_SystemApplication;

@@ -719,7 +719,7 @@ void App::SetReplaceHbmenuEnable(bool enable) {
                     }
 
                     if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
-                        if (std::strcmp(sphaira_nacp.display_version, hbmenu_nacp.display_version) < 0) {
+                        if (IsVersionNewer(sphaira_nacp.display_version, hbmenu_nacp.display_version)) {
                             if (R_FAILED(rc = fs.copy_entire_file(sphaira_path, "/hbmenu.nro"))) {
                                 log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path.s, rc, R_MODULE(rc), R_DESCRIPTION(rc));
                             } else {
@@ -1744,7 +1744,7 @@ App::~App() {
 
             // found sphaira, now lets get compare version
             if (R_SUCCEEDED(rc) && !std::strcmp(sphaira_nacp.lang[0].name, "sphaira")) {
-                if (std::strcmp(hbmenu_nacp.display_version, sphaira_nacp.display_version) < 0) {
+                if (IsVersionNewer(hbmenu_nacp.display_version, sphaira_nacp.display_version)) {
                     if (R_FAILED(rc = fs.copy_entire_file(GetExePath(), sphaira_path))) {
                         log_write("failed to copy entire file: %s 0x%X module: %u desc: %u\n", sphaira_path.s, rc, R_MODULE(rc), R_DESCRIPTION(rc));
                     } else {
@@ -1780,6 +1780,16 @@ App::~App() {
     u64 timestamp;
     timeGetCurrentTime(TimeType_LocalSystemClock, &timestamp);
     ini_putl("paths", "timestamp", timestamp, App::CONFIG_PATH);
+}
+
+auto App::GetVersionFromString(const char* str) -> u32 {
+    u32 major{}, minor{}, macro{};
+    std::sscanf(str, "%u.%u.%u", &major, &minor, &macro);
+    return MAKEHOSVERSION(major, minor, macro);
+}
+
+auto App::IsVersionNewer(const char* current, const char* new_version) -> u32 {
+    return GetVersionFromString(current) < GetVersionFromString(new_version);
 }
 
 void App::createFramebufferResources() {

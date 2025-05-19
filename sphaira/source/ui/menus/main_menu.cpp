@@ -212,7 +212,7 @@ MainMenu::MainMenu() {
 
             const auto version = yyjson_get_str(tag_key);
             R_UNLESS(version, false);
-            if (!std::strcmp(APP_VERSION, version)) {
+            if (!App::IsVersionNewer(APP_VERSION, version)) {
                 m_update_state = UpdateState::None;
                 return true;
             }
