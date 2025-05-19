@@ -152,6 +152,12 @@ Menu::Menu() : MenuBase{"FTP Install (EXPERIMENTAL)"_i18n} {
     }});
 
     mutexInit(&m_mutex);
+    m_was_ftp_enabled = App::GetFtpEnable();
+    if (!m_was_ftp_enabled) {
+        log_write("[FTP] wasn't enabled, forcefully enabling\n");
+        App::SetFtpEnable(true);
+    }
+
     ftpsrv::InitInstallMode(this, OnInstallStart, OnInstallWrite, OnInstallClose);
 
     m_port = ftpsrv::GetPort();
@@ -169,6 +175,11 @@ Menu::~Menu() {
 
     if (m_source) {
         m_source->Disable();
+    }
+
+    if (!m_was_ftp_enabled) {
+        log_write("[FTP] disabling on exit\n");
+        App::SetFtpEnable(false);
     }
 
     log_write("closing data!!!!\n");
