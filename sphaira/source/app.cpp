@@ -542,7 +542,7 @@ void App::NotifyClear(ui::NotifEntry::Side side) {
 }
 
 void App::NotifyFlashLed() {
-    static const HidsysNotificationLedPattern pattern = {
+    static constexpr HidsysNotificationLedPattern pattern = {
         .baseMiniCycleDuration = 0x1,             // 12.5ms.
         .totalMiniCycles = 0x1,                   // 1 mini cycle(s).
         .totalFullCycles = 0x1,                   // 1 full run(s).
@@ -554,11 +554,19 @@ void App::NotifyFlashLed() {
         }}
     };
 
+    Result rc;
     s32 total;
-    HidsysUniquePadId unique_pad_ids[16] = {0};
-    if (R_SUCCEEDED(hidsysGetUniquePadIds(unique_pad_ids, 16, &total))) {
-        for (int i = 0; i < total; i++) {
-            hidsysSetNotificationLedPattern(&pattern, unique_pad_ids[i]);
+    HidsysUniquePadId unique_pad_id;
+
+    rc = hidsysGetUniquePadsFromNpad(HidNpadIdType_Handheld, &unique_pad_id, 1, &total);
+    if (R_SUCCEEDED(rc) && total) {
+        rc = hidsysSetNotificationLedPattern(&pattern, unique_pad_id);
+    }
+
+    if (R_FAILED(rc) || !total) {
+        rc = hidsysGetUniquePadsFromNpad(HidNpadIdType_No1, &unique_pad_id, 1, &total);
+        if (R_SUCCEEDED(rc) && total) {
+            hidsysSetNotificationLedPattern(&pattern, unique_pad_id);
         }
     }
 }
