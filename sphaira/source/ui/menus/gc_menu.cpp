@@ -13,6 +13,7 @@
 #include "i18n.hpp"
 #include "download.hpp"
 #include "location.hpp"
+#include "threaded_file_transfer.hpp"
 
 #include <cstring>
 #include <algorithm>
@@ -285,6 +286,7 @@ Result DumpNspToFile(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEn
     R_TRY(fs.GetFsOpenResult());
 
     for (auto path : paths) {
+        const auto file_size = e.GetSize(path);
         pbox->SetTitle(e.application_name);
         pbox->NewTransfer(path);
 
@@ -292,9 +294,8 @@ Result DumpNspToFile(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEn
         fs.CreateDirectoryRecursivelyWithPath(temp_path);
         fs.DeleteFile(temp_path);
 
-        const auto size = e.GetSize(path);
-        const auto flags = size >= BIG_FILE_SIZE ? FsCreateOption_BigFile : 0;
-        R_TRY(fs.CreateFile(temp_path, size, flags));
+        const auto flags = file_size >= BIG_FILE_SIZE ? FsCreateOption_BigFile : 0;
+        R_TRY(fs.CreateFile(temp_path, file_size, flags));
         ON_SCOPE_EXIT(fs.DeleteFile(temp_path));
 
         {
@@ -302,24 +303,14 @@ Result DumpNspToFile(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEn
             R_TRY(fs.OpenFile(temp_path, FsOpenMode_Write, &file));
             ON_SCOPE_EXIT(fsFileClose(&file));
 
-            s64 offset{};
-            std::vector<u8> buf(1024*1024*4); // 4MiB
-
-            while (offset < size) {
-                if (pbox->ShouldExit()) {
-                    R_THROW(0xFFFF);
+            R_TRY(thread::Transfer(pbox, file_size,
+                [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
+                    return e.Read(path, data, off, size, bytes_read);
+                },
+                [&](const void* data, s64 off, s64 size) -> Result {
+                    return fsFileWrite(&file, off, data, size, FsWriteOption_None);
                 }
-
-                u64 bytes_read;
-                R_TRY(e.Read(path, buf.data(), offset, buf.size(), &bytes_read));
-                pbox->Yield();
-
-                R_TRY(fsFileWrite(&file, offset, buf.data(), bytes_read, FsWriteOption_None));
-                pbox->Yield();
-
-                pbox->UpdateTransfer(offset, size);
-                offset += bytes_read;
-            }
+            ));
         }
 
         path = fs::AppendPath(DUMP_PATH, path);
@@ -367,25 +358,18 @@ Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<const fs::FsPath> paths, Xci
 
 Result DumpNspToDevNull(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
     for (const auto& path : paths) {
+        const auto file_size = e.GetSize(path);
         pbox->SetTitle(e.application_name);
         pbox->NewTransfer(path);
 
-        s64 offset{};
-        const auto size = e.GetSize(path);
-        std::vector<u8> buf(1024*1024*4); // 4MiB
-
-        while (offset < size) {
-            if (pbox->ShouldExit()) {
-                R_THROW(0xFFFF);
+        R_TRY(thread::Transfer(pbox, file_size,
+            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
+                return e.Read(path, data, off, size, bytes_read);
+            },
+            [&](const void* data, s64 off, s64 size) -> Result {
+                R_SUCCEED();
             }
-
-            u64 bytes_read;
-            R_TRY(e.Read(path, buf.data(), offset, buf.size(), &bytes_read));
-            pbox->Yield();
-
-            pbox->UpdateTransfer(offset, size);
-            offset += bytes_read;
-        }
+        ));
     }
 
     R_SUCCEED();
@@ -397,41 +381,45 @@ Result DumpNspToNetwork(ProgressBox* pbox, const location::Entry& loc, std::span
             R_THROW(0xFFFF);
         }
 
+        const auto file_size = e.GetSize(path);
         pbox->SetTitle(e.application_name);
         pbox->NewTransfer(path);
 
-        s64 offset{};
-        const auto size = e.GetSize(path);
-
-        const auto result = curl::Api().FromMemory(
-            CURL_LOCATION_TO_API(loc),
-            curl::OnProgress{pbox->OnDownloadProgressCallback()},
-            curl::UploadInfo{
-                path, size,
-                [&pbox, &e, &offset, &path](void *ptr, size_t size) -> size_t {
-                    u64 bytes_read{};
-                    if (R_FAILED(e.Read(path, ptr, offset, size, &bytes_read))) {
-                        // curl will request past the size of the file, causing an error.
-                        // only log the error if it failed in the middle of a transfer.
-                        if (offset != size) {
-                            log_write("failed to read in custom callback: %zd size: %zd\n", offset, size);
-                        }
-                        return 0;
-                    }
-
-                    offset += bytes_read;
-                    return bytes_read;
-                }
+        R_TRY(thread::TransferPull(pbox, file_size,
+            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
+                return e.Read(path, data, off, size, bytes_read);
             },
-            curl::OnUploadSeek{
-                [&offset](s64 new_offset){
-                    offset = new_offset;
-                    return true;
-                }
-            }
-        );
+            [&](thread::PullFunctionCallback pull) -> Result {
+                s64 offset{};
+                const auto result = curl::Api().FromMemory(
+                    CURL_LOCATION_TO_API(loc),
+                    curl::OnProgress{pbox->OnDownloadProgressCallback()},
+                    curl::UploadInfo{
+                        path, file_size,
+                        [&](void *ptr, size_t size) -> size_t {
+                            // curl will request past the size of the file, causing an error.
+                            if (offset >= file_size) {
+                                log_write("finished file upload\n");
+                                return 0;
+                            }
 
-        R_UNLESS(result.success, 0x1);
+                            u64 bytes_read{};
+                            if (R_FAILED(pull(ptr, size, &bytes_read))) {
+                                log_write("failed to read in custom callback: %zd size: %zd\n", offset, size);
+                                return 0;
+                            }
+
+                            offset += bytes_read;
+                            return bytes_read;
+                        }
+                    }
+                );
+
+
+                R_UNLESS(result.success, 0x1);
+                R_SUCCEED();
+            }
+        ));
     }
 
     R_SUCCEED();

@@ -38,6 +38,7 @@ ProgressBox::ProgressBox(int image, const std::string& action, const std::string
     m_action = action;
     m_image = image;
 
+    m_cpuid = cpuid;
     m_thread_data.pbox = this;
     m_thread_data.callback = callback;
     if (R_FAILED(threadCreate(&m_thread, threadFunc, &m_thread_data, nullptr, stack_size, prio, cpuid))) {

@@ -236,7 +236,7 @@ private:
     auto CheckIfUpdateFolder() -> Result;
 
     auto get_collection(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollection& out, bool inc_file, bool inc_dir, bool inc_size) -> Result;
-    auto get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out) -> Result;
+    auto get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out, bool inc_size = false) -> Result;
 
     void SetFs(const fs::FsPath& new_path, u32 new_type);
 

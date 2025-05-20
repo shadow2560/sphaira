@@ -37,6 +37,10 @@ struct ProgressBox final : Widget {
     auto CopyFile(const fs::FsPath& src, const fs::FsPath& dst) -> Result;
     void Yield();
 
+    auto GetCpuId() const {
+        return m_cpuid;
+    }
+
     auto OnDownloadProgressCallback() {
         return [this](s64 dltotal, s64 dlnow, s64 ultotal, s64 ulnow){
             if (this->ShouldExit()) {
@@ -81,6 +85,7 @@ private:
     std::vector<u8> m_image_data{};
     // shared data end.
 
+    int m_cpuid{};
     int m_image{};
     bool m_own_image{};
 };

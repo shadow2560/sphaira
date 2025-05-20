@@ -19,6 +19,7 @@
 #include "swkbd.hpp"
 #include "i18n.hpp"
 #include "location.hpp"
+#include "threaded_file_transfer.hpp"
 
 #include "yati/yati.hpp"
 #include "yati/source/file.hpp"
@@ -1200,36 +1201,66 @@ void Menu::UploadFiles() {
             App::Push(std::make_shared<ProgressBox>(0, "Uploading"_i18n, "", [this, loc](auto pbox) -> bool {
                 auto targets = GetSelectedEntries();
 
-                const auto file_add = [&](const fs::FsPath& file_path, const char* name){
+                const auto file_add = [&](s64 file_size, const fs::FsPath& file_path, const char* name) -> Result {
                     // the file name needs to be relative to the current directory.
                     const auto relative_file_name = file_path.s + std::strlen(m_path);
                     pbox->SetTitle(name);
                     pbox->NewTransfer(relative_file_name);
 
-                    const auto result = curl::Api().FromFile(
-                        CURL_LOCATION_TO_API(loc),
-                        curl::Path{file_path},
-                        curl::OnProgress{pbox->OnDownloadProgressCallback()},
-                        curl::UploadInfo{relative_file_name}
-                    );
+                    FsFile file;
+                    R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Read, &file));
+                    ON_SCOPE_EXIT(fsFileClose(&file));
 
-                    return result.success;
+                    return thread::TransferPull(pbox, file_size,
+                        [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
+                            return fsFileRead(&file, off, data, size, FsReadOption_None, bytes_read);
+                        },
+                        [&](thread::PullFunctionCallback pull) -> Result {
+                            s64 offset{};
+                            const auto result = curl::Api().FromMemory(
+                                CURL_LOCATION_TO_API(loc),
+                                curl::OnProgress{pbox->OnDownloadProgressCallback()},
+                                curl::UploadInfo{
+                                    relative_file_name, file_size,
+                                    [&](void *ptr, size_t size) -> size_t {
+                                        // curl will request past the size of the file, causing an error.
+                                        if (offset >= file_size) {
+                                            log_write("finished file upload\n");
+                                            return 0;
+                                        }
+
+                                        u64 bytes_read{};
+                                        if (R_FAILED(pull(ptr, size, &bytes_read))) {
+                                            log_write("failed to read in custom callback: %zd size: %zd\n", offset, size);
+                                            return 0;
+                                        }
+
+                                        offset += bytes_read;
+                                        return bytes_read;
+                                    }
+                                }
+                            );
+
+                            R_UNLESS(result.success, 0x1);
+                            R_SUCCEED();
+                        }
+                    );
                 };
 
                 for (auto& e : targets) {
                     if (e.IsFile()) {
                         const auto file_path = GetNewPath(e);
-                        if (!file_add(file_path, e.GetName().c_str())) {
+                        if (R_FAILED(file_add(e.file_size, file_path, e.GetName().c_str()))) {
                             return false;
                         }
                     } else {
                         FsDirCollections collections;
-                        get_collections(GetNewPath(e), e.name, collections);
+                        get_collections(GetNewPath(e), e.name, collections, true);
 
                         for (const auto& collection : collections) {
                             for (const auto& file : collection.files) {
                                 const auto file_path = fs::AppendPath(collection.path, file.name);
-                                if (!file_add(file_path, file.name)) {
+                                if (R_FAILED(file_add(file.file_size, file_path, file.name))) {
                                     return false;
                                 }
                             }
@@ -1887,10 +1918,10 @@ auto Menu::get_collection(const fs::FsPath& path, const fs::FsPath& parent_name,
     R_SUCCEED();
 }
 
-auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out) -> Result {
+auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out, bool inc_size) -> Result {
     // get a list of all the files / dirs
     FsDirCollection collection;
-    R_TRY(get_collection(path, parent_name, collection, true, true, false));
+    R_TRY(get_collection(path, parent_name, collection, true, true, inc_size));
     log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path.s, parent_name.s, collection.files.size(), collection.dirs.size());
     out.emplace_back(collection);
 
@@ -1900,7 +1931,7 @@ auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name
         const auto new_path = std::make_unique<fs::FsPath>(Menu::GetNewPath(path, p.name));
         const auto new_parent_name = std::make_unique<fs::FsPath>(Menu::GetNewPath(parent_name, p.name));
         log_write("trying to get nested collection: %s parent_name: %s\n", new_path->s, new_parent_name->s);
-        R_TRY(get_collections(*new_path, *new_parent_name, out));
+        R_TRY(get_collections(*new_path, *new_parent_name, out, inc_size));
     }
 
     R_SUCCEED();
