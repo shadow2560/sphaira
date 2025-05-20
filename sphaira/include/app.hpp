@@ -165,6 +165,26 @@ public:
         return (paths.unk[0] != '\0') || (paths.nintendo[0] != '\0');
     }
 
+    static void SetAutoSleepDisabled(bool enable) {
+        static Mutex mutex{};
+        static int ref_count{};
+
+        mutexLock(&mutex);
+        ON_SCOPE_EXIT(mutexUnlock(&mutex));
+
+        if (enable) {
+            appletSetAutoSleepDisabled(true);
+            ref_count++;
+        } else {
+            if (ref_count) {
+                ref_count--;
+            }
+
+            if (!ref_count) {
+                appletSetAutoSleepDisabled(false);
+            }
+        }
+    }
 
 // private:
     static constexpr inline auto CONFIG_PATH = "/config/sphaira/config.ini";

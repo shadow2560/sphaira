@@ -754,7 +754,7 @@ struct BufHelper {
 };
 
 Yati::Yati(ui::ProgressBox* _pbox, std::shared_ptr<source::Base> _source) : pbox{_pbox}, source{_source} {
-    appletSetMediaPlaybackState(true);
+    App::SetAutoSleepDisabled(true);
 }
 
 Yati::~Yati() {
@@ -768,11 +768,11 @@ Yati::~Yati() {
         ncmContentStorageClose(std::addressof(ncm_cs[i]));
     }
 
-    appletSetMediaPlaybackState(false);
-
     if (config.boost_mode) {
         appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
     }
+
+    App::SetAutoSleepDisabled(false);
 }
 
 Result Yati::Setup(const ConfigOverride& override) {

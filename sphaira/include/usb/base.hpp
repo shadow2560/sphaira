@@ -15,6 +15,7 @@ struct Base {
     };
 
     Base(u64 transfer_timeout);
+    virtual ~Base();
 
     // sets up usb.
     virtual Result Init() = 0;

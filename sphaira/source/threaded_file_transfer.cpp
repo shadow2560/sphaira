@@ -1,6 +1,7 @@
 #include "threaded_file_transfer.hpp"
 #include "log.hpp"
 #include "defines.hpp"
+#include "app.hpp"
 
 #include <vector>
 #include <algorithm>
@@ -302,6 +303,9 @@ auto GetAlternateCore(int id) {
 }
 
 Result TransferInternal(ui::ProgressBox* pbox, s64 size, ReadFunctionCallback rfunc, WriteFunctionCallback wfunc, StartFunctionCallback sfunc) {
+    App::SetAutoSleepDisabled(true);
+    ON_SCOPE_EXIT(App::SetAutoSleepDisabled(false));
+
     const auto WRITE_THREAD_CORE = sfunc ? pbox->GetCpuId() : GetAlternateCore(pbox->GetCpuId());
     const auto READ_THREAD_CORE = GetAlternateCore(WRITE_THREAD_CORE);
 

@@ -151,6 +151,8 @@ Menu::Menu() : MenuBase{"FTP Install (EXPERIMENTAL)"_i18n} {
         App::DisplayInstallOptions(false);
     }});
 
+    App::SetAutoSleepDisabled(true);
+
     mutexInit(&m_mutex);
     m_was_ftp_enabled = App::GetFtpEnable();
     if (!m_was_ftp_enabled) {
@@ -182,6 +184,7 @@ Menu::~Menu() {
         App::SetFtpEnable(false);
     }
 
+    App::SetAutoSleepDisabled(false);
     log_write("closing data!!!!\n");
 }
 

@@ -19,16 +19,23 @@
 #include "usb/base.hpp"
 #include "log.hpp"
 #include "defines.hpp"
+#include "app.hpp"
 #include <ranges>
 #include <cstring>
 
 namespace sphaira::usb {
 
 Base::Base(u64 transfer_timeout) {
+    App::SetAutoSleepDisabled(true);
+
     m_transfer_timeout = transfer_timeout;
     ueventCreate(GetCancelEvent(), true);
     // this avoids allocations during transfers.
     m_aligned.reserve(1024 * 1024 * 16);
+}
+
+Base::~Base() {
+    App::SetAutoSleepDisabled(false);
 }
 
 Result Base::TransferPacketImpl(bool read, void *page, u32 size, u32 *out_size_transferred, u64 timeout) {

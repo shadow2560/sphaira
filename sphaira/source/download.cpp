@@ -3,6 +3,7 @@
 #include "defines.hpp"
 #include "evman.hpp"
 #include "fs.hpp"
+#include "app.hpp"
 
 #include <switch.h>
 #include <cstring>
@@ -669,6 +670,9 @@ void SetCommonCurlOptions(CURL* curl, const Api& e) {
 
 }
 auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
+    App::SetAutoSleepDisabled(true);
+    ON_SCOPE_EXIT(App::SetAutoSleepDisabled(false));
+
     // check if stop has been requested before starting download
     if (e.GetToken().stop_requested()) {
         return {};
