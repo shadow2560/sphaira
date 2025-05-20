@@ -1,33 +1,153 @@
 #include "ui/menus/gc_menu.hpp"
+#include "ui/nvg_util.hpp"
+#include "ui/sidebar.hpp"
+#include "ui/popup_list.hpp"
+
 #include "yati/yati.hpp"
 #include "yati/nx/nca.hpp"
+#include "usb/usb_uploader.hpp"
+
 #include "app.hpp"
 #include "defines.hpp"
 #include "log.hpp"
-#include "ui/nvg_util.hpp"
 #include "i18n.hpp"
+#include "download.hpp"
+#include "location.hpp"
+
 #include <cstring>
 #include <algorithm>
 
 namespace sphaira::ui::menu::gc {
 namespace {
 
+constexpr u32 XCI_MAGIC = std::byteswap(0x48454144);
+
+enum DumpFileType {
+    DumpFileType_XCI,
+    DumpFileType_TrimmedXCI,
+    DumpFileType_Set,
+    DumpFileType_UID,
+    DumpFileType_Cert,
+    DumpFileType_Initial,
+};
+
+enum DumpFileFlag {
+    DumpFileFlag_XCI = 1 << 0,
+    DumpFileFlag_Set = 1 << 1,
+    DumpFileFlag_UID = 1 << 2,
+    DumpFileFlag_Cert = 1 << 3,
+    DumpFileFlag_Initial = 1 << 4,
+
+    DumpFileFlag_AllBin = DumpFileFlag_Set | DumpFileFlag_UID | DumpFileFlag_Cert | DumpFileFlag_Initial,
+    DumpFileFlag_All = DumpFileFlag_XCI | DumpFileFlag_AllBin,
+};
+
+enum DumpLocationType {
+    DumpLocationType_SdCard,
+    DumpLocationType_UsbS2S,
+    DumpLocationType_DevNull,
+};
+
+struct DumpLocation {
+    const DumpLocationType type;
+    const char* display_name;
+};
+
+constexpr DumpLocation DUMP_LOCATIONS[]{
+    { DumpLocationType_SdCard, "microSD card (/dumps/XCI/)" },
+    { DumpLocationType_UsbS2S, "USB transfer (Switch 2 Switch)" },
+    { DumpLocationType_DevNull, "/dev/null (Speed Test)" },
+};
+
 const char *g_option_list[] = {
-    "Nand Install",
-    "SD Card Install",
+    "Install",
+    "Dump",
     "Exit",
 };
 
-struct HashStr {
-    char str[0x21];
-};
+// taken from nxdumptool.
+void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
+{
+    static const char g_illegalFileSystemChars[] = "\\/:*?\"<>|";
 
-HashStr hexIdToStr(auto id) {
-    HashStr str{};
-    const auto id_lower = std::byteswap(*(u64*)id.c);
-    const auto id_upper = std::byteswap(*(u64*)(id.c + 0x8));
-    std::snprintf(str.str, 0x21, "%016lx%016lx", id_lower, id_upper);
-    return str;
+    size_t str_size = 0, cur_pos = 0;
+
+    if (!str || !(str_size = strlen(str))) return;
+
+    u8 *ptr1 = (u8*)str, *ptr2 = ptr1;
+    ssize_t units = 0;
+    u32 code = 0;
+    bool repl = false;
+
+    while(cur_pos < str_size)
+    {
+        units = decode_utf8(&code, ptr1);
+        if (units < 0) break;
+
+        if (code < 0x20 || (!ascii_only && code == 0x7F) || (ascii_only && code >= 0x7F) || \
+            (units == 1 && memchr(g_illegalFileSystemChars, (int)code, std::size(g_illegalFileSystemChars))))
+        {
+            if (!repl)
+            {
+                *ptr2++ = '_';
+                repl = true;
+            }
+        } else {
+            if (ptr2 != ptr1) memmove(ptr2, ptr1, (size_t)units);
+            ptr2 += units;
+            repl = false;
+        }
+
+        ptr1 += units;
+        cur_pos += (size_t)units;
+    }
+
+    *ptr2 = '\0';
+}
+
+auto GetDumpTypeStr(u8 type) -> const char* {
+    switch (type) {
+        case DumpFileType_XCI: return ".xci";
+        case DumpFileType_TrimmedXCI: return " (trimmed).xci";
+        case DumpFileType_Set: return " (Card ID Set).bin";
+        case DumpFileType_UID: return " (Card UID).bin";
+        case DumpFileType_Cert: return " (Certificate).bin";
+        case DumpFileType_Initial: return " (Initial Data).bin";
+    }
+
+    return "";
+}
+
+auto BuildXciName(const ApplicationEntry& e) -> fs::FsPath {
+    fs::FsPath name_buf = e.lang_entry.name;
+    utilsReplaceIllegalCharacters(name_buf, true);
+
+    fs::FsPath path;
+    std::snprintf(path, sizeof(path), "%s [%016lX][v%u]", name_buf.s, e.app_id, e.version);
+    return path;
+}
+
+auto BuildXciBasePath(std::span<const ApplicationEntry> entries) -> fs::FsPath {
+    fs::FsPath path;
+    for (s64 i = 0; i < std::size(entries); i++) {
+        if (i) {
+            path += " + ";
+        }
+        path += BuildXciName(entries[i]);
+    }
+
+    return path;
+}
+
+// builds path suiteable for usb transfer.
+auto BuildFilePath(DumpFileType type, std::span<const ApplicationEntry> entries) -> fs::FsPath {
+    return BuildXciBasePath(entries) + GetDumpTypeStr(type);
+}
+
+// builds path suiteable for file dumps.
+auto BuildFullDumpPath(DumpFileType type, std::span<const ApplicationEntry> entries) -> fs::FsPath {
+    const auto base_path = BuildXciBasePath(entries);
+    return base_path + "/" + base_path + GetDumpTypeStr(type);
 }
 
 // @Gc is the mount point, S is for secure partion, the remaining is the
@@ -45,6 +165,288 @@ auto BuildGcPath(const char* name, const FsGameCardHandle* handle, FsGameCardPar
     return path;
 }
 
+struct XciEntry {
+    // application name.
+    std::string application_name{};
+    // extra
+    std::vector<u8> id_set{};
+    std::vector<u8> uid{};
+    std::vector<u8> cert{};
+    std::vector<u8> initial{};
+    // size of the entire xci.
+    s64 xci_size{};
+    Menu* menu{};
+
+    Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) {
+        if (path.ends_with(GetDumpTypeStr(DumpFileType_XCI))) {
+            size = ClipSize(off, size, xci_size);
+            *bytes_read = size;
+            return menu->GcStorageRead(buf, off, size);
+        } else {
+            std::span<const u8> span;
+            if (path.ends_with(GetDumpTypeStr(DumpFileType_Set))) {
+                span = id_set;
+            } else if (path.ends_with(GetDumpTypeStr(DumpFileType_UID))) {
+                span = uid;
+            } else if (path.ends_with(GetDumpTypeStr(DumpFileType_Cert))) {
+                span = cert;
+            } else if (path.ends_with(GetDumpTypeStr(DumpFileType_Initial))) {
+                span = initial;
+            }
+
+            R_UNLESS(!span.empty(), 0x1);
+
+            size = ClipSize(off, size, span.size());
+            *bytes_read = size;
+
+            std::memcpy(buf, span.data() + off, size);
+            R_SUCCEED();
+        }
+    }
+
+    auto GetName(const std::string& path) const -> std::string {
+        return application_name;
+    }
+
+    auto GetSize(const std::string& path) const -> s64 {
+        if (path.ends_with(GetDumpTypeStr(DumpFileType_XCI))) {
+            return xci_size;
+        } else if (path.ends_with(GetDumpTypeStr(DumpFileType_Set))) {
+            return id_set.size();
+        } else if (path.ends_with(GetDumpTypeStr(DumpFileType_UID))) {
+            return uid.size();
+        } else if (path.ends_with(GetDumpTypeStr(DumpFileType_Cert))) {
+            return cert.size();
+        } else if (path.ends_with(GetDumpTypeStr(DumpFileType_Initial))) {
+            return initial.size();
+        }
+        return 0;
+    }
+
+private:
+    static auto InRange(s64 off, s64 offset, s64 size) -> bool {
+        return off < offset + size && off >= offset;
+    }
+
+    static auto ClipSize(s64 off, s64 size, s64 file_size) -> s64 {
+        return std::min(size, file_size - off);
+    }
+};
+
+struct UsbTest final : usb::upload::Usb {
+    UsbTest(ProgressBox* pbox, XciEntry& entry) : Usb{UINT64_MAX}, m_entry{entry} {
+        m_pbox = pbox;
+    }
+
+    Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
+        if (m_path != path) {
+            m_path = path;
+            m_progress = 0;
+            m_size = m_entry.GetSize(path);
+            m_pbox->SetTitle(m_entry.GetName(path));
+            m_pbox->NewTransfer(m_path);
+        }
+
+        R_TRY(m_entry.Read(path, buf, off, size, bytes_read));
+
+        m_offset += *bytes_read;
+        m_progress += *bytes_read;
+        m_pbox->UpdateTransfer(m_progress, m_size);
+
+        R_SUCCEED();
+    }
+
+private:
+    XciEntry& m_entry;
+    ProgressBox* m_pbox{};
+    std::string m_path{};
+    s64 m_offset{};
+    s64 m_size{};
+    s64 m_progress{};
+};
+
+struct HashStr {
+    char str[0x21];
+};
+
+HashStr hexIdToStr(auto id) {
+    HashStr str{};
+    const auto id_lower = std::byteswap(*(u64*)id.c);
+    const auto id_upper = std::byteswap(*(u64*)(id.c + 0x8));
+    std::snprintf(str.str, 0x21, "%016lx%016lx", id_lower, id_upper);
+    return str;
+}
+
+Result DumpNspToFile(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
+    static constexpr fs::FsPath DUMP_PATH{"/dumps/XCI"};
+    constexpr s64 BIG_FILE_SIZE = 1024ULL*1024ULL*1024ULL*4ULL;
+
+    fs::FsNativeSd fs{};
+    R_TRY(fs.GetFsOpenResult());
+
+    for (auto path : paths) {
+        pbox->SetTitle(e.application_name);
+        pbox->NewTransfer(path);
+
+        const auto temp_path = fs::AppendPath(DUMP_PATH, path + ".temp");
+        fs.CreateDirectoryRecursivelyWithPath(temp_path);
+        fs.DeleteFile(temp_path);
+
+        const auto size = e.GetSize(path);
+        const auto flags = size >= BIG_FILE_SIZE ? FsCreateOption_BigFile : 0;
+        R_TRY(fs.CreateFile(temp_path, size, flags));
+        ON_SCOPE_EXIT(fs.DeleteFile(temp_path));
+
+        {
+            FsFile file;
+            R_TRY(fs.OpenFile(temp_path, FsOpenMode_Write, &file));
+            ON_SCOPE_EXIT(fsFileClose(&file));
+
+            s64 offset{};
+            std::vector<u8> buf(1024*1024*4); // 4MiB
+
+            while (offset < size) {
+                if (pbox->ShouldExit()) {
+                    R_THROW(0xFFFF);
+                }
+
+                u64 bytes_read;
+                R_TRY(e.Read(path, buf.data(), offset, buf.size(), &bytes_read));
+                pbox->Yield();
+
+                R_TRY(fsFileWrite(&file, offset, buf.data(), bytes_read, FsWriteOption_None));
+                pbox->Yield();
+
+                pbox->UpdateTransfer(offset, size);
+                offset += bytes_read;
+            }
+        }
+
+        path = fs::AppendPath(DUMP_PATH, path);
+        fs.DeleteFile(path);
+        R_TRY(fs.RenameFile(temp_path, path));
+    }
+
+    R_SUCCEED();
+}
+
+Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
+    std::vector<std::string> file_list;
+    for (auto& path : paths) {
+        file_list.emplace_back(path);
+    }
+
+    auto usb = std::make_unique<UsbTest>(pbox, e);
+    constexpr u64 timeout = 1e+9;
+
+    // todo: display progress bar during usb transfer.
+    while (!pbox->ShouldExit()) {
+        if (R_SUCCEEDED(usb->IsUsbConnected(timeout))) {
+            pbox->NewTransfer("USB connected, sending file list");
+            if (R_SUCCEEDED(usb->WaitForConnection(timeout, file_list))) {
+                pbox->NewTransfer("Sent file list, waiting for command...");
+
+                while (!pbox->ShouldExit()) {
+                    const auto rc = usb->PollCommands();
+                    if (rc == usb->Result_Exit) {
+                        log_write("got exit command\n");
+                        R_SUCCEED();
+                    }
+
+                    R_TRY(rc);
+                }
+            }
+
+        } else {
+            pbox->NewTransfer("waiting for usb connection...");
+        }
+    }
+
+    R_SUCCEED();
+}
+
+Result DumpNspToDevNull(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
+    for (const auto& path : paths) {
+        pbox->SetTitle(e.application_name);
+        pbox->NewTransfer(path);
+
+        s64 offset{};
+        const auto size = e.GetSize(path);
+        std::vector<u8> buf(1024*1024*4); // 4MiB
+
+        while (offset < size) {
+            if (pbox->ShouldExit()) {
+                R_THROW(0xFFFF);
+            }
+
+            u64 bytes_read;
+            R_TRY(e.Read(path, buf.data(), offset, buf.size(), &bytes_read));
+            pbox->Yield();
+
+            pbox->UpdateTransfer(offset, size);
+            offset += bytes_read;
+        }
+    }
+
+    R_SUCCEED();
+}
+
+Result DumpNspToNetwork(ProgressBox* pbox, const location::Entry& loc, std::span<const fs::FsPath> paths, XciEntry& e) {
+    for (const auto& path : paths) {
+        if (pbox->ShouldExit()) {
+            R_THROW(0xFFFF);
+        }
+
+        pbox->SetTitle(e.application_name);
+        pbox->NewTransfer(path);
+
+        s64 offset{};
+        const auto size = e.GetSize(path);
+
+        const auto result = curl::Api().FromMemory(
+            CURL_LOCATION_TO_API(loc),
+            curl::OnProgress{pbox->OnDownloadProgressCallback()},
+            curl::UploadInfo{
+                path, size,
+                [&pbox, &e, &offset, &path](void *ptr, size_t size) -> size_t {
+                    u64 bytes_read{};
+                    if (R_FAILED(e.Read(path, ptr, offset, size, &bytes_read))) {
+                        // curl will request past the size of the file, causing an error.
+                        // only log the error if it failed in the middle of a transfer.
+                        if (offset != size) {
+                            log_write("failed to read in custom callback: %zd size: %zd\n", offset, size);
+                        }
+                        return 0;
+                    }
+
+                    offset += bytes_read;
+                    return bytes_read;
+                }
+            },
+            curl::OnUploadSeek{
+                [&offset](s64 new_offset){
+                    offset = new_offset;
+                    return true;
+                }
+            }
+        );
+
+        R_UNLESS(result.success, 0x1);
+    }
+
+    R_SUCCEED();
+}
+
+// from Gamecard-Installer-NX
+Result fsOpenGameCardStorage(FsStorage* out, const FsGameCardHandle* handle, FsGameCardStoragePartition partition) {
+    const struct {
+        FsGameCardHandle handle;
+        u32 partition;
+    } in = { *handle, (u32)partition };
+
+    return serviceDispatchIn(fsGetServiceSession(), 30, in, .out_num_objects = 1, .out_objects = &out->s);
+}
+
 Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier* out) {
     return serviceDispatch(fsGetServiceSession(), 501,
         .out_num_objects = 1,
@@ -52,12 +454,8 @@ Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier* out) {
     );
 }
 
-auto InRange(u64 off, u64 offset, u64 size) -> bool {
-    return off < offset + size && off >= offset;
-}
-
 struct GcSource final : yati::source::Base {
-    GcSource(const ApplicationEntry& entry, fs::FsNativeGameCard* fs, bool sd_install);
+    GcSource(const ApplicationEntry& entry, fs::FsNativeGameCard* fs);
     ~GcSource();
     Result Read(void* buf, s64 off, s64 size, u64* bytes_read);
 
@@ -67,9 +465,14 @@ struct GcSource final : yati::source::Base {
     FsFile m_file{};
     s64 m_offset{};
     s64 m_size{};
+
+private:
+    static auto InRange(s64 off, s64 offset, s64 size) -> bool {
+        return off < offset + size && off >= offset;
+    }
 };
 
-GcSource::GcSource(const ApplicationEntry& entry, fs::FsNativeGameCard* fs, bool sd_install)
+GcSource::GcSource(const ApplicationEntry& entry, fs::FsNativeGameCard* fs)
 : m_fs{fs} {
     m_offset = -1;
 
@@ -112,7 +515,6 @@ GcSource::GcSource(const ApplicationEntry& entry, fs::FsNativeGameCard* fs, bool
     }
 
     // we don't need to verify the nca's, this speeds up installs.
-    m_config.sd_card_install = sd_install;
     m_config.skip_nca_hash_verify = true;
     m_config.skip_rsa_header_fixed_key_verify = true;
     m_config.skip_rsa_npdm_fixed_key_verify = true;
@@ -189,6 +591,7 @@ Menu::Menu() : MenuBase{"GameCard"_i18n} {
 }
 
 Menu::~Menu() {
+    GcUmountStorage();
     GcUnmount();
     eventClose(std::addressof(m_event));
     fsEventNotifierClose(std::addressof(m_event_notifier));
@@ -241,8 +644,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
         nvgSave(vg);
             nvgIntersectScissor(vg, 50, 90, 325, 555);
-            gfx::drawTextArgs(vg, 50, 415, 18.f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "%s", m_lang_entry.name);
-            gfx::drawTextArgs(vg, 50, 455, 18.f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "%s", m_lang_entry.author);
+            gfx::drawTextArgs(vg, 50, 415, 18.f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "%s", e.lang_entry.name);
+            gfx::drawTextArgs(vg, 50, 455, 18.f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "%s", e.lang_entry.author);
             gfx::drawTextArgs(vg, 50, 495, 18.f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "App-ID: 0%lX", e.app_id);
             gfx::drawTextArgs(vg, 50, 535, 18.f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "Key-Gen: %u (%s)", e.key_gen, nca::GetKeyGenStr(e.key_gen));
             gfx::drawTextArgs(vg, 50, 575, 18.f, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "Size: %.2f GB", (double)size / 0x40000000);
@@ -279,9 +682,16 @@ void Menu::OnFocusGained() {
 Result Menu::GcMount() {
     GcUnmount();
 
-    R_TRY(fsDeviceOperatorGetGameCardHandle(std::addressof(m_dev_op), std::addressof(m_handle)));
+    // after storage has been mounted, it will take 2 attempts to mount
+    // the fs, same as mounting storage.
+    for (int i = 0; i < 2; i++) {
+        R_TRY(fsDeviceOperatorGetGameCardHandle(std::addressof(m_dev_op), std::addressof(m_handle)));
+        m_fs = std::make_unique<fs::FsNativeGameCard>(std::addressof(m_handle), FsGameCardPartition_Secure, false);
+        if (R_SUCCEEDED(m_fs->GetFsOpenResult())) {
+            break;
+        }
+    }
 
-    m_fs = std::make_unique<fs::FsNativeGameCard>(std::addressof(m_handle), FsGameCardPartition_Secure, false);
     R_TRY(m_fs->GetFsOpenResult());
 
     FsDir dir;
@@ -384,13 +794,29 @@ Result Menu::GcMount() {
         e.tickets = ticket_collections;
     }
 
+    // load all control data, icons are loaded when displayed.
+    for (auto& e : m_entries) {
+        R_TRY(LoadControlData(e));
+
+        NacpLanguageEntry* lang_entry{};
+        R_TRY(nacpGetLanguageEntry(&e.control->nacp, &lang_entry));
+
+        if (lang_entry) {
+            e.lang_entry = *lang_entry;
+        }
+    }
+
     SetAction(Button::A, Action{"OK"_i18n, [this](){
         if (m_option_index == 2) {
             SetPop();
         } else {
-            if (m_mounted) {
-                App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_lang_entry.name, [this](auto pbox) mutable -> bool {
-                    auto source = std::make_shared<GcSource>(m_entries[m_entry_index], m_fs.get(), m_option_index == 1);
+            if (!m_mounted) {
+                return;
+            }
+
+            if (m_option_index == 0) {
+                App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) mutable -> bool {
+                    auto source = std::make_shared<GcSource>(m_entries[m_entry_index], m_fs.get());
                     return R_SUCCEEDED(yati::InstallFromCollections(pbox, source, source->m_collections, source->m_config));
                 }, [this](bool result){
                     if (result) {
@@ -399,6 +825,33 @@ Result Menu::GcMount() {
                         App::Notify("Gc install failed!"_i18n);
                     }
                 }));
+            } else {
+                auto options = std::make_shared<Sidebar>("Select content to dump"_i18n, Sidebar::Side::RIGHT);
+                ON_SCOPE_EXIT(App::Push(options));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Dump XCI"_i18n, [this](){
+                    DumpGames(DumpFileFlag_XCI);
+                }, true));
+                options->Add(std::make_shared<SidebarEntryCallback>("Dump All"_i18n, [this](){
+                    DumpGames(DumpFileFlag_All);
+                }, true));
+                options->Add(std::make_shared<SidebarEntryCallback>("Dump All Bins"_i18n, [this](){
+                    DumpGames(DumpFileFlag_AllBin);
+                }, true));
+                options->Add(std::make_shared<SidebarEntryCallback>("Dump Card ID Set"_i18n, [this](){
+                    DumpGames(DumpFileFlag_Set);
+                }, true));
+                // todo:
+                // options->Add(std::make_shared<SidebarEntryCallback>("Dump Card UID"_i18n, [this](){
+                //     DumpGames(DumpFileFlag_UID);
+                // }, true));
+                options->Add(std::make_shared<SidebarEntryCallback>("Dump Certificate"_i18n, [this](){
+                    DumpGames(DumpFileFlag_Cert);
+                }, true));
+                // todo:
+                // options->Add(std::make_shared<SidebarEntryCallback>("Dump Initial Data"_i18n, [this](){
+                //     DumpGames(DumpFileFlag_Initial);
+                // }, true));
             }
         }
     }});
@@ -426,11 +879,128 @@ void Menu::GcUnmount() {
     m_entries.clear();
     m_entry_index = 0;
     m_mounted = false;
-    m_lang_entry = {};
     FreeImage();
 
     RemoveAction(Button::L2);
     RemoveAction(Button::R2);
+}
+
+Result Menu::GcMountStorage() {
+    GcUmountStorage();
+
+    R_TRY(GcMountPartition(FsGameCardStoragePartition_Normal));
+
+    u8 header[0x200];
+    R_TRY(fsStorageRead(&m_storage, 0, header, sizeof(header)));
+
+    u32 magic;
+    u32 trim_size;
+    std::memcpy(&magic, header + 0x100, sizeof(magic));
+    std::memcpy(&trim_size, header + 0x118, sizeof(trim_size));
+    std::memcpy(m_initial_data_hash, header + 0x160, sizeof(m_initial_data_hash));
+    R_UNLESS(magic == XCI_MAGIC, 0x1);
+
+    R_TRY(fsStorageGetSize(&m_storage, &m_parition_normal_size));
+    R_TRY(GcMountPartition(FsGameCardStoragePartition_Secure));
+    R_TRY(fsStorageGetSize(&m_storage, &m_parition_secure_size));
+
+    m_storage_trimmed_size = sizeof(header) + trim_size * 512ULL;
+    m_storage_total_size = m_parition_normal_size + m_parition_secure_size;
+    m_storage_mounted = true;
+
+    R_SUCCEED();
+}
+
+void Menu::GcUmountStorage() {
+    if (m_storage_mounted) {
+        m_storage_mounted = false;
+        GcUnmountPartition();
+    }
+}
+
+Result Menu::GcMountPartition(FsGameCardStoragePartition partition) {
+    if (m_partition == partition) {
+        R_SUCCEED();
+    }
+
+    GcUnmountPartition();
+
+    // first attempt always fails due to qlaunch having the secure area mounted.
+    // the 2nd attempt will succeeded, but qlaunch will fail to mount
+    // the gamecard as it will only attempt to mount once.
+    Result rc;
+    for (int i = 0; i < 2; i++) {
+        R_TRY(fsDeviceOperatorGetGameCardHandle(&m_dev_op, &m_handle));
+        if (R_SUCCEEDED(rc = fsOpenGameCardStorage(&m_storage, &m_handle, partition))){
+            break;
+        }
+    }
+
+    m_partition = partition;
+    return rc;
+}
+
+void Menu::GcUnmountPartition() {
+    if (m_partition != FsGameCardStoragePartition_None) {
+        m_partition = FsGameCardStoragePartition_None;
+        fsStorageClose(&m_storage);
+    }
+}
+
+Result Menu::GcStorageReadInternal(void* buf, s64 off, s64 size, u64* bytes_read) {
+    if (off < m_parition_normal_size) {
+        size = std::min<s64>(size, m_parition_normal_size - off);
+        R_TRY(GcMountPartition(FsGameCardStoragePartition_Normal));
+    } else {
+        off = off - m_parition_normal_size;
+        R_TRY(GcMountPartition(FsGameCardStoragePartition_Secure));
+    }
+
+    R_TRY(fsStorageRead(&m_storage, off, buf, size));
+    *bytes_read = size;
+    R_SUCCEED();
+}
+
+Result Menu::GcStorageRead(void* _buf, s64 off, s64 size) {
+    auto buf = static_cast<u8*>(_buf);
+    u64 bytes_read;
+    u8 data[0x200];
+
+    size = std::min(size, m_storage_total_size - off);
+    if (size <= 0) {
+        R_SUCCEED();
+    }
+
+    const auto unaligned_off = off % 0x200;
+    off -= unaligned_off;
+    if (size > 0 && unaligned_off) {
+        R_TRY(GcStorageReadInternal(data, off, sizeof(data), &bytes_read));
+
+        const auto csize = std::min<s64>(size, 0x200 - unaligned_off);
+        std::memcpy(buf, data + unaligned_off, csize);
+        off += bytes_read;
+        size -= csize;
+        buf += csize;
+    }
+
+    const auto unaligned_size = size % 0x200;
+    size -= unaligned_size;
+    while (size > 0) {
+        R_TRY(GcStorageReadInternal(buf, off, size, &bytes_read));
+
+        off += bytes_read;
+        size -= bytes_read;
+        buf += bytes_read;
+    }
+
+    if (unaligned_size) {
+        R_TRY(GcStorageReadInternal(data, off, sizeof(data), &bytes_read));
+
+        const auto csize = std::min<s64>(size, 0x200 - unaligned_size);
+        std::memcpy(buf, data + unaligned_size, csize);
+    }
+
+    R_SUCCEED();
 }
 
 Result Menu::GcPoll(bool* inserted) {
@@ -488,35 +1058,15 @@ void Menu::FreeImage() {
     }
 }
 
-void Menu::OnChangeIndex(s64 new_index) {
-    FreeImage();
-    m_entry_index = new_index;
-
-    const auto index = m_entries.empty() ? 0 : m_entry_index + 1;
-    this->SetSubHeading(std::to_string(index) + " / " + std::to_string(m_entries.size()));
-
-    const auto id = m_entries[m_entry_index].app_id;
+Result Menu::LoadControlData(ApplicationEntry& e) {
+    const auto id = e.app_id;
+    e.control = std::make_unique<NsApplicationControlData>();
 
     if (hosversionBefore(20,0,0)) {
         TimeStamp ts;
-        auto control = std::make_unique<NsApplicationControlData>();
-        u64 control_size;
-
-        if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, id, control.get(), sizeof(NsApplicationControlData), &control_size))) {
+        if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, id, e.control.get(), sizeof(NsApplicationControlData), &e.control_size))) {
             log_write("\t\t[ns control cache] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
-
-            NacpLanguageEntry* lang_entry{};
-            nacpGetLanguageEntry(&control->nacp, &lang_entry);
-
-            if (lang_entry) {
-                m_lang_entry = *lang_entry;
-            }
-
-            const auto jpeg_size = control_size - sizeof(NacpStruct);
-            m_icon = nvgCreateImageMem(App::GetVg(), 0, control->icon, jpeg_size);
-            if (m_icon > 0) {
-                return;
-            }
+            R_SUCCEED();
         }
     }
 
@@ -525,11 +1075,9 @@ void Menu::OnChangeIndex(s64 new_index) {
     // waiting 1-2s after mount, then calling seems to work.
     // however, we can just manually parse the nca to get the data we need,
     // which always works and *is* faster too ;)
-    for (auto& e : m_entries[m_entry_index].application) {
-        for (auto& collection : e) {
+    for (const auto& app : e.application) {
+        for (const auto& collection : app) {
             if (collection.type == NcmContentType_Control) {
-                NacpStruct nacp;
-                std::vector<u8> icon;
                 const auto path = BuildGcPath(collection.name.c_str(), &m_handle);
 
                 u64 program_id = id | collection.id_offset;
@@ -538,27 +1086,136 @@ void Menu::OnChangeIndex(s64 new_index) {
                 }
 
                 TimeStamp ts;
-                if (R_SUCCEEDED(nca::ParseControl(path, program_id, &nacp, sizeof(nacp), &icon))) {
+                std::vector<u8> icon;
+                if (R_SUCCEEDED(nca::ParseControl(path, program_id, &e.control->nacp, sizeof(e.control->nacp), &icon))) {
+                    std::memcpy(e.control->icon, icon.data(), icon.size());
+                    e.control_size = sizeof(e.control->nacp) + icon.size();
                     log_write("\t\tnca::ParseControl(): %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
-
-                    log_write("managed to parse control nca %s\n", path.s);
-                    NacpLanguageEntry* lang_entry{};
-                    nacpGetLanguageEntry(&nacp, &lang_entry);
-
-                    if (lang_entry) {
-                        m_lang_entry = *lang_entry;
-                    }
-
-                    m_icon = nvgCreateImageMem(App::GetVg(), 0, icon.data(), icon.size());
-                    if (m_icon > 0) {
-                        return;
-                    }
+                    R_SUCCEED();
                 } else {
                     log_write("\tFAILED to parse control nca %s\n", path.s);
                 }
             }
         }
     }
+
+    return 0x1;
+}
+
+void Menu::OnChangeIndex(s64 new_index) {
+    FreeImage();
+    m_entry_index = new_index;
+
+    if (m_entries.empty()) {
+        this->SetSubHeading("No GameCard inserted");
+    } else {
+        const auto index = m_entries.empty() ? 0 : m_entry_index + 1;
+        this->SetSubHeading(std::to_string(index) + " / " + std::to_string(m_entries.size()));
+
+        const auto& e = m_entries[m_entry_index];
+        const auto jpeg_size = e.control_size - sizeof(NacpStruct);
+        m_icon = nvgCreateImageMem(App::GetVg(), 0, e.control->icon, jpeg_size);
+    }
+}
+
+void Menu::DumpGames(u32 flags) {
+    PopupList::Items items;
+    const auto network_locations = location::Load();
+
+    for (const auto&p : network_locations) {
+        items.emplace_back(p.name);
+    }
+
+    for (const auto&p : DUMP_LOCATIONS) {
+        items.emplace_back(i18n::get(p.display_name));
+    }
+
+    App::Push(std::make_shared<PopupList>(
+        "Select dump location"_i18n, items, [this, network_locations, flags](auto op_index){
+            if (!op_index) {
+                return;
+            }
+
+            const auto index = *op_index;
+            App::Push(std::make_shared<ProgressBox>(0, "Dumping"_i18n, "", [this, network_locations, index, flags](auto pbox) -> bool {
+                XciEntry entry{};
+                entry.menu = this;
+                entry.application_name = m_entries[m_entry_index].lang_entry.name;
+
+                if (R_FAILED(GcMountStorage())) {
+                    log_write("failed to mount storage\n");
+                    return false;
+                }
+
+                std::vector<fs::FsPath> paths;
+                if (flags & DumpFileFlag_XCI) {
+                    // todo: add config support for full and trimmed.
+                    if (1) {
+                        entry.xci_size = m_storage_trimmed_size;
+                        paths.emplace_back(BuildFullDumpPath(DumpFileType_TrimmedXCI, m_entries));
+                    } else {
+                        entry.xci_size = m_storage_total_size;
+                        paths.emplace_back(BuildFullDumpPath(DumpFileType_XCI, m_entries));
+                    }
+                }
+
+                if (flags & DumpFileFlag_Set) {
+                    entry.id_set.resize(0xC);
+                    if (R_FAILED(fsDeviceOperatorGetGameCardIdSet(&m_dev_op, entry.id_set.data(), entry.id_set.size(), entry.id_set.size()))) {
+                        return false;
+                    }
+                    paths.emplace_back(BuildFullDumpPath(DumpFileType_Set, m_entries));
+                }
+
+                // todo:
+                if (flags & DumpFileFlag_UID) {
+                    // paths.emplace_back(BuildFullDumpPath(DumpFileType_UID, m_entries));
+                }
+
+                if (flags & DumpFileFlag_Cert) {
+                    s64 size;
+                    entry.cert.resize(0x200);
+                    if (R_FAILED(fsDeviceOperatorGetGameCardDeviceCertificate(&m_dev_op, &m_handle, entry.cert.data(), entry.cert.size(), &size, entry.cert.size()))) {
+                        return false;
+                    }
+                    if (size != entry.cert.size()) {
+                        return false;
+                    }
+                    paths.emplace_back(BuildFullDumpPath(DumpFileType_Cert, m_entries));
+                }
+
+                // todo:
+                if (flags & DumpFileFlag_Initial) {
+                    // paths.emplace_back(BuildFullDumpPath(DumpFileType_Initial, m_entries));
+                }
+
+                const auto index2 = index - network_locations.size();
+
+                if (!network_locations.empty() && index < network_locations.size()) {
+                    return R_SUCCEEDED(DumpNspToNetwork(pbox, network_locations[index], paths, entry));
+                } else if (index2 == DumpLocationType_SdCard) {
+                    return R_SUCCEEDED(DumpNspToFile(pbox, paths, entry));
+                } else if (index2 == DumpLocationType_UsbS2S) {
+                    return R_SUCCEEDED(DumpNspToUsbS2S(pbox, paths, entry));
+                } else if (index2 == DumpLocationType_DevNull) {
+                    return R_SUCCEEDED(DumpNspToDevNull(pbox, paths, entry));
+                }
+
+                return false;
+            }, [this](bool success){
+                if (success) {
+                    App::Notify("Dump successfull!");
+                    log_write("dump successfull!!!\n");
+                } else {
+                    App::Notify("Dump failed!");
+                    log_write("dump failed!!!\n");
+                }
+
+                GcUmountStorage();
+                GcUnmount();
+            }));
+        }
+    ));
 }
 
 } // namespace sphaira::ui::menu::gc
