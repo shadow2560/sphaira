@@ -20,7 +20,7 @@ constexpr u16 DEVICE_SPEED[] = {
 };
 
 // TODO: pr this to libnx.
-Result usbDsGetSpeed(u32 *out) {
+Result usbDsGetSpeed(UsbDeviceSpeed *out) {
     if (hosversionBefore(8,0,0)) {
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
     }
@@ -247,7 +247,7 @@ Result UsbDs::IsUsbConnected(u64 timeout) {
 
 Result UsbDs::GetSpeed(UsbDeviceSpeed* out, u16* max_packet_size) {
     if (hosversionAtLeast(8,0,0)) {
-        R_TRY(usbDsGetSpeed((u32*)out));
+        R_TRY(usbDsGetSpeed(out));
     } else {
         // assume USB 2.0 speed (likely the case anyway).
         *out = UsbDeviceSpeed_High;

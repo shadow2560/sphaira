@@ -527,9 +527,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
                     continue;
             }
 
-            if (!unzip_to(new_entry.path, new_entry.path)) {
-                return false;
-            }
+            R_TRY(unzip_to(new_entry.path, new_entry.path));
         }
 
         // finally finally, remove files no longer in the manifest
