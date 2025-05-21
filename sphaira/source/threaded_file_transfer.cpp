@@ -65,7 +65,7 @@ public:
 };
 
 struct ThreadData {
-    ThreadData(ui::ProgressBox* _pbox, s64 size, ReadFunctionCallback _rfunc, WriteFunctionCallback _wfunc);
+    ThreadData(ui::ProgressBox* _pbox, s64 size, ReadCallback _rfunc, WriteCallback _wfunc);
 
     auto GetResults() -> Result;
     void WakeAllThreads();
@@ -105,8 +105,8 @@ private:
 private:
     // these need to be copied
     ui::ProgressBox* pbox{};
-    ReadFunctionCallback rfunc{};
-    WriteFunctionCallback wfunc{};
+    ReadCallback rfunc{};
+    WriteCallback wfunc{};
 
     // these need to be created
     Mutex mutex{};
@@ -134,7 +134,7 @@ private:
     volatile Result pull_result{};
 };
 
-ThreadData::ThreadData(ui::ProgressBox* _pbox, s64 size, ReadFunctionCallback _rfunc, WriteFunctionCallback _wfunc)
+ThreadData::ThreadData(ui::ProgressBox* _pbox, s64 size, ReadCallback _rfunc, WriteCallback _wfunc)
 : pbox{_pbox}, rfunc{_rfunc}, wfunc{_wfunc} {
     mutexInit(std::addressof(mutex));
     mutexInit(std::addressof(pull_mutex));
@@ -302,7 +302,7 @@ auto GetAlternateCore(int id) {
     return id == 1 ? 2 : 1;
 }
 
-Result TransferInternal(ui::ProgressBox* pbox, s64 size, ReadFunctionCallback rfunc, WriteFunctionCallback wfunc, StartFunctionCallback sfunc) {
+Result TransferInternal(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, WriteCallback wfunc, StartCallback2 sfunc) {
     App::SetAutoSleepDisabled(true);
     ON_SCOPE_EXIT(App::SetAutoSleepDisabled(false));
 
@@ -319,19 +319,24 @@ Result TransferInternal(ui::ProgressBox* pbox, s64 size, ReadFunctionCallback rf
     R_TRY(threadCreate(&t_write, writeFunc, std::addressof(t_data), nullptr, 1024*64, 0x20, WRITE_THREAD_CORE));
     ON_SCOPE_EXIT(threadClose(&t_write));
 
-    log_write("starting threads\n");
-    R_TRY(threadStart(std::addressof(t_read)));
-    ON_SCOPE_EXIT(threadWaitForExit(std::addressof(t_read)));
+    const auto start_threads = [&]() -> Result {
+        log_write("starting threads\n");
+        R_TRY(threadStart(std::addressof(t_read)));
+        R_TRY(threadStart(std::addressof(t_write)));
+        R_SUCCEED();
+    };
 
-    R_TRY(threadStart(std::addressof(t_write)));
+    ON_SCOPE_EXIT(threadWaitForExit(std::addressof(t_read)));
     ON_SCOPE_EXIT(threadWaitForExit(std::addressof(t_write)));
 
     if (sfunc) {
-        t_data.SetPullResult(sfunc([&](void* data, s64 size, u64* bytes_read) -> Result {
+        t_data.SetPullResult(sfunc(start_threads, [&](void* data, s64 size, u64* bytes_read) -> Result {
             R_TRY(t_data.GetResults());
             return t_data.Pull(data, size, bytes_read);
         }));
     } else {
+        R_TRY(start_threads());
+
         while (t_data.GetWriteOffset() != t_data.GetWriteSize() && R_SUCCEEDED(t_data.GetResults())) {
             pbox->UpdateTransfer(t_data.GetWriteOffset(), t_data.GetWriteSize());
             svcSleepThread(1e+6);
@@ -365,11 +370,18 @@ Result TransferInternal(ui::ProgressBox* pbox, s64 size, ReadFunctionCallback rf
 
 } // namespace
 
-Result Transfer(ui::ProgressBox* pbox, s64 size, ReadFunctionCallback rfunc, WriteFunctionCallback wfunc) {
+Result Transfer(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, WriteCallback wfunc) {
     return TransferInternal(pbox, size, rfunc, wfunc, nullptr);
 }
 
-Result TransferPull(ui::ProgressBox* pbox, s64 size, ReadFunctionCallback rfunc, StartFunctionCallback sfunc) {
+Result TransferPull(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, StartCallback sfunc) {
+    return TransferInternal(pbox, size, rfunc, nullptr, [sfunc](StartThreadCallback start, PullCallback pull) -> Result {
+        R_TRY(start());
+        return sfunc(pull);
+    });
+}
+
+Result TransferPull(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, StartCallback2 sfunc) {
     return TransferInternal(pbox, size, rfunc, nullptr, sfunc);
 }
 

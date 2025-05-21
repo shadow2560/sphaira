@@ -31,7 +31,7 @@ struct Usb {
     }
 
     // waits for connection and then sends file list.
-    Result WaitForConnection(u64 timeout, std::span<const std::string> names);
+    Result WaitForConnection(u64 timeout, u8 flags, std::span<const std::string> names);
 
     // polls for command, executes transfer if possible.
     // will return Result_Exit if exit command is recieved.

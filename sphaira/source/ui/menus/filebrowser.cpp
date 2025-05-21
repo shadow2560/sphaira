@@ -1215,7 +1215,7 @@ void Menu::UploadFiles() {
                         [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
                             return fsFileRead(&file, off, data, size, FsReadOption_None, bytes_read);
                         },
-                        [&](thread::PullFunctionCallback pull) -> Result {
+                        [&](thread::PullCallback pull) -> Result {
                             s64 offset{};
                             const auto result = curl::Api().FromMemory(
                                 CURL_LOCATION_TO_API(loc),

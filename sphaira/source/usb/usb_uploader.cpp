@@ -45,7 +45,7 @@ Usb::Usb(u64 transfer_timeout) {
 Usb::~Usb() {
 }
 
-Result Usb::WaitForConnection(u64 timeout, std::span<const std::string> names) {
+Result Usb::WaitForConnection(u64 timeout, u8 flags, std::span<const std::string> names) {
     R_TRY(m_usb->IsUsbConnected(timeout));
 
     std::string names_list;
@@ -56,6 +56,7 @@ Result Usb::WaitForConnection(u64 timeout, std::span<const std::string> names) {
     tinfoil::TUSHeader header{};
     header.magic = tinfoil::Magic_List0;
     header.nspListSize = names_list.length();
+    header.flags = flags;
 
     R_TRY(m_usb->TransferAll(false, &header, sizeof(header), timeout));
     R_TRY(m_usb->TransferAll(false, names_list.data(), names_list.length(), timeout));

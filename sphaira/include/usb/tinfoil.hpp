@@ -19,10 +19,20 @@ enum USBCmdId : u32 {
     FILE_RANGE = 1
 };
 
+// extension flags for sphaira.
+enum USBFlag : u8 {
+    USBFlag_NONE = 0,
+    // stream install, does not allow for random access.
+    // allows the upload to be multi threaded., do not modify!
+    // the order of the file list must be kept as-is.
+    USBFlag_STREAM = 1 << 0,
+};
+
 struct TUSHeader {
     u32 magic; // TUL0 (Tinfoil Usb List 0)
     u32 nspListSize;
-    u64 padding;
+    u8 flags;
+    u8 padding[0x7];
 };
 
 struct NX_PACKED USBCmdHeader {

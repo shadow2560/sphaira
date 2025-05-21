@@ -1,20 +1,3 @@
-/*
- * Copyright (c) Atmosphère-NX
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-// The USB transfer code was taken from Haze (part of Atmosphere).
 // The USB protocol was taken from Tinfoil, by Adubbz.
 
 #include "yati/source/usb.hpp"
@@ -42,7 +25,8 @@ Result Usb::WaitForConnection(u64 timeout, std::vector<std::string>& out_names) 
     R_TRY(m_usb->TransferAll(true, &header, sizeof(header), timeout));
     R_UNLESS(header.magic == tinfoil::Magic_List0, Result_BadMagic);
     R_UNLESS(header.nspListSize > 0, Result_BadCount);
-    log_write("USB got header\n");
+    m_flags = header.flags;
+    log_write("[USB] got header, flags: 0x%X\n", m_flags);
 
     std::vector<char> names(header.nspListSize);
     R_TRY(m_usb->TransferAll(true, names.data(), names.size(), timeout));
@@ -97,6 +81,10 @@ Result Usb::SendFileRangeCmd(u64 off, u64 size, u64 timeout) {
 
 Result Usb::Finished(u64 timeout) {
     return SendCmdHeader(tinfoil::USBCmdId::EXIT, 0, timeout);
+}
+
+bool Usb::IsStream() const {
+    return (m_flags & tinfoil::USBFlag_STREAM);
 }
 
 Result Usb::Read(void* buf, s64 off, s64 size, u64* bytes_read) {

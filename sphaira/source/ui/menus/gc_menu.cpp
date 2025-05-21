@@ -5,7 +5,9 @@
 
 #include "yati/yati.hpp"
 #include "yati/nx/nca.hpp"
+#include "yati/source/stream.hpp"
 #include "usb/usb_uploader.hpp"
+#include "usb/tinfoil.hpp"
 
 #include "app.hpp"
 #include "defines.hpp"
@@ -234,15 +236,30 @@ private:
     }
 };
 
-struct UsbTest final : usb::upload::Usb {
+struct UsbTest final : usb::upload::Usb, yati::source::Stream {
     UsbTest(ProgressBox* pbox, XciEntry& entry) : Usb{UINT64_MAX}, m_entry{entry} {
         m_pbox = pbox;
     }
 
+    Result ReadChunk(void* buf, s64 size, u64* bytes_read) override {
+        R_TRY(m_pull(buf, size, bytes_read));
+        m_pull_offset += *bytes_read;
+        R_SUCCEED();
+    }
+
     Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
+        if (m_pull) {
+            return Stream::Read(buf, off, size, bytes_read);
+        } else {
+            return ReadInternal(path, buf, off, size, bytes_read);
+        }
+    }
+
+    Result ReadInternal(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) {
         if (m_path != path) {
             m_path = path;
             m_progress = 0;
+            m_pull_offset = 0;
             m_size = m_entry.GetSize(path);
             m_pbox->SetTitle(m_entry.GetName(path));
             m_pbox->NewTransfer(m_path);
@@ -257,13 +274,23 @@ struct UsbTest final : usb::upload::Usb {
         R_SUCCEED();
     }
 
+    void SetPullCallback(thread::PullCallback pull) {
+        m_pull = pull;
+    }
+
+    auto GetPullOffset() const {
+        return m_pull_offset;
+    }
+
 private:
     XciEntry& m_entry;
     ProgressBox* m_pbox{};
     std::string m_path{};
+    thread::PullCallback m_pull{};
     s64 m_offset{};
     s64 m_size{};
     s64 m_progress{};
+    s64 m_pull_offset{};
 };
 
 struct HashStr {
@@ -321,6 +348,42 @@ Result DumpNspToFile(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEn
     R_SUCCEED();
 }
 
+Result DumpNspToUsbS2SStream(ProgressBox* pbox, UsbTest* usb, std::span<const std::string> file_list, XciEntry& e) {
+    for (auto& path : file_list) {
+        const auto file_size = e.GetSize(path);
+
+        R_TRY(thread::TransferPull(pbox, file_size,
+            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
+                return usb->ReadInternal(path, data, off, size, bytes_read);
+            },
+            [&](thread::StartThreadCallback start, thread::PullCallback pull) -> Result {
+                usb->SetPullCallback(pull);
+                R_TRY(start());
+
+                while (!pbox->ShouldExit()) {
+                    R_TRY(usb->PollCommands());
+
+                    if (usb->GetPullOffset() >= file_size) {
+                        R_SUCCEED();
+                    }
+                }
+
+                R_THROW(0xFFFF);
+            }
+        ));
+    }
+
+    R_SUCCEED();
+}
+
+Result DumpNspToUsbS2SRandom(ProgressBox* pbox, UsbTest* usb, std::span<const std::string> file_list, XciEntry& e) {
+    while (!pbox->ShouldExit()) {
+        R_TRY(usb->PollCommands());
+    }
+
+    R_THROW(0xFFFF);
+}
+
 Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
     std::vector<std::string> file_list;
     for (auto& path : paths) {
@@ -330,30 +393,38 @@ Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<const fs::FsPath> paths, Xci
     auto usb = std::make_unique<UsbTest>(pbox, e);
     constexpr u64 timeout = 1e+9;
 
-    // todo: display progress bar during usb transfer.
     while (!pbox->ShouldExit()) {
         if (R_SUCCEEDED(usb->IsUsbConnected(timeout))) {
             pbox->NewTransfer("USB connected, sending file list");
-            if (R_SUCCEEDED(usb->WaitForConnection(timeout, file_list))) {
+            const u8 flags = usb::tinfoil::USBFlag_STREAM;
+            if (R_SUCCEEDED(usb->WaitForConnection(timeout, flags, file_list))) {
                 pbox->NewTransfer("Sent file list, waiting for command...");
 
-                while (!pbox->ShouldExit()) {
-                    const auto rc = usb->PollCommands();
-                    if (rc == usb->Result_Exit) {
-                        log_write("got exit command\n");
-                        R_SUCCEED();
-                    }
-
-                    R_TRY(rc);
+                Result rc;
+                if (flags & usb::tinfoil::USBFlag_STREAM) {
+                    rc = DumpNspToUsbS2SStream(pbox, usb.get(), file_list, e);
+                } else {
+                    rc = DumpNspToUsbS2SRandom(pbox, usb.get(), file_list, e);
                 }
-            }
 
+                // wait for exit command.
+                if (R_SUCCEEDED(rc)) {
+                    rc = usb->PollCommands();
+                }
+
+                if (rc == usb->Result_Exit) {
+                    log_write("got exit command\n");
+                    R_SUCCEED();
+                }
+
+                return rc;
+            }
         } else {
             pbox->NewTransfer("waiting for usb connection...");
         }
     }
 
-    R_SUCCEED();
+    R_THROW(0xFFFF);
 }
 
 Result DumpNspToDevNull(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
@@ -389,7 +460,7 @@ Result DumpNspToNetwork(ProgressBox* pbox, const location::Entry& loc, std::span
             [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
                 return e.Read(path, data, off, size, bytes_read);
             },
-            [&](thread::PullFunctionCallback pull) -> Result {
+            [&](thread::PullCallback pull) -> Result {
                 s64 offset{};
                 const auto result = curl::Api().FromMemory(
                     CURL_LOCATION_TO_API(loc),
