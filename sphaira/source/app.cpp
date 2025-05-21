@@ -1590,6 +1590,10 @@ void App::DisplayAdvancedOptions(bool left_side) {
     options->Add(std::make_shared<ui::SidebarEntryCallback>("Install options"_i18n, [left_side](){
         App::DisplayInstallOptions(left_side);
     }));
+
+    options->Add(std::make_shared<ui::SidebarEntryCallback>("Dump options"_i18n, [left_side](){
+        App::DisplayDumpOptions(left_side);
+    }));
 }
 
 void App::DisplayInstallOptions(bool left_side) {
@@ -1678,6 +1682,27 @@ void App::DisplayInstallOptions(bool left_side) {
 
     options->Add(std::make_shared<ui::SidebarEntryBool>("Lower system version"_i18n, App::GetApp()->m_lower_system_version.Get(), [](bool& enable){
         App::GetApp()->m_lower_system_version.Set(enable);
+    }));
+}
+
+void App::DisplayDumpOptions(bool left_side) {
+    auto options = std::make_shared<ui::Sidebar>("Dump Options"_i18n, left_side ? ui::Sidebar::Side::LEFT : ui::Sidebar::Side::RIGHT);
+    ON_SCOPE_EXIT(App::Push(options));
+
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Created nested folder"_i18n, App::GetApp()->m_dump_app_folder.Get(), [](bool& enable){
+        App::GetApp()->m_dump_app_folder.Set(enable);
+    }));
+
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Append folder with .xci"_i18n, App::GetApp()->m_dump_append_folder_with_xci.Get(), [](bool& enable){
+        App::GetApp()->m_dump_append_folder_with_xci.Set(enable);
+    }));
+
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Trim XCI"_i18n, App::GetApp()->m_dump_trim_xci.Get(), [](bool& enable){
+        App::GetApp()->m_dump_trim_xci.Set(enable);
+    }));
+
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Multi-threaded USB transfer"_i18n, App::GetApp()->m_dump_usb_transfer_stream.Get(), [](bool& enable){
+        App::GetApp()->m_dump_usb_transfer_stream.Set(enable);
     }));
 }
 

@@ -2,6 +2,7 @@
 #include "ui/nvg_util.hpp"
 #include "ui/sidebar.hpp"
 #include "ui/popup_list.hpp"
+#include "ui/option_box.hpp"
 
 #include "yati/yati.hpp"
 #include "yati/nx/nca.hpp"
@@ -150,7 +151,15 @@ auto BuildFilePath(DumpFileType type, std::span<const ApplicationEntry> entries)
 // builds path suiteable for file dumps.
 auto BuildFullDumpPath(DumpFileType type, std::span<const ApplicationEntry> entries) -> fs::FsPath {
     const auto base_path = BuildXciBasePath(entries);
-    return base_path + "/" + base_path + GetDumpTypeStr(type);
+    if (App::GetApp()->m_dump_app_folder.Get()) {
+        if (App::GetApp()->m_dump_append_folder_with_xci.Get()) {
+            return base_path + ".xci/" + base_path + GetDumpTypeStr(type);
+        } else {
+            return base_path + "/" + base_path + GetDumpTypeStr(type);
+        }
+    } else {
+        return base_path + GetDumpTypeStr(type);
+    }
 }
 
 // @Gc is the mount point, S is for secure partion, the remaining is the
@@ -397,7 +406,11 @@ Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<const fs::FsPath> paths, Xci
     while (!pbox->ShouldExit()) {
         if (R_SUCCEEDED(usb->IsUsbConnected(timeout))) {
             pbox->NewTransfer("USB connected, sending file list");
-            const u8 flags = usb::tinfoil::USBFlag_STREAM;
+            u8 flags = usb::tinfoil::USBFlag_NONE;
+            if (App::GetApp()->m_dump_usb_transfer_stream.Get()) {
+                flags |= usb::tinfoil::USBFlag_STREAM;
+            }
+
             if (R_SUCCEEDED(usb->WaitForConnection(timeout, flags, file_list))) {
                 pbox->NewTransfer("Sent file list, waiting for command...");
 
@@ -636,7 +649,16 @@ Menu::Menu() : MenuBase{"GameCard"_i18n} {
             SetPop();
         }}),
         std::make_pair(Button::X, Action{"Options"_i18n, [this](){
-            App::DisplayInstallOptions(false);
+            auto options = std::make_shared<Sidebar>("Game Options"_i18n, Sidebar::Side::RIGHT);
+            ON_SCOPE_EXIT(App::Push(options));
+
+            options->Add(std::make_shared<SidebarEntryCallback>("Install options"_i18n, [this](){
+                App::DisplayInstallOptions(false);
+            }));
+
+            options->Add(std::make_shared<SidebarEntryCallback>("Dump options"_i18n, [this](){
+                App::DisplayDumpOptions(false);
+            }));
         }})
     );
 
@@ -875,16 +897,24 @@ Result Menu::GcMount() {
             }
 
             if (m_option_index == 0) {
-                App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) -> Result {
-                    auto source = std::make_shared<GcSource>(m_entries[m_entry_index], m_fs.get());
-                    return yati::InstallFromCollections(pbox, source, source->m_collections, source->m_config);
-                }, [this](Result rc){
-                    App::PushErrorBox(rc, "Gc install failed"_i18n);
+                if (!App::GetInstallEnable()) {
+                    App::Push(std::make_shared<ui::OptionBox>(
+                        "Install disabled...\n"
+                        "Please enable installing via the install options."_i18n,
+                        "OK"_i18n
+                    ));
+                } else {
+                    App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) -> Result {
+                        auto source = std::make_shared<GcSource>(m_entries[m_entry_index], m_fs.get());
+                        return yati::InstallFromCollections(pbox, source, source->m_collections, source->m_config);
+                    }, [this](Result rc){
+                        App::PushErrorBox(rc, "Gc install failed"_i18n);
 
-                    if (R_SUCCEEDED(rc)) {
-                        App::Notify("Gc install success!"_i18n);
-                    }
-                }));
+                        if (R_SUCCEEDED(rc)) {
+                            App::Notify("Gc install success!"_i18n);
+                        }
+                    }));
+                }
             } else {
                 auto options = std::make_shared<Sidebar>("Select content to dump"_i18n, Sidebar::Side::RIGHT);
                 ON_SCOPE_EXIT(App::Push(options));
@@ -1206,8 +1236,7 @@ void Menu::DumpGames(u32 flags) {
 
                 std::vector<fs::FsPath> paths;
                 if (flags & DumpFileFlag_XCI) {
-                    // todo: add config support for full and trimmed.
-                    if (1) {
+                    if (App::GetApp()->m_dump_trim_xci.Get()) {
                         entry.xci_size = m_storage_trimmed_size;
                         paths.emplace_back(BuildFullDumpPath(DumpFileType_TrimmedXCI, m_entries));
                     } else {

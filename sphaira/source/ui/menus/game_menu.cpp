@@ -410,7 +410,11 @@ Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<NspEntry> entries) {
     while (!pbox->ShouldExit()) {
         if (R_SUCCEEDED(usb->IsUsbConnected(timeout))) {
             pbox->NewTransfer("USB connected, sending file list");
-            const u8 flags = usb::tinfoil::USBFlag_STREAM;
+            u8 flags = usb::tinfoil::USBFlag_NONE;
+            if (App::GetApp()->m_dump_usb_transfer_stream.Get()) {
+                flags |= usb::tinfoil::USBFlag_STREAM;
+            }
+
             if (R_SUCCEEDED(usb->WaitForConnection(timeout, flags, file_list))) {
                 pbox->NewTransfer("Sent file list, waiting for command...");
 
@@ -740,7 +744,12 @@ auto BuildNspPath(const Entry& e, const NsApplicationContentMetaStatus& status) 
     }
 
     fs::FsPath path;
-    std::snprintf(path, sizeof(path), "%s/%s %s[%016lX][v%u][%s].nsp", name_buf.s, name_buf.s, version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type));
+    if (App::GetApp()->m_dump_app_folder.Get()) {
+        std::snprintf(path, sizeof(path), "%s/%s %s[%016lX][v%u][%s].nsp", name_buf.s, name_buf.s, version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type));
+    } else {
+        std::snprintf(path, sizeof(path), "%s %s[%016lX][v%u][%s].nsp", name_buf.s, version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type));
+    }
+
     return path;
 }
 
@@ -1116,6 +1125,10 @@ Menu::Menu() : grid::Menu{"Games"_i18n} {
                         DumpGames(ContentFlag_DataPatch);
                     }, true));
                 }, true));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Dump options"_i18n, [this](){
+                    App::DisplayDumpOptions(false);
+                }));
 
                 // completely deletes the application record and all data.
                 options->Add(std::make_shared<SidebarEntryCallback>("Delete"_i18n, [this](){

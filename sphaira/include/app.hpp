@@ -115,6 +115,7 @@ public:
     static void DisplayMiscOptions(bool left_side = true);
     static void DisplayAdvancedOptions(bool left_side = true);
     static void DisplayInstallOptions(bool left_side = true);
+    static void DisplayDumpOptions(bool left_side = true);
 
     void Draw();
     void Update();
@@ -251,6 +252,12 @@ public:
     option::OptionBool m_convert_to_standard_crypto{INI_SECTION, "convert_to_standard_crypto", false};
     option::OptionBool m_lower_master_key{INI_SECTION, "lower_master_key", false};
     option::OptionBool m_lower_system_version{INI_SECTION, "lower_system_version", false};
+
+    // dump options
+    option::OptionBool m_dump_app_folder{"dump", "app_folder", true};
+    option::OptionBool m_dump_append_folder_with_xci{"dump", "append_folder_with_xci", true};
+    option::OptionBool m_dump_trim_xci{"dump", "trim_xci", false};
+    option::OptionBool m_dump_usb_transfer_stream{"dump", "usb_transfer_stream", true};
 
     // todo: move this into it's own menu
     option::OptionLong m_text_scroll_speed{"accessibility", "text_scroll_speed", 1}; // normal
