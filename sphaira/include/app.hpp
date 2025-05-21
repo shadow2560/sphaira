@@ -193,8 +193,6 @@ public:
 
     fs::FsPath m_app_path;
     u64 m_start_timestamp{};
-    u64 m_prev_timestamp{};
-    fs::FsPath m_prev_last_launch{};
     int m_default_image{};
 
     bool m_is_launched_via_sphaira_forwader{};

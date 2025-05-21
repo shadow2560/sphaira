@@ -439,9 +439,6 @@ void App::Loop() {
                     timeGetCurrentTime(TimeType_LocalSystemClock, &timestamp);
                     const auto nro_path = nro_normalise_path(arg.path);
 
-                    ini_puts("paths", "last_launch_full", arg.argv.c_str(), App::CONFIG_PATH);
-                    ini_puts("paths", "last_launch_path", nro_path.c_str(), App::CONFIG_PATH);
-
                     // update timestamp
                     ini_putl(nro_path.c_str(), "timestamp", timestamp, App::PLAYLOG_PATH);
                     // update launch_count
@@ -1419,14 +1416,6 @@ App::App(const char* argv0) {
     // usbHsFsSetPopulateCallback();
     // usbHsFsInitialize(0);
 
-    m_prev_timestamp = ini_getl("paths", "timestamp", 0, App::CONFIG_PATH);
-    const auto last_launch_path_size = ini_gets("paths", "last_launch_path", "", m_prev_last_launch, sizeof(m_prev_last_launch), App::CONFIG_PATH);
-    fs::FsPath last_launch_path;
-    if (last_launch_path_size) {
-        ini_gets("paths", "last_launch_path", "", last_launch_path, sizeof(last_launch_path), App::CONFIG_PATH);
-    }
-    ini_puts("paths", "last_launch_path", "", App::CONFIG_PATH);
-
     const auto loader_info_size = envGetLoaderInfoSize();
     if (loader_info_size) {
         if (loader_info_size >= 8 && !std::memcmp(envGetLoaderInfo(), "sphaira", 7)) {
@@ -1784,10 +1773,6 @@ App::~App() {
         log_write("closing log\n");
         log_file_exit();
     }
-
-    u64 timestamp;
-    timeGetCurrentTime(TimeType_LocalSystemClock, &timestamp);
-    ini_putl("paths", "timestamp", timestamp, App::CONFIG_PATH);
 }
 
 auto App::GetVersionFromString(const char* str) -> u32 {
