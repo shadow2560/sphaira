@@ -220,12 +220,12 @@ void from_json(const fs::FsPath& path, PackList& e) {
     );
 }
 
-auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
+auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> Result {
     static const fs::FsPath zip_out{"/switch/sphaira/cache/themezer/temp.zip"};
     constexpr auto chunk_size = 1024 * 512; // 512KiB
 
     fs::FsNativeSd fs;
-    R_TRY_RESULT(fs.GetFsOpenResult(), false);
+    R_TRY(fs.GetFsOpenResult());
 
     DownloadPack download_pack;
 
@@ -243,7 +243,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
 
         if (!result.success || result.data.empty()) {
             log_write("error with download: %s\n", url.c_str());
-            return false;
+            R_THROW(0x1);
         }
 
         from_json(result.data, download_pack);
@@ -254,13 +254,13 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
         pbox->NewTransfer("Downloading "_i18n + entry.details.name);
         log_write("starting download: %s\n", download_pack.url.c_str());
 
-        if (!curl::Api().ToFile(
+        const auto result = curl::Api().ToFile(
             curl::Url{download_pack.url},
             curl::Path{zip_out},
-            curl::OnProgress{pbox->OnDownloadProgressCallback()}).success) {
-            log_write("error with download\n");
-            return false;
-        }
+            curl::OnProgress{pbox->OnDownloadProgressCallback()}
+        );
+
+        R_UNLESS(result.success, 0x1);
     }
 
     ON_SCOPE_EXIT(fs.DeleteFile(zip_out));
@@ -273,28 +273,25 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
     // 3. extract the zip
     if (!pbox->ShouldExit()) {
         auto zfile = unzOpen64(zip_out);
-        if (!zfile) {
-            log_write("failed to open zip: %s\n", zip_out.s);
-            return false;
-        }
+        R_UNLESS(zfile, 0x1);
         ON_SCOPE_EXIT(unzClose(zfile));
 
         unz_global_info64 pglobal_info;
         if (UNZ_OK != unzGetGlobalInfo64(zfile, &pglobal_info)) {
-            return false;
+            R_THROW(0x1);
         }
 
         for (int i = 0; i < pglobal_info.number_entry; i++) {
             if (i > 0) {
                 if (UNZ_OK != unzGoToNextFile(zfile)) {
                     log_write("failed to unzGoToNextFile\n");
-                    return false;
+                    R_THROW(0x1);
                 }
             }
 
             if (UNZ_OK != unzOpenCurrentFile(zfile)) {
                 log_write("failed to open current file\n");
-                return false;
+                R_THROW(0x1);
             }
             ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
@@ -302,7 +299,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
             char name[512];
             if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0)) {
                 log_write("failed to get current info\n");
-                return false;
+                R_THROW(0x1);
             }
 
             const auto file_path = fs::AppendPath(dir_path, name);
@@ -311,38 +308,27 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
             Result rc;
             if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                 log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
-                return false;
+                R_THROW(rc);
             }
 
             FsFile f;
-            if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Write, &f))) {
-                log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
-                return false;
-            }
+            R_TRY(fs.OpenFile(file_path, FsOpenMode_Write, &f));
             ON_SCOPE_EXIT(fsFileClose(&f));
 
-            if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                log_write("failed to set file size: %s 0x%04X\n", file_path.s, rc);
-                return false;
-            }
+            R_TRY(fsFileSetSize(&f, info.uncompressed_size));
 
             std::vector<char> buf(chunk_size);
             s64 offset{};
             while (offset < info.uncompressed_size) {
-                if (pbox->ShouldExit()) {
-                    return false;
-                }
+                R_TRY(pbox->ShouldExitResult());
 
                 const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                 if (bytes_read <= 0) {
                     // log_write("failed to read zip file: %s\n", inzip.c_str());
-                    return false;
+                    R_THROW(0x1);
                 }
 
-                if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                    log_write("failed to write file: %s 0x%04X\n", file_path.s, rc);
-                    return false;
-                }
+                R_TRY(fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None));
 
                 pbox->UpdateTransfer(offset, info.uncompressed_size);
                 offset += bytes_read;
@@ -351,7 +337,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> bool {
     }
 
     log_write("finished install :)\n");
-    return true;
+    R_SUCCEED();
 }
 
 } // namespace
@@ -386,13 +372,15 @@ Menu::Menu() : MenuBase{"Themezer"_i18n} {
                             const auto& entry = page.m_packList[m_index];
                             const auto url = apiBuildUrlDownloadPack(entry);
 
-                            App::Push(std::make_shared<ProgressBox>(entry.themes[0].preview.lazy_image.image, "Downloading "_i18n, entry.details.name, [this, &entry](auto pbox){
+                            App::Push(std::make_shared<ProgressBox>(entry.themes[0].preview.lazy_image.image, "Downloading "_i18n, entry.details.name, [this, &entry](auto pbox) -> Result {
                                 return InstallTheme(pbox, entry);
-                            }, [this, &entry](bool success){
-                                if (success) {
+                            }, [this, &entry](Result rc){
+                                App::PushErrorBox(rc, "Failed to download theme"_i18n);
+
+                                if (R_SUCCEEDED(rc)) {
                                     App::Notify("Downloaded "_i18n + entry.details.name);
                                 }
-                            }, 2));
+                            }));
                         }
                     }
                 }

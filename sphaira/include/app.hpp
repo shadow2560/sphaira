@@ -61,6 +61,9 @@ public:
     static void NotifyClear(ui::NotifEntry::Side side = ui::NotifEntry::Side::RIGHT);
     static void NotifyFlashLed();
 
+    // if R_FAILED(rc), pushes error box. returns rc passed in.
+    static Result PushErrorBox(Result rc, const std::string& message);
+
     static auto GetThemeMetaList() -> std::span<ThemeMeta>;
     static void SetTheme(s64 theme_index);
     static auto GetThemeIndex() -> s64;

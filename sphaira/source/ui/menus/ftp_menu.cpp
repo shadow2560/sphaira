@@ -202,25 +202,25 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
             log_write("set to progress\n");
             m_state = State::Progress;
             log_write("got connection\n");
-            App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this](auto pbox) mutable -> bool {
+            App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this](auto pbox) -> Result {
                 log_write("inside progress box\n");
                 const auto rc = yati::InstallFromSource(pbox, m_source, m_source->m_path);
                 if (R_FAILED(rc)) {
                     m_source->Disable();
-                    return false;
+                    R_THROW(rc);
                 }
 
-                log_write("progress box is done\n");
-                return true;
-            }, [this](bool result){
+                R_SUCCEED();
+            }, [this](Result rc){
+                App::PushErrorBox(rc, "Ftp install failed!"_i18n);
+
                 mutexLock(&m_mutex);
                 ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
 
-                if (result) {
+                if (R_SUCCEEDED(rc)) {
                     App::Notify("Ftp install success!"_i18n);
                     m_state = State::Done;
                 } else {
-                    App::Notify("Ftp install failed!"_i18n);
                     m_state = State::Failed;
                 }
             }));

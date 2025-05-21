@@ -212,6 +212,13 @@ auto ProgressBox::ShouldExit() -> bool {
     return m_stop_source.stop_requested();
 }
 
+auto ProgressBox::ShouldExitResult() -> Result {
+    if (ShouldExit()) {
+        R_THROW(0xFFFF);
+    }
+    R_SUCCEED();
+}
+
 auto ProgressBox::CopyFile(const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
     fs::FsNativeSd fs;
     R_TRY(fs.GetFsOpenResult());

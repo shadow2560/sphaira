@@ -8,15 +8,15 @@
 namespace sphaira::ui {
 
 struct ProgressBox;
-using ProgressBoxCallback = std::function<bool(ProgressBox*)>;
-using ProgressBoxDoneCallback = std::function<void(bool success)>;
+using ProgressBoxCallback = std::function<Result(ProgressBox*)>;
+using ProgressBoxDoneCallback = std::function<void(Result rc)>;
 
 struct ProgressBox final : Widget {
     ProgressBox(
         int image,
         const std::string& action,
         const std::string& title,
-        ProgressBoxCallback callback, ProgressBoxDoneCallback done = [](bool success){},
+        ProgressBoxCallback callback, ProgressBoxDoneCallback done = [](Result rc){},
         int cpuid = 1, int prio = 0x2C, int stack_size = 1024*128
     );
     ~ProgressBox();
@@ -30,8 +30,10 @@ struct ProgressBox final : Widget {
     // not const in order to avoid copy by using std::swap
     auto SetImageData(std::vector<u8>& data) -> ProgressBox&;
     auto SetImageDataConst(std::span<const u8> data) -> ProgressBox&;
+
     void RequestExit();
     auto ShouldExit() -> bool;
+    auto ShouldExitResult() -> Result;
 
     // helper functions
     auto CopyFile(const fs::FsPath& src, const fs::FsPath& dst) -> Result;
@@ -64,7 +66,7 @@ public:
     struct ThreadData {
         ProgressBox* pbox{};
         ProgressBoxCallback callback{};
-        bool result{};
+        Result result{};
     };
 
 private:

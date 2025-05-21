@@ -1012,8 +1012,8 @@ auto install_forwarder(ui::ProgressBox* pbox, OwoConfig& config, NcmStorageId st
 }
 
 auto install_forwarder(OwoConfig& config, NcmStorageId storage_id) -> Result {
-    App::Push(std::make_shared<ui::ProgressBox>(0, "Installing Forwarder"_i18n, config.name, [config, storage_id](auto pbox) mutable -> bool {
-        return R_SUCCEEDED(install_forwarder(pbox, config, storage_id));
+    App::Push(std::make_shared<ui::ProgressBox>(0, "Installing Forwarder"_i18n, config.name, [config, storage_id](auto pbox) mutable -> Result {
+        return install_forwarder(pbox, config, storage_id);
     }));
     R_SUCCEED();
 }

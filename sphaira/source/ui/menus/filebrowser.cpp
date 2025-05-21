@@ -489,7 +489,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             Scan(m_path);
                         } else {
                             const auto msg = std::string("Failed to rename file: ") + entry.name;
-                            App::Push(std::make_shared<ErrorBox>(rc, msg.c_str()));
+                            App::PushErrorBox(rc, msg);
                         }
                     }
                 }));
@@ -854,15 +854,13 @@ void Menu::InstallForwarder() {
             if (op_index) {
                 const auto assoc = assoc_list[*op_index];
                 log_write("pushing it\n");
-                App::Push(std::make_shared<ProgressBox>(0, "Installing Forwarder"_i18n, GetEntry().name, [assoc, this](auto pbox) -> bool {
+                App::Push(std::make_shared<ProgressBox>(0, "Installing Forwarder"_i18n, GetEntry().name, [assoc, this](auto pbox) -> Result {
                     log_write("inside callback\n");
 
                     NroEntry nro{};
                     log_write("parsing nro\n");
-                    if (R_FAILED(nro_parse(assoc.path, nro))) {
-                        log_write("failed nro parse\n");
-                        return false;
-                    }
+                    R_TRY(nro_parse(assoc.path, nro));
+
                     log_write("got nro data\n");
                     auto file_name = assoc.use_base_name ? GetEntry().GetName() : GetEntry().GetInternalName();
 
@@ -883,7 +881,7 @@ void Menu::InstallForwarder() {
                     config.icon = GetRomIcon(m_fs.get(), pbox, file_name, db_indexs, nro);
                     pbox->SetImageDataConst(config.icon);
 
-                    return R_SUCCEEDED(App::Install(pbox, config));
+                    return App::Install(pbox, config);
                 }));
             } else {
                 log_write("pressed B to skip launch...\n");
@@ -899,19 +897,13 @@ void Menu::InstallFiles() {
         if (op_index && *op_index) {
             App::PopToMenu();
 
-            App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this, targets](auto pbox) mutable -> bool {
+            App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this, targets](auto pbox) -> Result {
                 for (auto& e : targets) {
-                    const auto rc = yati::InstallFromFile(pbox, &m_fs->m_fs, GetNewPath(e));
-                    if (rc == yati::Result_Cancelled) {
-                        break;
-                    } else if (R_FAILED(rc)) {
-                        return false;
-                    } else {
-                        App::Notify("Installed " + e.GetName());
-                    }
+                    R_TRY(yati::InstallFromFile(pbox, &m_fs->m_fs, GetNewPath(e)));
+                    App::Notify("Installed " + e.GetName());
                 }
 
-                return true;
+                R_SUCCEED();
             }));
         }
     }));
@@ -925,7 +917,7 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
         dir_path = m_path;
     }
 
-    App::Push(std::make_shared<ui::ProgressBox>(0, "Extracting "_i18n, "", [this, dir_path, targets](auto pbox) mutable -> bool {
+    App::Push(std::make_shared<ui::ProgressBox>(0, "Extracting "_i18n, "", [this, dir_path, targets](auto pbox) -> Result {
         constexpr auto chunk_size = 1024 * 512; // 512KiB
         auto& fs = *m_fs.get();
 
@@ -934,28 +926,25 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
 
             const auto zip_out = GetNewPath(e);
             auto zfile = unzOpen64(zip_out);
-            if (!zfile) {
-                log_write("failed to open zip: %s\n", zip_out.s);
-                return false;
-            }
+            R_UNLESS(zfile, 0x1);
             ON_SCOPE_EXIT(unzClose(zfile));
 
             unz_global_info64 pglobal_info;
             if (UNZ_OK != unzGetGlobalInfo64(zfile, &pglobal_info)) {
-                return false;
+                R_THROW(0x1);
             }
 
             for (int i = 0; i < pglobal_info.number_entry; i++) {
                 if (i > 0) {
                     if (UNZ_OK != unzGoToNextFile(zfile)) {
                         log_write("failed to unzGoToNextFile\n");
-                        return false;
+                        R_THROW(0x1);
                     }
                 }
 
                 if (UNZ_OK != unzOpenCurrentFile(zfile)) {
                     log_write("failed to open current file\n");
-                    return false;
+                    R_THROW(0x1);
                 }
                 ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
@@ -963,7 +952,7 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
                 char name[512];
                 if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0)) {
                     log_write("failed to get current info\n");
-                    return false;
+                    R_THROW(0x1);
                 }
 
                 const auto file_path = fs::AppendPath(dir_path, name);
@@ -975,38 +964,27 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
                 Result rc;
                 if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
-                    return false;
+                    R_THROW(rc);
                 }
 
                 FsFile f;
-                if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Write, &f))) {
-                    log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
-                    return false;
-                }
+                R_TRY(fs.OpenFile(file_path, FsOpenMode_Write, &f));
                 ON_SCOPE_EXIT(fsFileClose(&f));
 
-                if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                    log_write("failed to set file size: %s 0x%04X\n", file_path.s, rc);
-                    return false;
-                }
+                R_TRY(fsFileSetSize(&f, info.uncompressed_size));
 
                 std::vector<char> buf(chunk_size);
                 s64 offset{};
                 while (offset < info.uncompressed_size) {
-                    if (pbox->ShouldExit()) {
-                        return false;
-                    }
+                    R_TRY(pbox->ShouldExitResult());
 
                     const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                     if (bytes_read <= 0) {
                         log_write("failed to read zip file: %s\n", name);
-                        return false;
+                        R_THROW(0x1);
                     }
 
-                    if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                        log_write("failed to write file: %s 0x%04X\n", file_path.s, rc);
-                        return false;
-                    }
+                    R_TRY(fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None));
 
                     pbox->UpdateTransfer(offset, info.uncompressed_size);
                     offset += bytes_read;
@@ -1014,13 +992,14 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
             }
         }
 
-        return true;
-    }, [this](bool success){
-        if (success) {
+        R_SUCCEED();
+    }, [this](Result rc){
+        App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
+        if (R_SUCCEEDED(rc)) {
             App::Notify("Extract success!");
-        } else {
-            App::Notify("Extract failed!");
         }
+
         Scan(m_path);
         log_write("did extract\n");
     }));
@@ -1062,7 +1041,7 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
         }
     }
 
-    App::Push(std::make_shared<ui::ProgressBox>(0, "Compressing "_i18n, "", [this, zip_out, targets](auto pbox) mutable -> bool {
+    App::Push(std::make_shared<ui::ProgressBox>(0, "Compressing "_i18n, "", [this, zip_out, targets](auto pbox) -> Result {
         constexpr auto chunk_size = 1024 * 512; // 512KiB
         auto& fs = *m_fs.get();
 
@@ -1079,13 +1058,10 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
         zip_info.tmz_date.tm_year = tm->tm_year;
 
         auto zfile = zipOpen(zip_out, APPEND_STATUS_CREATE);
-        if (!zfile) {
-            log_write("failed to open zip: %s\n", zip_out.s);
-            return false;
-        }
+        R_UNLESS(zfile, 0x1);
         ON_SCOPE_EXIT(zipClose(zfile, "sphaira v" APP_VERSION_HASH));
 
-        const auto zip_add = [&](const fs::FsPath& file_path){
+        const auto zip_add = [&](const fs::FsPath& file_path) -> Result {
             // the file name needs to be relative to the current directory.
             const char* file_name_in_zip = file_path.s + std::strlen(m_path);
 
@@ -1100,56 +1076,42 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
             const auto raw = ext && IsExtension(ext + 1, COMPRESSED_EXTENSIONS);
 
             if (ZIP_OK != zipOpenNewFileInZip2(zfile, file_name_in_zip, &zip_info, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION, raw)) {
-                return false;
+                R_THROW(0x1);
             }
             ON_SCOPE_EXIT(zipCloseFileInZip(zfile));
 
             FsFile f;
-            Result rc;
-            if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Read, &f))) {
-                log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
-                return false;
-            }
+            R_TRY(fs.OpenFile(file_path, FsOpenMode_Read, &f));
             ON_SCOPE_EXIT(fsFileClose(&f));
 
             s64 file_size;
-            if (R_FAILED(rc = fsFileGetSize(&f, &file_size))) {
-                log_write("failed to get file size: %s 0x%04X\n", file_path.s, rc);
-                return false;
-            }
+            R_TRY(fsFileGetSize(&f, &file_size));
 
             std::vector<char> buf(chunk_size);
             s64 offset{};
             while (offset < file_size) {
-                if (pbox->ShouldExit()) {
-                    return false;
-                }
+                R_TRY(pbox->ShouldExitResult());
 
                 u64 bytes_read;
-                if (R_FAILED(rc = fsFileRead(&f, offset, buf.data(), buf.size(), FsReadOption_None, &bytes_read))) {
-                    log_write("failed to write file: %s 0x%04X\n", file_path.s, rc);
-                    return false;
-                }
+                R_TRY(fsFileRead(&f, offset, buf.data(), buf.size(), FsReadOption_None, &bytes_read));
 
                 if (ZIP_OK != zipWriteInFileInZip(zfile, buf.data(), bytes_read)) {
                     log_write("failed to write zip file: %s\n", file_path.s);
-                    return false;
+                    R_THROW(0x1);
                 }
 
                 pbox->UpdateTransfer(offset, file_size);
                 offset += bytes_read;
             }
 
-            return true;
+            R_SUCCEED();
         };
 
         for (auto& e : targets) {
             pbox->SetTitle(e.GetName());
             if (e.IsFile()) {
                 const auto file_path = GetNewPath(e);
-                if (!zip_add(file_path)) {
-                    return false;
-                }
+                R_TRY(zip_add(file_path));
             } else {
                 FsDirCollections collections;
                 get_collections(GetNewPath(e), e.name, collections);
@@ -1157,21 +1119,20 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
                 for (const auto& collection : collections) {
                     for (const auto& file : collection.files) {
                         const auto file_path = fs::AppendPath(collection.path, file.name);
-                        if (!zip_add(file_path)) {
-                            return false;
-                        }
+                        R_TRY(zip_add(file_path));
                     }
                 }
             }
         }
 
-        return true;
-    }, [this](bool success){
-        if (success) {
+        R_SUCCEED();
+    }, [this](Result rc){
+        App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
+        if (R_SUCCEEDED(rc)) {
             App::Notify("Compress success!");
-        } else {
-            App::Notify("Compress failed!");
         }
+
         Scan(m_path);
         log_write("did compress\n");
     }));
@@ -1198,7 +1159,7 @@ void Menu::UploadFiles() {
             }
 
             const auto loc = network_locations[*op_index];
-            App::Push(std::make_shared<ProgressBox>(0, "Uploading"_i18n, "", [this, loc](auto pbox) -> bool {
+            App::Push(std::make_shared<ProgressBox>(0, "Uploading"_i18n, "", [this, loc](auto pbox) -> Result {
                 auto targets = GetSelectedEntries();
 
                 const auto file_add = [&](s64 file_size, const fs::FsPath& file_path, const char* name) -> Result {
@@ -1250,9 +1211,7 @@ void Menu::UploadFiles() {
                 for (auto& e : targets) {
                     if (e.IsFile()) {
                         const auto file_path = GetNewPath(e);
-                        if (R_FAILED(file_add(e.file_size, file_path, e.GetName().c_str()))) {
-                            return false;
-                        }
+                        R_TRY(file_add(e.file_size, file_path, e.GetName().c_str()));
                     } else {
                         FsDirCollections collections;
                         get_collections(GetNewPath(e), e.name, collections, true);
@@ -1260,24 +1219,20 @@ void Menu::UploadFiles() {
                         for (const auto& collection : collections) {
                             for (const auto& file : collection.files) {
                                 const auto file_path = fs::AppendPath(collection.path, file.name);
-                                if (R_FAILED(file_add(file.file_size, file_path, file.name))) {
-                                    return false;
-                                }
+                                R_TRY(file_add(file.file_size, file_path, file.name));
                             }
                         }
                     }
                 }
 
-                return true;
-            }, [this](bool success){
+                R_SUCCEED();
+            }, [this](Result rc){
+                App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
                 ResetSelection();
 
-                if (success) {
+                if (R_SUCCEEDED(rc)) {
                     App::Notify("Upload successfull!");
                     log_write("Upload successfull!!!\n");
-                } else {
-                    App::Notify("Upload failed!");
-                    log_write("Upload failed!!!\n");
                 }
             }));
         }
@@ -1643,80 +1598,70 @@ void Menu::OnDeleteCallback() {
         Scan(m_path);
         log_write("did delete\n");
     } else {
-        App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox){
+        App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox) -> Result {
             FsDirCollections collections;
 
             // build list of dirs / files
             for (const auto&p : m_selected_files) {
                 pbox->Yield();
-                if (pbox->ShouldExit()) {
-                    return false;
-                }
+                R_TRY(pbox->ShouldExitResult());
 
                 const auto full_path = GetNewPath(m_selected_path, p.name);
                 if (p.IsDir()) {
                     pbox->NewTransfer("Scanning "_i18n + full_path);
-                    if (R_FAILED(get_collections(full_path, p.name, collections))) {
-                        log_write("failed to get dir collection: %s\n", full_path.s);
-                        return false;
-                    }
+                    R_TRY(get_collections(full_path, p.name, collections));
                 }
             }
 
             // delete everything in collections, reversed
             for (const auto& c : std::views::reverse(collections)) {
-                const auto delete_func = [&](auto& array) {
+                const auto delete_func = [&](auto& array) -> Result {
                     for (const auto& p : array) {
                         pbox->Yield();
-                        if (pbox->ShouldExit()) {
-                            return false;
-                        }
+                        R_TRY(pbox->ShouldExitResult());
 
                         const auto full_path = GetNewPath(c.path, p.name);
                         pbox->NewTransfer("Deleting "_i18n + full_path);
                         if (p.type == FsDirEntryType_Dir) {
                             log_write("deleting dir: %s\n", full_path.s);
-                            m_fs->DeleteDirectory(full_path);
+                            R_TRY(m_fs->DeleteDirectory(full_path));
                         } else {
                             log_write("deleting file: %s\n", full_path.s);
-                            m_fs->DeleteFile(full_path);
+                            R_TRY(m_fs->DeleteFile(full_path));
                         }
                     }
-                    return true;
+
+                    R_SUCCEED();
                 };
 
-                if (!delete_func(c.files)) {
-                    return false;
-                }
-                if (!delete_func(c.dirs)) {
-                    return false;
-                }
+                R_TRY(delete_func(c.files));
+                R_TRY(delete_func(c.dirs));
             }
 
             for (const auto& p : m_selected_files) {
                 pbox->Yield();
-                if (pbox->ShouldExit()) {
-                    return false;
-                }
+                R_TRY(pbox->ShouldExitResult());
 
                 const auto full_path = GetNewPath(m_selected_path, p.name);
                 pbox->NewTransfer("Deleting "_i18n + full_path);
 
                 if (p.IsDir()) {
                     log_write("deleting dir: %s\n", full_path.s);
-                    m_fs->DeleteDirectory(full_path);
+                    R_TRY(m_fs->DeleteDirectory(full_path));
                 } else {
                     log_write("deleting file: %s\n", full_path.s);
-                    m_fs->DeleteFile(full_path);
+                    R_TRY(m_fs->DeleteFile(full_path));
                 }
             }
 
-            return true;
-        }, [this](bool success){
+            R_SUCCEED();
+        }, [this](Result rc){
+            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
             ResetSelection();
             Scan(m_path);
             log_write("did delete\n");
-        }, 2));
+        }));
     }
 }
 
@@ -1736,14 +1681,12 @@ void Menu::OnPasteCallback() {
         Scan(m_path);
         log_write("did paste\n");
     } else {
-        App::Push(std::make_shared<ProgressBox>(0, "Pasting"_i18n, "", [this](auto pbox){
+        App::Push(std::make_shared<ProgressBox>(0, "Pasting"_i18n, "", [this](auto pbox) -> Result {
 
             if (m_selected_type == SelectedType::Cut) {
                 for (const auto& p : m_selected_files) {
                     pbox->Yield();
-                    if (pbox->ShouldExit()) {
-                        return false;
-                    }
+                    R_TRY(pbox->ShouldExitResult());
 
                     const auto src_path = GetNewPath(m_selected_path, p.name);
                     const auto dst_path = GetNewPath(m_path, p.name);
@@ -1762,25 +1705,18 @@ void Menu::OnPasteCallback() {
                 // build list of dirs / files
                 for (const auto&p : m_selected_files) {
                     pbox->Yield();
-                    if (pbox->ShouldExit()) {
-                        return false;
-                    }
+                    R_TRY(pbox->ShouldExitResult());
 
                     const auto full_path = GetNewPath(m_selected_path, p.name);
                     if (p.IsDir()) {
                         pbox->NewTransfer("Scanning "_i18n + full_path);
-                        if (R_FAILED(get_collections(full_path, p.name, collections))) {
-                            log_write("failed to get dir collection: %s\n", full_path.s);
-                            return false;
-                        }
+                        R_TRY(get_collections(full_path, p.name, collections));
                     }
                 }
 
                 for (const auto& p : m_selected_files) {
                     pbox->Yield();
-                    if (pbox->ShouldExit()) {
-                        return false;
-                    }
+                    R_TRY(pbox->ShouldExitResult());
 
                     const auto src_path = GetNewPath(m_selected_path, p.name);
                     const auto dst_path = GetNewPath(p);
@@ -1790,7 +1726,7 @@ void Menu::OnPasteCallback() {
                         m_fs->CreateDirectory(dst_path);
                     } else {
                         pbox->NewTransfer("Copying "_i18n + src_path);
-                        R_TRY_RESULT(pbox->CopyFile(src_path, dst_path), false);
+                        R_TRY(pbox->CopyFile(src_path, dst_path));
                     }
                 }
 
@@ -1800,9 +1736,7 @@ void Menu::OnPasteCallback() {
 
                     for (const auto& p : c.dirs) {
                         pbox->Yield();
-                        if (pbox->ShouldExit()) {
-                            return false;
-                        }
+                        R_TRY(pbox->ShouldExitResult());
 
                         const auto src_path = GetNewPath(c.path, p.name);
                         const auto dst_path = GetNewPath(base_dst_path, p.name);
@@ -1814,26 +1748,26 @@ void Menu::OnPasteCallback() {
 
                     for (const auto& p : c.files) {
                         pbox->Yield();
-                        if (pbox->ShouldExit()) {
-                            return false;
-                        }
+                        R_TRY(pbox->ShouldExitResult());
 
                         const auto src_path = GetNewPath(c.path, p.name);
                         const auto dst_path = GetNewPath(base_dst_path, p.name);
 
                         pbox->NewTransfer("Copying "_i18n + src_path);
                         log_write("copying: %s to %s\n", src_path.s, dst_path.s);
-                        R_TRY_RESULT(pbox->CopyFile(src_path, dst_path), false);
+                        R_TRY(pbox->CopyFile(src_path, dst_path));
                     }
                 }
             }
 
-            return true;
-        }, [this](bool success){
+            R_SUCCEED();
+        }, [this](Result rc){
+            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
             ResetSelection();
             Scan(m_path);
             log_write("did paste\n");
-        }, 2));
+        }));
     }
 }
 

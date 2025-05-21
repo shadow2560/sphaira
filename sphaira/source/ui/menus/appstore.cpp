@@ -286,14 +286,12 @@ void ReadFromInfoJson(Entry& e) {
 
 // this ignores ShouldExit() as leaving somthing in a half
 // deleted state is a bad idea :)
-auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
+auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
     const auto manifest = LoadAndParseManifest(entry);
     fs::FsNativeSd fs;
 
     if (manifest.empty()) {
-        if (entry.binary.empty()) {
-            return false;
-        }
+        R_UNLESS(!entry.binary.empty(), 0x1);
         fs.DeleteFile(entry.binary);
     } else {
         for (auto& e : manifest) {
@@ -319,7 +317,8 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
     } else {
         log_write("deleted: %s\n", dir.s);
     }
-    return true;
+
+    R_SUCCEED();
 }
 
 // this is called by ProgressBox on a seperate thread
@@ -328,12 +327,12 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
 // 2. md5 check the zip
 // 3. parse manifest and unzip everything to placeholder
 // 4. move everything from placeholder to normal location
-auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
+auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
     static const fs::FsPath zip_out{"/switch/sphaira/cache/appstore/temp.zip"};
     constexpr auto chunk_size = 1024 * 512; // 512KiB
 
     fs::FsNativeSd fs;
-    R_TRY_RESULT(fs.GetFsOpenResult(), false);
+    R_TRY(fs.GetFsOpenResult());
 
     // 1. download the zip
     if (!pbox->ShouldExit()) {
@@ -341,14 +340,13 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
         log_write("starting download\n");
 
         const auto url = BuildZipUrl(entry);
-        if (!curl::Api().ToFile(
+        const auto result = curl::Api().ToFile(
             curl::Url{url},
             curl::Path{zip_out},
             curl::OnProgress{pbox->OnDownloadProgressCallback()}
-        ).success) {
-            log_write("error with download\n");
-            return false;
-        }
+        );
+
+        R_UNLESS(result.success, 0x1);
     }
 
     ON_SCOPE_EXIT(fs.DeleteFile(zip_out));
@@ -359,15 +357,11 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
         log_write("starting md5 check\n");
 
         FsFile f;
-        if (R_FAILED(fs.OpenFile(zip_out, FsOpenMode_Read, &f))) {
-            return false;
-        }
+        R_TRY(fs.OpenFile(zip_out, FsOpenMode_Read, &f));
         ON_SCOPE_EXIT(fsFileClose(&f));
 
         s64 size;
-        if (R_FAILED(fsFileGetSize(&f, &size))) {
-            return false;
-        }
+        R_TRY(fsFileGetSize(&f, &size));
 
         mbedtls_md5_context ctx;
         mbedtls_md5_init(&ctx);
@@ -380,19 +374,14 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
         std::vector<u8> chunk(chunk_size);
         s64 offset{};
         while (offset < size) {
-            if (pbox->ShouldExit()) {
-                return false;
-            }
+            R_TRY(pbox->ShouldExitResult());
 
             u64 bytes_read;
-            if (R_FAILED(fsFileRead(&f, offset, chunk.data(), chunk.size(), 0, &bytes_read))) {
-                log_write("failed to read file offset: %zd size: %zd\n", offset, size);
-                return false;
-            }
+            R_TRY(fsFileRead(&f, offset, chunk.data(), chunk.size(), 0, &bytes_read));
 
             if (mbedtls_md5_update_ret(&ctx, chunk.data(), bytes_read)) {
                 log_write("failed to update ret\n");
-                return false;
+                R_THROW(0x1);
             }
 
             offset += bytes_read;
@@ -401,7 +390,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
 
         u8 md5_out[16];
         if (mbedtls_md5_finish_ret(&ctx, (u8*)md5_out)) {
-            return false;
+            R_THROW(0x1);
         }
 
         // convert md5 to hex string
@@ -412,23 +401,20 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
 
         if (strncasecmp(md5_str, entry.md5.data(), entry.md5.length())) {
             log_write("bad md5: %.*s vs %.*s\n", 32, md5_str, 32, entry.md5.c_str());
-            return false;
+            R_THROW(0x1);
         }
     }
 
     // 3. extract the zip
     if (!pbox->ShouldExit()) {
         auto zfile = unzOpen64(zip_out);
-        if (!zfile) {
-            log_write("failed to open zip: %s\n", zip_out.s);
-            return false;
-        }
+        R_UNLESS(zfile, 0x1);
         ON_SCOPE_EXIT(unzClose(zfile));
 
         // get manifest
         if (UNZ_END_OF_LIST_OF_FILE == unzLocateFile(zfile, "manifest.install", 0)) {
             log_write("failed to find manifest.install\n");
-            return false;
+            R_THROW(0x1);
         }
 
         ManifestEntries new_manifest;
@@ -436,47 +422,47 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
         {
             if (UNZ_OK != unzOpenCurrentFile(zfile)) {
                 log_write("failed to open current file\n");
-                return false;
+                R_THROW(0x1);
             }
             ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
             unz_file_info64 info;
             if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, 0, 0, 0, 0, 0, 0)) {
                 log_write("failed to get current info\n");
-                return false;
+                R_THROW(0x1);
             }
 
             std::vector<char> manifest_data(info.uncompressed_size);
             if ((int)info.uncompressed_size != unzReadCurrentFile(zfile, manifest_data.data(), manifest_data.size())) {
                 log_write("failed to read manifest file\n");
-                return false;
+                R_THROW(0x1);
             }
 
             new_manifest = ParseManifest(manifest_data);
             if (new_manifest.empty()) {
                 log_write("manifest is empty!\n");
-                return false;
+                R_THROW(0x1);
             }
         }
 
-        const auto unzip_to = [pbox, &fs, zfile](const fs::FsPath& inzip, fs::FsPath output) -> bool {
+        const auto unzip_to = [pbox, &fs, zfile](const fs::FsPath& inzip, fs::FsPath output) -> Result {
             pbox->NewTransfer(inzip);
 
             if (UNZ_END_OF_LIST_OF_FILE == unzLocateFile(zfile, inzip, 0)) {
                 log_write("failed to find %s\n", inzip.s);
-                return false;
+                R_THROW(0x1);
             }
 
             if (UNZ_OK != unzOpenCurrentFile(zfile)) {
                 log_write("failed to open current file\n");
-                return false;
+                R_THROW(0x1);
             }
             ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
             unz_file_info64 info;
             if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, 0, 0, 0, 0, 0, 0)) {
                 log_write("failed to get current info\n");
-                return false;
+                R_THROW(0x1);
             }
 
             if (output[0] != '/') {
@@ -489,58 +475,41 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
             Result rc;
             if (R_FAILED(rc = fs.CreateFile(output, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                 log_write("failed to create file: %s 0x%04X\n", output.s, rc);
-                return false;
+                R_THROW(rc);
             }
 
             FsFile f;
-            if (R_FAILED(rc = fs.OpenFile(output, FsOpenMode_Write, &f))) {
-                log_write("failed to open file: %s 0x%04X\n", output.s, rc);
-                return false;
-            }
+            R_TRY(fs.OpenFile(output, FsOpenMode_Write, &f));
             ON_SCOPE_EXIT(fsFileClose(&f));
 
-            if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                log_write("failed to set file size: %s 0x%04X\n", output.s, rc);
-                return false;
-            }
+            R_TRY(fsFileSetSize(&f, info.uncompressed_size));
 
             std::vector<char> buf(chunk_size);
             u64 offset{};
             while (offset < info.uncompressed_size) {
-                if (pbox->ShouldExit()) {
-                    return false;
-                }
+                R_TRY(pbox->ShouldExitResult());
 
                 const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                 if (bytes_read <= 0) {
                     log_write("failed to read zip file: %s\n", inzip.s);
-                    return false;
+                    R_THROW(0x1);
                 }
 
-                if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                    log_write("failed to write file: %s 0x%04X\n", output.s, rc);
-                    return false;
-                }
+                R_TRY(fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None));
 
                 pbox->UpdateTransfer(offset, info.uncompressed_size);
                 offset += bytes_read;
             }
 
-            return true;
+            R_SUCCEED();
         };
 
         // unzip manifest and info
-        if (!unzip_to("info.json", BuildInfoCachePath(entry))) {
-            return false;
-        }
-        if (!unzip_to("manifest.install", BuildManifestCachePath(entry))) {
-            return false;
-        }
+        R_TRY(unzip_to("info.json", BuildInfoCachePath(entry)));
+        R_TRY(unzip_to("manifest.install", BuildManifestCachePath(entry)));
 
         for (auto& new_entry : new_manifest) {
-            if (pbox->ShouldExit()) {
-                return false;
-            }
+            R_TRY(pbox->ShouldExitResult());
 
             switch (new_entry.command) {
                 case 'E': // both are the same?
@@ -586,7 +555,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> bool {
     }
 
     log_write("finished install :)\n");
-    return true;
+    R_SUCCEED();
 }
 
 // case-insensitive version of str.find()
@@ -775,27 +744,31 @@ void EntryMenu::UpdateOptions() {
     const auto install = [this](){
         App::Push(std::make_shared<ProgressBox>(m_entry.image.image, "Downloading "_i18n, m_entry.title, [this](auto pbox){
             return InstallApp(pbox, m_entry);
-        }, [this](bool success){
-            if (success) {
+        }, [this](Result rc){
+            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
+            if (R_SUCCEEDED(rc)) {
                 App::Notify("Downloaded "_i18n + m_entry.title);
                 m_entry.status = EntryStatus::Installed;
                 m_menu.SetDirty();
                 UpdateOptions();
             }
-        }, 2));
+        }));
     };
 
     const auto uninstall = [this](){
         App::Push(std::make_shared<ProgressBox>(m_entry.image.image, "Uninstalling "_i18n, m_entry.title, [this](auto pbox){
             return UninstallApp(pbox, m_entry);
-        }, [this](bool success){
-            if (success) {
+        }, [this](Result rc){
+            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
+            if (R_SUCCEEDED(rc)) {
                 App::Notify("Removed "_i18n + m_entry.title);
                 m_entry.status = EntryStatus::Get;
                 m_menu.SetDirty();
                 UpdateOptions();
             }
-        }, 2));
+        }));
     };
 
     const Option install_option{"Install"_i18n, install};

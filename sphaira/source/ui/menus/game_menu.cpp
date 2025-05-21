@@ -1361,7 +1361,7 @@ void Menu::OnLayoutChange() {
 }
 
 void Menu::DeleteGames() {
-    App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox) -> bool {
+    App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox) -> Result {
         auto targets = GetSelectedEntries();
 
         for (s64 i = 0; i < std::size(targets); i++) {
@@ -1370,18 +1370,18 @@ void Menu::DeleteGames() {
             LoadControlEntry(e);
             pbox->SetTitle(e.GetName());
             pbox->UpdateTransfer(i + 1, std::size(targets));
-            nsDeleteApplicationCompletely(e.app_id);
+            R_TRY(nsDeleteApplicationCompletely(e.app_id));
         }
 
-        return true;
-    }, [this](bool success){
+        R_SUCCEED();
+    }, [this](Result rc){
+        App::PushErrorBox(rc, "Delete failed"_i18n);
+
         ClearSelection();
         m_dirty = true;
 
-        if (success) {
+        if (R_SUCCEEDED(rc)) {
             App::Notify("Delete successfull!");
-        } else {
-            App::Notify("Delete failed!");
         }
     }));
 }
@@ -1405,7 +1405,7 @@ void Menu::DumpGames(u32 flags) {
             }
 
             const auto index = *op_index;
-            App::Push(std::make_shared<ProgressBox>(0, "Dumping"_i18n, "", [this, network_locations, index, flags](auto pbox) -> bool {
+            App::Push(std::make_shared<ProgressBox>(0, "Dumping"_i18n, "", [this, network_locations, index, flags](auto pbox) -> Result {
                 auto targets = GetSelectedEntries();
 
                 std::vector<NspEntry> nsp_entries;
@@ -1416,25 +1416,23 @@ void Menu::DumpGames(u32 flags) {
                 const auto index2 = index - network_locations.size();
 
                 if (!network_locations.empty() && index < network_locations.size()) {
-                    return R_SUCCEEDED(DumpNspToNetwork(pbox, network_locations[index], nsp_entries));
+                    R_TRY(DumpNspToNetwork(pbox, network_locations[index], nsp_entries));
                 } else if (index2 == DumpLocationType_SdCard) {
-                    return R_SUCCEEDED(DumpNspToFile(pbox, nsp_entries));
+                    R_TRY(DumpNspToFile(pbox, nsp_entries));
                 } else if (index2 == DumpLocationType_UsbS2S) {
-                    return R_SUCCEEDED(DumpNspToUsbS2S(pbox, nsp_entries));
+                    R_TRY(DumpNspToUsbS2S(pbox, nsp_entries));
                 } else if (index2 == DumpLocationType_DevNull) {
-                    return R_SUCCEEDED(DumpNspToDevNull(pbox, nsp_entries));
+                    R_TRY(DumpNspToDevNull(pbox, nsp_entries));
                 }
 
-                return false;
-            }, [this](bool success){
+                R_SUCCEED();
+            }, [this](Result rc){
+                App::PushErrorBox(rc, "Dump failed!"_i18n);
                 ClearSelection();
 
-                if (success) {
+                if (R_SUCCEEDED(rc)) {
                     App::Notify("Dump successfull!");
                     log_write("dump successfull!!!\n");
-                } else {
-                    App::Notify("Dump failed!");
-                    log_write("dump failed!!!\n");
                 }
             }));
         }

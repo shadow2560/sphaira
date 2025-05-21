@@ -81,32 +81,28 @@ void from_json(const fs::FsPath& path, GhApiEntry& e) {
     );
 }
 
-auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry* entry) -> bool {
+auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry* entry) -> Result {
     static const fs::FsPath temp_file{"/switch/sphaira/cache/github/ghdl.temp"};
     constexpr auto chunk_size = 1024 * 512; // 512KiB
 
     fs::FsNativeSd fs;
-    R_TRY_RESULT(fs.GetFsOpenResult(), false);
+    R_TRY(fs.GetFsOpenResult());
     ON_SCOPE_EXIT(fs.DeleteFile(temp_file));
 
-    if (gh_asset.browser_download_url.empty()) {
-        log_write("failed to find asset\n");
-        return false;
-    }
+    R_UNLESS(!gh_asset.browser_download_url.empty(), 0x1);
 
     // 2. download the asset
     if (!pbox->ShouldExit()) {
         pbox->NewTransfer("Downloading "_i18n + gh_asset.name);
         log_write("starting download: %s\n", gh_asset.browser_download_url.c_str());
 
-        if (!curl::Api().ToFile(
+        const auto result = curl::Api().ToFile(
             curl::Url{gh_asset.browser_download_url},
             curl::Path{temp_file},
             curl::OnProgress{pbox->OnDownloadProgressCallback()}
-        ).success){
-            log_write("error with download\n");
-            return false;
-        }
+        );
+
+        R_UNLESS(result.success, 0x1);
     }
 
     fs::FsPath root_path{"/"};
@@ -118,28 +114,25 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
     if (gh_asset.content_type.find("zip") != gh_asset.content_type.npos) {
         log_write("found zip\n");
         auto zfile = unzOpen64(temp_file);
-        if (!zfile) {
-            log_write("failed to open zip: %s\n", temp_file.s);
-            return false;
-        }
+        R_UNLESS(zfile, 0x1);
         ON_SCOPE_EXIT(unzClose(zfile));
 
         unz_global_info64 pglobal_info;
         if (UNZ_OK != unzGetGlobalInfo64(zfile, &pglobal_info)) {
-            return false;
+            R_THROW(0x1);
         }
 
         for (int i = 0; i < pglobal_info.number_entry; i++) {
             if (i > 0) {
                 if (UNZ_OK != unzGoToNextFile(zfile)) {
                     log_write("failed to unzGoToNextFile\n");
-                    return false;
+                    R_THROW(0x1);
                 }
             }
 
             if (UNZ_OK != unzOpenCurrentFile(zfile)) {
                 log_write("failed to open current file\n");
-                return false;
+                R_THROW(0x1);
             }
             ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
@@ -147,7 +140,7 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
             fs::FsPath file_path;
             if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, file_path, sizeof(file_path), 0, 0, 0, 0)) {
                 log_write("failed to get current info\n");
-                return false;
+                R_THROW(0x1);
             }
 
             file_path = fs::AppendPath(root_path, file_path);
@@ -156,44 +149,37 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
             if (file_path[strlen(file_path) -1] == '/') {
                 if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
-                    return false;
+                    R_THROW(rc);
                 }
             } else {
                 if (R_FAILED(rc = fs.CreateDirectoryRecursivelyWithPath(file_path)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
-                    return false;
+                    R_THROW(rc);
                 }
 
                 if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
-                    return false;
+                    R_THROW(rc);
                 }
 
                 FsFile f;
-                if (R_FAILED(rc = fs.OpenFile(file_path, FsOpenMode_Write, &f))) {
-                    log_write("failed to open file: %s 0x%04X\n", file_path.s, rc);
-                    return false;
-                }
+                R_TRY(fs.OpenFile(file_path, FsOpenMode_Write, &f));
                 ON_SCOPE_EXIT(fsFileClose(&f));
 
-                if (R_FAILED(rc = fsFileSetSize(&f, info.uncompressed_size))) {
-                    log_write("failed to set file size: %s 0x%04X\n", file_path.s, rc);
-                    return false;
-                }
+                R_TRY(fsFileSetSize(&f, info.uncompressed_size));
 
                 std::vector<char> buf(chunk_size);
                 s64 offset{};
                 while (offset < info.uncompressed_size) {
+                    R_TRY(pbox->ShouldExitResult());
+
                     const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
                     if (bytes_read <= 0) {
                         log_write("failed to read zip file: %s\n", file_path.s);
-                        return false;
+                        R_THROW(0x1);
                     }
 
-                    if (R_FAILED(rc = fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None))) {
-                        log_write("failed to write file: %s 0x%04X\n", file_path.s, rc);
-                        return false;
-                    }
+                    R_TRY(fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None));
 
                     pbox->UpdateTransfer(offset, info.uncompressed_size);
                     offset += bytes_read;
@@ -203,16 +189,14 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
     } else {
         fs.CreateDirectoryRecursivelyWithPath(root_path);
         fs.DeleteFile(root_path);
-        if (R_FAILED(fs.RenameFile(temp_file, root_path))) {
-            log_write("failed to rename file: %s -> %s\n", temp_file.s, root_path.s);
-        }
+        R_TRY(fs.RenameFile(temp_file, root_path));
     }
 
     log_write("success\n");
-    return true;
+    R_SUCCEED();
 }
 
-auto DownloadAssetJson(ProgressBox* pbox, const std::string& url, GhApiEntry& out) -> bool {
+auto DownloadAssetJson(ProgressBox* pbox, const std::string& url, GhApiEntry& out) -> Result {
     // 1. download the json
     if (!pbox->ShouldExit()) {
         pbox->NewTransfer("Downloading json"_i18n);
@@ -230,15 +214,12 @@ auto DownloadAssetJson(ProgressBox* pbox, const std::string& url, GhApiEntry& ou
             }
         );
 
-        if (!result.success) {
-            log_write("json empty\n");
-            return false;
-        }
-
+        R_UNLESS(result.success, 0x1);
         from_json(result.path, out);
     }
 
-    return !out.assets.empty();
+    R_UNLESS(!out.assets.empty(), 0x1);
+    R_SUCCEED();
 }
 
 } // namespace
@@ -256,10 +237,12 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
             static GhApiEntry gh_entry;
             gh_entry = {};
 
-            App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, GetEntry().repo, [this](auto pbox){
+            App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, GetEntry().repo, [this](auto pbox) -> Result {
                 return DownloadAssetJson(pbox, GenerateApiUrl(GetEntry()), gh_entry);
-            }, [this](bool success){
-                if (success) {
+            }, [this](Result rc){
+                App::PushErrorBox(rc, "Failed to download json"_i18n);
+
+                if (R_SUCCEEDED(rc)) {
                     const auto& assets = GetEntry().assets;
                     PopupList::Items asset_items;
                     std::vector<const AssetEntry*> asset_ptr;
@@ -304,10 +287,12 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                         }
 
                         const auto func = [this, &asset_entry, ptr](){
-                            App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, GetEntry().repo, [this, &asset_entry, ptr](auto pbox){
+                            App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, GetEntry().repo, [this, &asset_entry, ptr](auto pbox) -> Result {
                                 return DownloadApp(pbox, asset_entry, ptr);
-                            }, [this, ptr](bool success){
-                                if (success) {
+                            }, [this, ptr](Result rc){
+                                App::PushErrorBox(rc, "Failed to download app!"_i18n);
+
+                                if (R_SUCCEEDED(rc)) {
                                     App::Notify("Downloaded "_i18n + GetEntry().repo);
                                     auto post_install_message = GetEntry().post_install_message;
                                     if (ptr && !ptr->post_install_message.empty()) {
@@ -318,7 +303,7 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                                         App::Push(std::make_shared<OptionBox>(post_install_message, "OK"_i18n));
                                     }
                                 }
-                            }, 2));
+                            }));
                         };
 
                         if (!pre_install_message.empty()) {
@@ -335,7 +320,7 @@ Menu::Menu() : MenuBase{"GitHub"_i18n} {
                         }
                     }));
                 }
-            }, 2));
+            }));
         }}),
 
         std::make_pair(Button::B, Action{"Back"_i18n, [this](){

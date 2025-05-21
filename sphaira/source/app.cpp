@@ -50,15 +50,17 @@ void download_default_music() {
             curl::OnProgress{pbox->OnDownloadProgressCallback()}
         );
 
-        return result.success;
-    }, [](bool success){
-        if (success) {
+        if (!result.success) {
+            R_THROW(0x1);
+        }
+
+        R_SUCCEED();
+    }, [](Result rc){
+        App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
+        if (R_SUCCEEDED(rc)) {
             App::Notify("Downloaded "_i18n + "default_music.bfstm");
             App::SetTheme(App::GetThemeIndex());
-        } else {
-            App::Push(std::make_shared<ui::ErrorBox>(
-                "Failed to download default_music.bfstm, please try again"_i18n
-            ));
         }
     }));
 }
@@ -568,6 +570,13 @@ void App::NotifyFlashLed() {
     }
 }
 
+Result App::PushErrorBox(Result rc, const std::string& message) {
+    if (R_FAILED(rc)) {
+        App::Push(std::make_shared<ui::ErrorBox>(rc, message));
+    }
+    return rc;
+}
+
 auto App::GetThemeMetaList() -> std::span<ThemeMeta> {
     return g_app->m_theme_meta_entries;
 }
@@ -742,9 +751,10 @@ void App::SetReplaceHbmenuEnable(bool enable) {
                     if (R_FAILED(rc = fs.copy_entire_file("/hbmenu.nro", "/switch/hbmenu.nro")))  {
                         // try and restore sphaira in a last ditch effort.
                         if (R_FAILED(rc = fs.copy_entire_file("/hbmenu.nro", sphaira_path))) {
-                            App::Push(std::make_shared<ui::ErrorBox>(rc,
+                            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+                            App::PushErrorBox(rc,
                                 "Failed to restore hbmenu, please re-download hbmenu"_i18n
-                            ));
+                            );
                         } else {
                             App::Push(std::make_shared<ui::OptionBox>(
                                 "Failed to restore hbmenu, using sphaira instead"_i18n,

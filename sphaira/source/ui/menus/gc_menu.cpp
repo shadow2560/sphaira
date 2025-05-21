@@ -875,14 +875,14 @@ Result Menu::GcMount() {
             }
 
             if (m_option_index == 0) {
-                App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) mutable -> bool {
+                App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) -> Result {
                     auto source = std::make_shared<GcSource>(m_entries[m_entry_index], m_fs.get());
-                    return R_SUCCEEDED(yati::InstallFromCollections(pbox, source, source->m_collections, source->m_config));
-                }, [this](bool result){
-                    if (result) {
+                    return yati::InstallFromCollections(pbox, source, source->m_collections, source->m_config);
+                }, [this](Result rc){
+                    App::PushErrorBox(rc, "Gc install failed"_i18n);
+
+                    if (R_SUCCEEDED(rc)) {
                         App::Notify("Gc install success!"_i18n);
-                    } else {
-                        App::Notify("Gc install failed!"_i18n);
                     }
                 }));
             } else {
@@ -1197,15 +1197,12 @@ void Menu::DumpGames(u32 flags) {
             }
 
             const auto index = *op_index;
-            App::Push(std::make_shared<ProgressBox>(0, "Dumping"_i18n, "", [this, network_locations, index, flags](auto pbox) -> bool {
+            App::Push(std::make_shared<ProgressBox>(0, "Dumping"_i18n, "", [this, network_locations, index, flags](auto pbox) -> Result {
                 XciEntry entry{};
                 entry.menu = this;
                 entry.application_name = m_entries[m_entry_index].lang_entry.name;
 
-                if (R_FAILED(GcMountStorage())) {
-                    log_write("failed to mount storage\n");
-                    return false;
-                }
+                R_TRY(GcMountStorage());
 
                 std::vector<fs::FsPath> paths;
                 if (flags & DumpFileFlag_XCI) {
@@ -1221,9 +1218,7 @@ void Menu::DumpGames(u32 flags) {
 
                 if (flags & DumpFileFlag_Set) {
                     entry.id_set.resize(0xC);
-                    if (R_FAILED(fsDeviceOperatorGetGameCardIdSet(&m_dev_op, entry.id_set.data(), entry.id_set.size(), entry.id_set.size()))) {
-                        return false;
-                    }
+                    R_TRY(fsDeviceOperatorGetGameCardIdSet(&m_dev_op, entry.id_set.data(), entry.id_set.size(), entry.id_set.size()));
                     paths.emplace_back(BuildFullDumpPath(DumpFileType_Set, m_entries));
                 }
 
@@ -1235,12 +1230,7 @@ void Menu::DumpGames(u32 flags) {
                 if (flags & DumpFileFlag_Cert) {
                     s64 size;
                     entry.cert.resize(0x200);
-                    if (R_FAILED(fsDeviceOperatorGetGameCardDeviceCertificate(&m_dev_op, &m_handle, entry.cert.data(), entry.cert.size(), &size, entry.cert.size()))) {
-                        return false;
-                    }
-                    if (size != entry.cert.size()) {
-                        return false;
-                    }
+                    R_TRY(fsDeviceOperatorGetGameCardDeviceCertificate(&m_dev_op, &m_handle, entry.cert.data(), entry.cert.size(), &size, entry.cert.size()));
                     paths.emplace_back(BuildFullDumpPath(DumpFileType_Cert, m_entries));
                 }
 
@@ -1252,23 +1242,22 @@ void Menu::DumpGames(u32 flags) {
                 const auto index2 = index - network_locations.size();
 
                 if (!network_locations.empty() && index < network_locations.size()) {
-                    return R_SUCCEEDED(DumpNspToNetwork(pbox, network_locations[index], paths, entry));
+                    R_TRY(DumpNspToNetwork(pbox, network_locations[index], paths, entry));
                 } else if (index2 == DumpLocationType_SdCard) {
-                    return R_SUCCEEDED(DumpNspToFile(pbox, paths, entry));
+                    R_TRY(DumpNspToFile(pbox, paths, entry));
                 } else if (index2 == DumpLocationType_UsbS2S) {
-                    return R_SUCCEEDED(DumpNspToUsbS2S(pbox, paths, entry));
+                    R_TRY(DumpNspToUsbS2S(pbox, paths, entry));
                 } else if (index2 == DumpLocationType_DevNull) {
-                    return R_SUCCEEDED(DumpNspToDevNull(pbox, paths, entry));
+                    R_TRY(DumpNspToDevNull(pbox, paths, entry));
                 }
 
-                return false;
-            }, [this](bool success){
-                if (success) {
+                R_SUCCEED();
+            }, [this](Result rc){
+                App::PushErrorBox(rc, "Dump failed!"_i18n);
+
+                if (R_SUCCEEDED(rc)) {
                     App::Notify("Dump successfull!");
                     log_write("dump successfull!!!\n");
-                } else {
-                    App::Notify("Dump failed!");
-                    log_write("dump failed!!!\n");
                 }
 
                 GcUmountStorage();
