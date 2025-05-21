@@ -14,7 +14,7 @@ struct UsbHs final : Base {
 private:
     Event *GetCompletionEvent(UsbSessionEndpoint ep) override;
     Result WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) override;
-    Result TransferAsync(UsbSessionEndpoint ep, void *buffer, u32 size, u32 *out_xfer_id) override;
+    Result TransferAsync(UsbSessionEndpoint ep, void *buffer, u32 remaining, u32 size, u32 *out_xfer_id) override;
     Result GetTransferResult(UsbSessionEndpoint ep, u32 xfer_id, u32 *out_requested_size, u32 *out_transferred_size) override;
 
     Result Connect();

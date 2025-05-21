@@ -80,6 +80,7 @@ Result Usb::SendFileRangeCmd(u64 off, u64 size, u64 timeout) {
 }
 
 Result Usb::Finished(u64 timeout) {
+    log_write("[USB] sending finished command\n");
     return SendCmdHeader(tinfoil::USBCmdId::EXIT, 0, timeout);
 }
 

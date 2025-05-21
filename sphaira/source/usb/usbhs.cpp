@@ -184,7 +184,7 @@ Result UsbHs::WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) {
     return rc;
 }
 
-Result UsbHs::TransferAsync(UsbSessionEndpoint ep, void *buffer, u32 size, u32 *out_xfer_id) {
+Result UsbHs::TransferAsync(UsbSessionEndpoint ep, void *buffer, u32 remaining, u32 size, u32 *out_xfer_id) {
     return usbHsEpPostBufferAsync(&m_endpoints[ep], buffer, size, 0, out_xfer_id);
 }
 

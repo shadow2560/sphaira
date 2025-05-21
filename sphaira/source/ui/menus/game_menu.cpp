@@ -277,6 +277,7 @@ struct UsbTest final : usb::upload::Usb, yati::source::Stream {
             m_path = path;
             m_progress = 0;
             m_pull_offset = 0;
+            Stream::Reset();
             m_size = m_source->GetSize(path);
             m_pbox->SetTitle(m_source->GetName(path));
             m_pbox->NewTransfer(m_path);
@@ -422,7 +423,11 @@ Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<NspEntry> entries) {
 
                 // wait for exit command.
                 if (R_SUCCEEDED(rc)) {
+                    log_write("waiting for exit command\n");
                     rc = usb->PollCommands();
+                    log_write("finished polling for exit command\n");
+                } else {
+                    log_write("skipped polling for exit command\n");
                 }
 
                 if (rc == usb->Result_Exit) {

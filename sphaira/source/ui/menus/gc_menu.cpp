@@ -260,6 +260,7 @@ struct UsbTest final : usb::upload::Usb, yati::source::Stream {
             m_path = path;
             m_progress = 0;
             m_pull_offset = 0;
+            Stream::Reset();
             m_size = m_entry.GetSize(path);
             m_pbox->SetTitle(m_entry.GetName(path));
             m_pbox->NewTransfer(m_path);

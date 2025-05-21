@@ -18,6 +18,10 @@ struct Stream : Base {
         return true;
     }
 
+    void Reset() {
+        m_offset = 0;
+    }
+
 protected:
     Result m_open_result{};
 

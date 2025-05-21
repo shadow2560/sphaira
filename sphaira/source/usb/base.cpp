@@ -38,7 +38,7 @@ Base::~Base() {
     App::SetAutoSleepDisabled(false);
 }
 
-Result Base::TransferPacketImpl(bool read, void *page, u32 size, u32 *out_size_transferred, u64 timeout) {
+Result Base::TransferPacketImpl(bool read, void *page, u32 remaining, u32 size, u32 *out_size_transferred, u64 timeout) {
     u32 xfer_id;
 
     /* If we're not configured yet, wait to become configured first. */
@@ -46,7 +46,7 @@ Result Base::TransferPacketImpl(bool read, void *page, u32 size, u32 *out_size_t
 
     /* Select the appropriate endpoint and begin a transfer. */
     const auto ep = read ? UsbSessionEndpoint_Out : UsbSessionEndpoint_In;
-    R_TRY(TransferAsync(ep, page, size, std::addressof(xfer_id)));
+    R_TRY(TransferAsync(ep, page, remaining, size, std::addressof(xfer_id)));
 
     /* Try to wait for the event. */
     R_TRY(WaitTransferCompletion(ep, timeout));
@@ -84,7 +84,7 @@ Result Base::TransferAll(bool read, void *data, u32 size, u64 timeout) {
         }
 
         u32 out_size_transferred;
-        R_TRY(TransferPacketImpl(read, transfer_buf, size, &out_size_transferred, timeout));
+        R_TRY(TransferPacketImpl(read, transfer_buf, size, size, &out_size_transferred, timeout));
 
         if (!alias && read) {
             std::memcpy(buf, transfer_buf, out_size_transferred);

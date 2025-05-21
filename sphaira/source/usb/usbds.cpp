@@ -7,8 +7,19 @@
 namespace sphaira::usb {
 namespace {
 
-// untested, should work tho.
 // TODO: pr missing speed fields to libnx.
+enum { UsbDeviceSpeed_None = 0x0 };
+enum { UsbDeviceSpeed_Low = 0x1 };
+
+constexpr u16 DEVICE_SPEED[] = {
+    [UsbDeviceSpeed_None] = 0x0,
+    [UsbDeviceSpeed_Low] = 0x0,
+    [UsbDeviceSpeed_Full] = 0x40,
+    [UsbDeviceSpeed_High] = 0x200,
+    [UsbDeviceSpeed_Super] = 0x400,
+};
+
+// TODO: pr this to libnx.
 Result usbDsGetSpeed(u32 *out) {
     if (hosversionBefore(8,0,0)) {
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
@@ -140,22 +151,22 @@ Result UsbDs::Init() {
     endpoint_descriptor_out.bEndpointAddress += interface_descriptor.bInterfaceNumber + 1;
 
     // Full Speed Config
-    endpoint_descriptor_in.wMaxPacketSize = 0x40;
-    endpoint_descriptor_out.wMaxPacketSize = 0x40;
+    endpoint_descriptor_in.wMaxPacketSize = DEVICE_SPEED[UsbDeviceSpeed_Full];
+    endpoint_descriptor_out.wMaxPacketSize = DEVICE_SPEED[UsbDeviceSpeed_Full];
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Full, &interface_descriptor, USB_DT_INTERFACE_SIZE));
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Full, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE));
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Full, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE));
 
     // High Speed Config
-    endpoint_descriptor_in.wMaxPacketSize = 0x200;
-    endpoint_descriptor_out.wMaxPacketSize = 0x200;
+    endpoint_descriptor_in.wMaxPacketSize = DEVICE_SPEED[UsbDeviceSpeed_High];
+    endpoint_descriptor_out.wMaxPacketSize = DEVICE_SPEED[UsbDeviceSpeed_High];
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_High, &interface_descriptor, USB_DT_INTERFACE_SIZE));
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_High, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE));
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_High, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE));
 
     // Super Speed Config
-    endpoint_descriptor_in.wMaxPacketSize = 0x400;
-    endpoint_descriptor_out.wMaxPacketSize = 0x400;
+    endpoint_descriptor_in.wMaxPacketSize = DEVICE_SPEED[UsbDeviceSpeed_Super];
+    endpoint_descriptor_out.wMaxPacketSize = DEVICE_SPEED[UsbDeviceSpeed_Super];
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Super, &interface_descriptor, USB_DT_INTERFACE_SIZE));
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Super, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE));
     R_TRY(usbDsInterface_AppendConfigurationData(m_interface, UsbDeviceSpeed_Super, &endpoint_companion, USB_DT_SS_ENDPOINT_COMPANION_SIZE));
@@ -174,7 +185,7 @@ Result UsbDs::Init() {
 }
 
 // the below code is taken from libnx, with the addition of a uevent to cancel.
-Result UsbDs::IsUsbConnected(u64 timeout) {
+Result UsbDs::WaitUntilConfigured(u64 timeout) {
     Result rc;
     UsbState state = UsbState_Detached;
 
@@ -218,8 +229,33 @@ Result UsbDs::IsUsbConnected(u64 timeout) {
     return rc;
 }
 
-Result UsbDs::GetSpeed(UsbDeviceSpeed* out) {
-    return usbDsGetSpeed((u32*)out);
+Result UsbDs::IsUsbConnected(u64 timeout) {
+    const auto rc = WaitUntilConfigured(timeout);
+    if (R_FAILED(rc)) {
+        m_max_packet_size = 0;
+        return rc;
+    }
+
+    if (!m_max_packet_size) {
+        UsbDeviceSpeed speed;
+        R_TRY(GetSpeed(&speed, &m_max_packet_size));
+        log_write("[USBDS] speed: %u max_packet: 0x%X\n", speed, m_max_packet_size);
+    }
+
+    R_SUCCEED();
+}
+
+Result UsbDs::GetSpeed(UsbDeviceSpeed* out, u16* max_packet_size) {
+    if (hosversionAtLeast(8,0,0)) {
+        R_TRY(usbDsGetSpeed((u32*)out));
+    } else {
+        // assume USB 2.0 speed (likely the case anyway).
+        *out = UsbDeviceSpeed_High;
+    }
+
+    *max_packet_size = DEVICE_SPEED[*out];
+    R_UNLESS(*max_packet_size > 0, 0x1);
+    R_SUCCEED();
 }
 
 Event *UsbDs::GetCompletionEvent(UsbSessionEndpoint ep) {
@@ -242,6 +278,7 @@ Result UsbDs::WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) {
         rc = Result_Cancelled;
     } else if (R_SUCCEEDED(rc) && idx == waiters.size() - 2) {
         log_write("got usbDsGetStateChangeEvent() event\n");
+        m_max_packet_size = 0;
         rc = KERNELRESULT(TimedOut);
     }
 
@@ -255,7 +292,14 @@ Result UsbDs::WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) {
     return rc;
 }
 
-Result UsbDs::TransferAsync(UsbSessionEndpoint ep, void *buffer, u32 size, u32 *out_urb_id) {
+Result UsbDs::TransferAsync(UsbSessionEndpoint ep, void *buffer, u32 remaining, u32 size, u32 *out_urb_id) {
+    if (remaining == size && size == m_max_packet_size) {
+        log_write("[USBDS] SetZlt(true)\n");
+        R_TRY(usbDsEndpoint_SetZlt(m_endpoints[ep], true));
+    } else {
+        R_TRY(usbDsEndpoint_SetZlt(m_endpoints[ep], false));
+    }
+
     return usbDsEndpoint_PostBufferAsync(m_endpoints[ep], buffer, size, out_urb_id);
 }
 
