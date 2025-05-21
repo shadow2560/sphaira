@@ -57,6 +57,7 @@ auto nro_parse_internal(fs::FsNative& fs, const fs::FsPath& path, NroEntry& entr
 
     // some .nro (vgedit) have bad nacp, fake the nacp
     if (asset.magic != NROASSETHEADER_MAGIC || asset.nacp.offset == 0 || asset.nacp.size != sizeof(entry.nacp)) {
+        std::memset(&asset, 0, sizeof(asset));
         std::memset(&entry.nacp, 0, sizeof(entry.nacp));
 
         // get the name without the .nro
@@ -157,6 +158,11 @@ auto nro_scan_internal(const fs::FsPath& path, std::vector<NroEntry>& nros, bool
 }
 
 auto nro_get_icon_internal(FsFile* f, u64 size, u64 offset) -> std::vector<u8> {
+    // protect again really messed up sizes.
+    if (size > 1024 * 1024) {
+        return {};
+    }
+
     std::vector<u8> icon;
     u64 bytes_read{};
     icon.resize(size);
