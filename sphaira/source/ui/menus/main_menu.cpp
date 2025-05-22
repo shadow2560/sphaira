@@ -278,6 +278,10 @@ MainMenu::MainMenu() {
                     App::SetNxlinkEnable(enable);
                 }));
 
+                options->Add(std::make_shared<SidebarEntryBool>("Hdd"_i18n, App::GetHddEnable(), [](bool& enable){
+                    App::SetHddEnable(enable);
+                }));
+
                 if (m_update_state == UpdateState::Update) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Download update: "_i18n + m_update_version, [this](){
                         App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, "Sphaira v" + m_update_version, [this](auto pbox) -> Result {

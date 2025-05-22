@@ -78,6 +78,7 @@ public:
     static auto GetMtpEnable() -> bool;
     static auto GetFtpEnable() -> bool;
     static auto GetNxlinkEnable() -> bool;
+    static auto GetHddEnable() -> bool;
     static auto GetLogEnable() -> bool;
     static auto GetReplaceHbmenuEnable() -> bool;
     static auto GetInstallEnable() -> bool;
@@ -93,6 +94,7 @@ public:
     static void SetMtpEnable(bool enable);
     static void SetFtpEnable(bool enable);
     static void SetNxlinkEnable(bool enable);
+    static void SetHddEnable(bool enable);
     static void SetLogEnable(bool enable);
     static void SetReplaceHbmenuEnable(bool enable);
     static void SetInstallSysmmcEnable(bool enable);
@@ -224,6 +226,7 @@ public:
     option::OptionBool m_nxlink_enabled{INI_SECTION, "nxlink_enabled", true};
     option::OptionBool m_mtp_enabled{INI_SECTION, "mtp_enabled", false};
     option::OptionBool m_ftp_enabled{INI_SECTION, "ftp_enabled", false};
+    option::OptionBool m_hdd_enabled{INI_SECTION, "hdd_enabled", false};
     option::OptionBool m_log_enabled{INI_SECTION, "log_enabled", false};
     option::OptionBool m_replace_hbmenu{INI_SECTION, "replace_hbmenu", false};
     option::OptionBool m_theme_music{INI_SECTION, "theme_music", true};

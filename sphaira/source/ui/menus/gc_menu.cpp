@@ -6,17 +6,13 @@
 
 #include "yati/yati.hpp"
 #include "yati/nx/nca.hpp"
-#include "yati/source/stream.hpp"
-#include "usb/usb_uploader.hpp"
-#include "usb/tinfoil.hpp"
 
 #include "app.hpp"
 #include "defines.hpp"
 #include "log.hpp"
 #include "i18n.hpp"
 #include "download.hpp"
-#include "location.hpp"
-#include "threaded_file_transfer.hpp"
+#include "dumper.hpp"
 
 #include <cstring>
 #include <algorithm>
@@ -44,23 +40,6 @@ enum DumpFileFlag {
 
     DumpFileFlag_AllBin = DumpFileFlag_Set | DumpFileFlag_UID | DumpFileFlag_Cert | DumpFileFlag_Initial,
     DumpFileFlag_All = DumpFileFlag_XCI | DumpFileFlag_AllBin,
-};
-
-enum DumpLocationType {
-    DumpLocationType_SdCard,
-    DumpLocationType_UsbS2S,
-    DumpLocationType_DevNull,
-};
-
-struct DumpLocation {
-    const DumpLocationType type;
-    const char* display_name;
-};
-
-constexpr DumpLocation DUMP_LOCATIONS[]{
-    { DumpLocationType_SdCard, "microSD card (/dumps/XCI/)" },
-    { DumpLocationType_UsbS2S, "USB transfer (Switch 2 Switch)" },
-    { DumpLocationType_DevNull, "/dev/null (Speed Test)" },
 };
 
 const char *g_option_list[] = {
@@ -177,7 +156,7 @@ auto BuildGcPath(const char* name, const FsGameCardHandle* handle, FsGameCardPar
     return path;
 }
 
-struct XciEntry {
+struct XciSource final : dump::BaseSource {
     // application name.
     std::string application_name{};
     // extra
@@ -189,7 +168,7 @@ struct XciEntry {
     s64 xci_size{};
     Menu* menu{};
 
-    Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) {
+    Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
         if (path.ends_with(GetDumpTypeStr(DumpFileType_XCI))) {
             size = ClipSize(off, size, xci_size);
             *bytes_read = size;
@@ -216,11 +195,11 @@ struct XciEntry {
         }
     }
 
-    auto GetName(const std::string& path) const -> std::string {
+    auto GetName(const std::string& path) const -> std::string override {
         return application_name;
     }
 
-    auto GetSize(const std::string& path) const -> s64 {
+    auto GetSize(const std::string& path) const -> s64 override {
         if (path.ends_with(GetDumpTypeStr(DumpFileType_XCI))) {
             return xci_size;
         } else if (path.ends_with(GetDumpTypeStr(DumpFileType_Set))) {
@@ -245,64 +224,6 @@ private:
     }
 };
 
-struct UsbTest final : usb::upload::Usb, yati::source::Stream {
-    UsbTest(ProgressBox* pbox, XciEntry& entry) : Usb{UINT64_MAX}, m_entry{entry} {
-        m_pbox = pbox;
-    }
-
-    Result ReadChunk(void* buf, s64 size, u64* bytes_read) override {
-        R_TRY(m_pull(buf, size, bytes_read));
-        m_pull_offset += *bytes_read;
-        R_SUCCEED();
-    }
-
-    Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
-        if (m_pull) {
-            return Stream::Read(buf, off, size, bytes_read);
-        } else {
-            return ReadInternal(path, buf, off, size, bytes_read);
-        }
-    }
-
-    Result ReadInternal(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) {
-        if (m_path != path) {
-            m_path = path;
-            m_progress = 0;
-            m_pull_offset = 0;
-            Stream::Reset();
-            m_size = m_entry.GetSize(path);
-            m_pbox->SetTitle(m_entry.GetName(path));
-            m_pbox->NewTransfer(m_path);
-        }
-
-        R_TRY(m_entry.Read(path, buf, off, size, bytes_read));
-
-        m_offset += *bytes_read;
-        m_progress += *bytes_read;
-        m_pbox->UpdateTransfer(m_progress, m_size);
-
-        R_SUCCEED();
-    }
-
-    void SetPullCallback(thread::PullCallback pull) {
-        m_pull = pull;
-    }
-
-    auto GetPullOffset() const {
-        return m_pull_offset;
-    }
-
-private:
-    XciEntry& m_entry;
-    ProgressBox* m_pbox{};
-    std::string m_path{};
-    thread::PullCallback m_pull{};
-    s64 m_offset{};
-    s64 m_size{};
-    s64 m_progress{};
-    s64 m_pull_offset{};
-};
-
 struct HashStr {
     char str[0x21];
 };
@@ -313,201 +234,6 @@ HashStr hexIdToStr(auto id) {
     const auto id_upper = std::byteswap(*(u64*)(id.c + 0x8));
     std::snprintf(str.str, 0x21, "%016lx%016lx", id_lower, id_upper);
     return str;
-}
-
-Result DumpNspToFile(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
-    static constexpr fs::FsPath DUMP_PATH{"/dumps/XCI"};
-    constexpr s64 BIG_FILE_SIZE = 1024ULL*1024ULL*1024ULL*4ULL;
-
-    fs::FsNativeSd fs{};
-    R_TRY(fs.GetFsOpenResult());
-
-    for (auto path : paths) {
-        const auto file_size = e.GetSize(path);
-        pbox->SetTitle(e.application_name);
-        pbox->NewTransfer(path);
-
-        const auto temp_path = fs::AppendPath(DUMP_PATH, path + ".temp");
-        fs.CreateDirectoryRecursivelyWithPath(temp_path);
-        fs.DeleteFile(temp_path);
-
-        const auto flags = file_size >= BIG_FILE_SIZE ? FsCreateOption_BigFile : 0;
-        R_TRY(fs.CreateFile(temp_path, file_size, flags));
-        ON_SCOPE_EXIT(fs.DeleteFile(temp_path));
-
-        {
-            FsFile file;
-            R_TRY(fs.OpenFile(temp_path, FsOpenMode_Write, &file));
-            ON_SCOPE_EXIT(fsFileClose(&file));
-
-            R_TRY(thread::Transfer(pbox, file_size,
-                [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                    return e.Read(path, data, off, size, bytes_read);
-                },
-                [&](const void* data, s64 off, s64 size) -> Result {
-                    return fsFileWrite(&file, off, data, size, FsWriteOption_None);
-                }
-            ));
-        }
-
-        path = fs::AppendPath(DUMP_PATH, path);
-        fs.DeleteFile(path);
-        R_TRY(fs.RenameFile(temp_path, path));
-    }
-
-    R_SUCCEED();
-}
-
-Result DumpNspToUsbS2SStream(ProgressBox* pbox, UsbTest* usb, std::span<const std::string> file_list, XciEntry& e) {
-    for (auto& path : file_list) {
-        const auto file_size = e.GetSize(path);
-
-        R_TRY(thread::TransferPull(pbox, file_size,
-            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                return usb->ReadInternal(path, data, off, size, bytes_read);
-            },
-            [&](thread::StartThreadCallback start, thread::PullCallback pull) -> Result {
-                usb->SetPullCallback(pull);
-                R_TRY(start());
-
-                while (!pbox->ShouldExit()) {
-                    R_TRY(usb->PollCommands());
-
-                    if (usb->GetPullOffset() >= file_size) {
-                        R_SUCCEED();
-                    }
-                }
-
-                R_THROW(0xFFFF);
-            }
-        ));
-    }
-
-    R_SUCCEED();
-}
-
-Result DumpNspToUsbS2SRandom(ProgressBox* pbox, UsbTest* usb, std::span<const std::string> file_list, XciEntry& e) {
-    while (!pbox->ShouldExit()) {
-        R_TRY(usb->PollCommands());
-    }
-
-    R_THROW(0xFFFF);
-}
-
-Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
-    std::vector<std::string> file_list;
-    for (auto& path : paths) {
-        file_list.emplace_back(path);
-    }
-
-    auto usb = std::make_unique<UsbTest>(pbox, e);
-    constexpr u64 timeout = 1e+9;
-
-    while (!pbox->ShouldExit()) {
-        if (R_SUCCEEDED(usb->IsUsbConnected(timeout))) {
-            pbox->NewTransfer("USB connected, sending file list");
-            u8 flags = usb::tinfoil::USBFlag_NONE;
-            if (App::GetApp()->m_dump_usb_transfer_stream.Get()) {
-                flags |= usb::tinfoil::USBFlag_STREAM;
-            }
-
-            if (R_SUCCEEDED(usb->WaitForConnection(timeout, flags, file_list))) {
-                pbox->NewTransfer("Sent file list, waiting for command...");
-
-                Result rc;
-                if (flags & usb::tinfoil::USBFlag_STREAM) {
-                    rc = DumpNspToUsbS2SStream(pbox, usb.get(), file_list, e);
-                } else {
-                    rc = DumpNspToUsbS2SRandom(pbox, usb.get(), file_list, e);
-                }
-
-                // wait for exit command.
-                if (R_SUCCEEDED(rc)) {
-                    rc = usb->PollCommands();
-                }
-
-                if (rc == usb->Result_Exit) {
-                    log_write("got exit command\n");
-                    R_SUCCEED();
-                }
-
-                return rc;
-            }
-        } else {
-            pbox->NewTransfer("waiting for usb connection...");
-        }
-    }
-
-    R_THROW(0xFFFF);
-}
-
-Result DumpNspToDevNull(ProgressBox* pbox, std::span<const fs::FsPath> paths, XciEntry& e) {
-    for (const auto& path : paths) {
-        const auto file_size = e.GetSize(path);
-        pbox->SetTitle(e.application_name);
-        pbox->NewTransfer(path);
-
-        R_TRY(thread::Transfer(pbox, file_size,
-            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                return e.Read(path, data, off, size, bytes_read);
-            },
-            [&](const void* data, s64 off, s64 size) -> Result {
-                R_SUCCEED();
-            }
-        ));
-    }
-
-    R_SUCCEED();
-}
-
-Result DumpNspToNetwork(ProgressBox* pbox, const location::Entry& loc, std::span<const fs::FsPath> paths, XciEntry& e) {
-    for (const auto& path : paths) {
-        if (pbox->ShouldExit()) {
-            R_THROW(0xFFFF);
-        }
-
-        const auto file_size = e.GetSize(path);
-        pbox->SetTitle(e.application_name);
-        pbox->NewTransfer(path);
-
-        R_TRY(thread::TransferPull(pbox, file_size,
-            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                return e.Read(path, data, off, size, bytes_read);
-            },
-            [&](thread::PullCallback pull) -> Result {
-                s64 offset{};
-                const auto result = curl::Api().FromMemory(
-                    CURL_LOCATION_TO_API(loc),
-                    curl::OnProgress{pbox->OnDownloadProgressCallback()},
-                    curl::UploadInfo{
-                        path, file_size,
-                        [&](void *ptr, size_t size) -> size_t {
-                            // curl will request past the size of the file, causing an error.
-                            if (offset >= file_size) {
-                                log_write("finished file upload\n");
-                                return 0;
-                            }
-
-                            u64 bytes_read{};
-                            if (R_FAILED(pull(ptr, size, &bytes_read))) {
-                                log_write("failed to read in custom callback: %zd size: %zd\n", offset, size);
-                                return 0;
-                            }
-
-                            offset += bytes_read;
-                            return bytes_read;
-                        }
-                    }
-                );
-
-
-                R_UNLESS(result.success, 0x1);
-                R_SUCCEED();
-            }
-        ));
-    }
-
-    R_SUCCEED();
 }
 
 // from Gamecard-Installer-NX
@@ -1208,92 +934,53 @@ void Menu::OnChangeIndex(s64 new_index) {
     }
 }
 
-void Menu::DumpGames(u32 flags) {
-    PopupList::Items items;
-    const auto network_locations = location::Load();
+Result Menu::DumpGames(u32 flags) {
+    R_TRY(GcMountStorage());
 
-    for (const auto&p : network_locations) {
-        items.emplace_back(p.name);
-    }
+    auto source = std::make_shared<XciSource>();
+    source->menu = this;
+    source->application_name = m_entries[m_entry_index].lang_entry.name;
 
-    for (const auto&p : DUMP_LOCATIONS) {
-        items.emplace_back(i18n::get(p.display_name));
-    }
-
-    App::Push(std::make_shared<PopupList>(
-        "Select dump location"_i18n, items, [this, network_locations, flags](auto op_index){
-            if (!op_index) {
-                return;
-            }
-
-            const auto index = *op_index;
-            App::Push(std::make_shared<ProgressBox>(0, "Dumping"_i18n, "", [this, network_locations, index, flags](auto pbox) -> Result {
-                XciEntry entry{};
-                entry.menu = this;
-                entry.application_name = m_entries[m_entry_index].lang_entry.name;
-
-                R_TRY(GcMountStorage());
-
-                std::vector<fs::FsPath> paths;
-                if (flags & DumpFileFlag_XCI) {
-                    if (App::GetApp()->m_dump_trim_xci.Get()) {
-                        entry.xci_size = m_storage_trimmed_size;
-                        paths.emplace_back(BuildFullDumpPath(DumpFileType_TrimmedXCI, m_entries));
-                    } else {
-                        entry.xci_size = m_storage_total_size;
-                        paths.emplace_back(BuildFullDumpPath(DumpFileType_XCI, m_entries));
-                    }
-                }
-
-                if (flags & DumpFileFlag_Set) {
-                    entry.id_set.resize(0xC);
-                    R_TRY(fsDeviceOperatorGetGameCardIdSet(&m_dev_op, entry.id_set.data(), entry.id_set.size(), entry.id_set.size()));
-                    paths.emplace_back(BuildFullDumpPath(DumpFileType_Set, m_entries));
-                }
-
-                // todo:
-                if (flags & DumpFileFlag_UID) {
-                    // paths.emplace_back(BuildFullDumpPath(DumpFileType_UID, m_entries));
-                }
-
-                if (flags & DumpFileFlag_Cert) {
-                    s64 size;
-                    entry.cert.resize(0x200);
-                    R_TRY(fsDeviceOperatorGetGameCardDeviceCertificate(&m_dev_op, &m_handle, entry.cert.data(), entry.cert.size(), &size, entry.cert.size()));
-                    paths.emplace_back(BuildFullDumpPath(DumpFileType_Cert, m_entries));
-                }
-
-                // todo:
-                if (flags & DumpFileFlag_Initial) {
-                    // paths.emplace_back(BuildFullDumpPath(DumpFileType_Initial, m_entries));
-                }
-
-                const auto index2 = index - network_locations.size();
-
-                if (!network_locations.empty() && index < network_locations.size()) {
-                    R_TRY(DumpNspToNetwork(pbox, network_locations[index], paths, entry));
-                } else if (index2 == DumpLocationType_SdCard) {
-                    R_TRY(DumpNspToFile(pbox, paths, entry));
-                } else if (index2 == DumpLocationType_UsbS2S) {
-                    R_TRY(DumpNspToUsbS2S(pbox, paths, entry));
-                } else if (index2 == DumpLocationType_DevNull) {
-                    R_TRY(DumpNspToDevNull(pbox, paths, entry));
-                }
-
-                R_SUCCEED();
-            }, [this](Result rc){
-                App::PushErrorBox(rc, "Dump failed!"_i18n);
-
-                if (R_SUCCEEDED(rc)) {
-                    App::Notify("Dump successfull!");
-                    log_write("dump successfull!!!\n");
-                }
-
-                GcUmountStorage();
-                GcUnmount();
-            }));
+    std::vector<fs::FsPath> paths;
+    if (flags & DumpFileFlag_XCI) {
+        if (App::GetApp()->m_dump_trim_xci.Get()) {
+            source->xci_size = m_storage_trimmed_size;
+            paths.emplace_back(BuildFullDumpPath(DumpFileType_TrimmedXCI, m_entries));
+        } else {
+            source->xci_size = m_storage_total_size;
+            paths.emplace_back(BuildFullDumpPath(DumpFileType_XCI, m_entries));
         }
-    ));
+    }
+
+    if (flags & DumpFileFlag_Set) {
+        source->id_set.resize(0xC);
+        R_TRY(fsDeviceOperatorGetGameCardIdSet(&m_dev_op, source->id_set.data(), source->id_set.size(), source->id_set.size()));
+        paths.emplace_back(BuildFullDumpPath(DumpFileType_Set, m_entries));
+    }
+
+    // todo:
+    if (flags & DumpFileFlag_UID) {
+        // paths.emplace_back(BuildFullDumpPath(DumpFileType_UID, m_entries));
+    }
+
+    if (flags & DumpFileFlag_Cert) {
+        s64 size;
+        source->cert.resize(0x200);
+        R_TRY(fsDeviceOperatorGetGameCardDeviceCertificate(&m_dev_op, &m_handle, source->cert.data(), source->cert.size(), &size, source->cert.size()));
+        paths.emplace_back(BuildFullDumpPath(DumpFileType_Cert, m_entries));
+    }
+
+    // todo:
+    if (flags & DumpFileFlag_Initial) {
+        // paths.emplace_back(BuildFullDumpPath(DumpFileType_Initial, m_entries));
+    }
+
+    dump::Dump(source, paths, [this](Result rc){
+        GcUmountStorage();
+        GcUnmount();
+    });
+
+    R_SUCCEED();
 }
 
 } // namespace sphaira::ui::menu::gc

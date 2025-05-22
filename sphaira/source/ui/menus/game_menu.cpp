@@ -1,11 +1,9 @@
 #include "app.hpp"
 #include "log.hpp"
 #include "fs.hpp"
-#include "download.hpp"
+#include "dumper.hpp"
 #include "defines.hpp"
 #include "i18n.hpp"
-#include "location.hpp"
-#include "threaded_file_transfer.hpp"
 
 #include "ui/menus/game_menu.hpp"
 #include "ui/sidebar.hpp"
@@ -20,10 +18,6 @@
 #include "yati/nx/es.hpp"
 #include "yati/container/base.hpp"
 #include "yati/container/nsp.hpp"
-#include "yati/source/stream.hpp"
-
-#include "usb/usb_uploader.hpp"
-#include "usb/tinfoil.hpp"
 
 #include <utility>
 #include <cstring>
@@ -47,23 +41,6 @@ enum ContentFlag {
     ContentFlag_AddOnContent = ContentMetaTypeToContentFlag(NcmContentMetaType_AddOnContent),
     ContentFlag_DataPatch = ContentMetaTypeToContentFlag(NcmContentMetaType_DataPatch),
     ContentFlag_All = ContentFlag_Application | ContentFlag_Patch | ContentFlag_AddOnContent | ContentFlag_DataPatch,
-};
-
-enum DumpLocationType {
-    DumpLocationType_SdCard,
-    DumpLocationType_UsbS2S,
-    DumpLocationType_DevNull,
-};
-
-struct DumpLocation {
-    const DumpLocationType type;
-    const char* display_name;
-};
-
-constexpr DumpLocation DUMP_LOCATIONS[]{
-    { DumpLocationType_SdCard, "microSD card (/dumps/NSP/)" },
-    { DumpLocationType_UsbS2S, "USB transfer (Switch 2 Switch)" },
-    { DumpLocationType_DevNull, "/dev/null (Speed Test)" },
 };
 
 struct NcmEntry {
@@ -203,13 +180,8 @@ private:
     }
 };
 
-struct BaseSource {
-    virtual ~BaseSource() = default;
-    virtual Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) = 0;
-};
-
-struct NspSource final : BaseSource {
-    NspSource(std::span<NspEntry> entries) : m_entries{entries} { }
+struct NspSource final : dump::BaseSource {
+    NspSource(const std::vector<NspEntry>& entries) : m_entries{entries} { }
 
     Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
@@ -218,10 +190,6 @@ struct NspSource final : BaseSource {
         R_UNLESS(it != m_entries.end(), 0x1);
 
         return it->Read(buf, off, size, bytes_read);
-    }
-
-    auto GetEntries() const -> std::span<const NspEntry> {
-        return m_entries;
     }
 
     auto GetName(const std::string& path) const -> std::string {
@@ -249,277 +217,8 @@ struct NspSource final : BaseSource {
     }
 
 private:
-    std::span<NspEntry> m_entries{};
+    std::vector<NspEntry> m_entries{};
 };
-
-struct UsbTest final : usb::upload::Usb, yati::source::Stream {
-    UsbTest(ProgressBox* pbox, std::span<NspEntry> entries) : Usb{UINT64_MAX} {
-        m_source = std::make_unique<NspSource>(entries);
-        m_pbox = pbox;
-    }
-
-    Result ReadChunk(void* buf, s64 size, u64* bytes_read) override {
-        R_TRY(m_pull(buf, size, bytes_read));
-        m_pull_offset += *bytes_read;
-        R_SUCCEED();
-    }
-
-    Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
-        if (m_pull) {
-            return Stream::Read(buf, off, size, bytes_read);
-        } else {
-            return ReadInternal(path, buf, off, size, bytes_read);
-        }
-    }
-
-    Result ReadInternal(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) {
-        if (m_path != path) {
-            m_path = path;
-            m_progress = 0;
-            m_pull_offset = 0;
-            Stream::Reset();
-            m_size = m_source->GetSize(path);
-            m_pbox->SetTitle(m_source->GetName(path));
-            m_pbox->NewTransfer(m_path);
-        }
-
-        R_TRY(m_source->Read(path, buf, off, size, bytes_read));
-
-        m_offset += *bytes_read;
-        m_progress += *bytes_read;
-        m_pbox->UpdateTransfer(m_progress, m_size);
-
-        R_SUCCEED();
-    }
-
-    void SetPullCallback(thread::PullCallback pull) {
-        m_pull = pull;
-    }
-
-    auto* GetSource() {
-        return m_source.get();
-    }
-
-    auto GetPullOffset() const {
-        return m_pull_offset;
-    }
-
-private:
-    std::unique_ptr<NspSource> m_source{};
-    ProgressBox* m_pbox{};
-    std::string m_path{};
-    thread::PullCallback m_pull{};
-    s64 m_offset{};
-    s64 m_size{};
-    s64 m_progress{};
-    s64 m_pull_offset{};
-};
-
-Result DumpNspToFile(ProgressBox* pbox, std::span<NspEntry> entries) {
-    static constexpr fs::FsPath DUMP_PATH{"/dumps/NSP"};
-    constexpr s64 BIG_FILE_SIZE = 1024ULL*1024ULL*1024ULL*4ULL;
-
-    fs::FsNativeSd fs{};
-    R_TRY(fs.GetFsOpenResult());
-
-    auto source = std::make_unique<NspSource>(entries);
-    for (const auto& e : entries) {
-        auto path = e.path;
-        const auto file_size = e.nsp_size;
-        pbox->SetTitle(e.application_name);
-        pbox->NewTransfer(path);
-
-        const auto temp_path = fs::AppendPath(DUMP_PATH, path + ".temp");
-        fs.CreateDirectoryRecursivelyWithPath(temp_path);
-        fs.DeleteFile(temp_path);
-
-        const auto flags = file_size >= BIG_FILE_SIZE ? FsCreateOption_BigFile : 0;
-        R_TRY(fs.CreateFile(temp_path, file_size, flags));
-        ON_SCOPE_EXIT(fs.DeleteFile(temp_path));
-
-        {
-            FsFile file;
-            R_TRY(fs.OpenFile(temp_path, FsOpenMode_Write, &file));
-            ON_SCOPE_EXIT(fsFileClose(&file));
-
-            R_TRY(thread::Transfer(pbox, file_size,
-                [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                    return source->Read(path, data, off, size, bytes_read);
-                },
-                [&](const void* data, s64 off, s64 size) -> Result {
-                    return fsFileWrite(&file, off, data, size, FsWriteOption_None);
-                }
-            ));
-        }
-
-        path = fs::AppendPath(DUMP_PATH, path);
-        fs.DeleteFile(path);
-        R_TRY(fs.RenameFile(temp_path, path));
-    }
-
-    R_SUCCEED();
-}
-
-Result DumpNspToUsbS2SStream(ProgressBox* pbox, UsbTest* usb, std::span<const std::string> file_list, std::span<NspEntry> entries) {
-    auto source = usb->GetSource();
-
-    for (auto& path : file_list) {
-        const auto file_size = source->GetSize(path);
-
-        R_TRY(thread::TransferPull(pbox, file_size,
-            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                return usb->ReadInternal(path, data, off, size, bytes_read);
-            },
-            [&](thread::StartThreadCallback start, thread::PullCallback pull) -> Result {
-                usb->SetPullCallback(pull);
-                R_TRY(start());
-
-                while (!pbox->ShouldExit()) {
-                    R_TRY(usb->PollCommands());
-
-                    if (usb->GetPullOffset() >= file_size) {
-                        R_SUCCEED();
-                    }
-                }
-
-                R_THROW(0xFFFF);
-            }
-        ));
-    }
-
-    R_SUCCEED();
-}
-
-Result DumpNspToUsbS2SRandom(ProgressBox* pbox, UsbTest* usb, std::span<const std::string> file_list, std::span<NspEntry> entries) {
-    while (!pbox->ShouldExit()) {
-        R_TRY(usb->PollCommands());
-    }
-
-    R_THROW(0xFFFF);
-}
-
-Result DumpNspToUsbS2S(ProgressBox* pbox, std::span<NspEntry> entries) {
-    std::vector<std::string> file_list;
-    for (auto& e : entries) {
-        file_list.emplace_back(e.path);
-    }
-
-    auto usb = std::make_unique<UsbTest>(pbox, entries);
-    constexpr u64 timeout = 1e+9;
-
-    while (!pbox->ShouldExit()) {
-        if (R_SUCCEEDED(usb->IsUsbConnected(timeout))) {
-            pbox->NewTransfer("USB connected, sending file list");
-            u8 flags = usb::tinfoil::USBFlag_NONE;
-            if (App::GetApp()->m_dump_usb_transfer_stream.Get()) {
-                flags |= usb::tinfoil::USBFlag_STREAM;
-            }
-
-            if (R_SUCCEEDED(usb->WaitForConnection(timeout, flags, file_list))) {
-                pbox->NewTransfer("Sent file list, waiting for command...");
-
-                Result rc;
-                if (flags & usb::tinfoil::USBFlag_STREAM) {
-                    rc = DumpNspToUsbS2SStream(pbox, usb.get(), file_list, entries);
-                } else {
-                    rc = DumpNspToUsbS2SRandom(pbox, usb.get(), file_list, entries);
-                }
-
-                // wait for exit command.
-                if (R_SUCCEEDED(rc)) {
-                    log_write("waiting for exit command\n");
-                    rc = usb->PollCommands();
-                    log_write("finished polling for exit command\n");
-                } else {
-                    log_write("skipped polling for exit command\n");
-                }
-
-                if (rc == usb->Result_Exit) {
-                    log_write("got exit command\n");
-                    R_SUCCEED();
-                }
-
-                return rc;
-            }
-        } else {
-            pbox->NewTransfer("waiting for usb connection...");
-        }
-    }
-
-    R_THROW(0xFFFF);
-}
-
-Result DumpNspToDevNull(ProgressBox* pbox, std::span<NspEntry> entries) {
-    auto source = std::make_unique<NspSource>(entries);
-    for (const auto& e : entries) {
-        const auto path = e.path;
-        const auto file_size = e.nsp_size;
-        pbox->SetTitle(e.application_name);
-        pbox->NewTransfer(path);
-
-        R_TRY(thread::Transfer(pbox, file_size,
-            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                return source->Read(path, data, off, size, bytes_read);
-            },
-            [&](const void* data, s64 off, s64 size) -> Result {
-                R_SUCCEED();
-            }
-        ));
-    }
-
-    R_SUCCEED();
-}
-
-Result DumpNspToNetwork(ProgressBox* pbox, const location::Entry& loc, std::span<NspEntry> entries) {
-    auto source = std::make_unique<NspSource>(entries);
-    for (const auto& e : entries) {
-        if (pbox->ShouldExit()) {
-            R_THROW(0xFFFF);
-        }
-
-        const auto path = e.path;
-        const auto file_size = e.nsp_size;
-        pbox->SetTitle(e.application_name);
-        pbox->NewTransfer(path);
-
-        R_TRY(thread::TransferPull(pbox, file_size,
-            [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                return source->Read(path, data, off, size, bytes_read);
-            },
-            [&](thread::PullCallback pull) -> Result {
-                s64 offset{};
-                const auto result = curl::Api().FromMemory(
-                    CURL_LOCATION_TO_API(loc),
-                    curl::OnProgress{pbox->OnDownloadProgressCallback()},
-                    curl::UploadInfo{
-                        path, file_size,
-                        [&](void *ptr, size_t size) -> size_t {
-                            // curl will request past the size of the file, causing an error.
-                            if (offset >= file_size) {
-                                log_write("finished file upload\n");
-                                return 0;
-                            }
-
-                            u64 bytes_read{};
-                            if (R_FAILED(pull(ptr, size, &bytes_read))) {
-                                log_write("failed to read in custom callback: %zd size: %zd\n", offset, size);
-                                return 0;
-                            }
-
-                            offset += bytes_read;
-                            return bytes_read;
-                        }
-                    }
-                );
-
-                R_UNLESS(result.success, 0x1);
-                R_SUCCEED();
-            }
-        ));
-    }
-
-    R_SUCCEED();
-}
 
 Result Notify(Result rc, const std::string& error_message) {
     if (R_FAILED(rc)) {
@@ -1400,57 +1099,22 @@ void Menu::DeleteGames() {
 }
 
 void Menu::DumpGames(u32 flags) {
-    PopupList::Items items;
-    const auto network_locations = location::Load();
+    auto targets = GetSelectedEntries();
 
-    for (const auto&p : network_locations) {
-        items.emplace_back(p.name);
+    std::vector<NspEntry> nsp_entries;
+    for (auto& e : targets) {
+        BuildNspEntries(e, flags, nsp_entries);
     }
 
-    for (const auto&p : DUMP_LOCATIONS) {
-        items.emplace_back(i18n::get(p.display_name));
+    std::vector<fs::FsPath> paths;
+    for (auto& e : nsp_entries) {
+        paths.emplace_back(e.path);
     }
 
-    App::Push(std::make_shared<PopupList>(
-        "Select dump location"_i18n, items, [this, network_locations, flags](auto op_index){
-            if (!op_index) {
-                return;
-            }
-
-            const auto index = *op_index;
-            App::Push(std::make_shared<ProgressBox>(0, "Dumping"_i18n, "", [this, network_locations, index, flags](auto pbox) -> Result {
-                auto targets = GetSelectedEntries();
-
-                std::vector<NspEntry> nsp_entries;
-                for (auto& e : targets) {
-                    BuildNspEntries(e, flags, nsp_entries);
-                }
-
-                const auto index2 = index - network_locations.size();
-
-                if (!network_locations.empty() && index < network_locations.size()) {
-                    R_TRY(DumpNspToNetwork(pbox, network_locations[index], nsp_entries));
-                } else if (index2 == DumpLocationType_SdCard) {
-                    R_TRY(DumpNspToFile(pbox, nsp_entries));
-                } else if (index2 == DumpLocationType_UsbS2S) {
-                    R_TRY(DumpNspToUsbS2S(pbox, nsp_entries));
-                } else if (index2 == DumpLocationType_DevNull) {
-                    R_TRY(DumpNspToDevNull(pbox, nsp_entries));
-                }
-
-                R_SUCCEED();
-            }, [this](Result rc){
-                App::PushErrorBox(rc, "Dump failed!"_i18n);
-                ClearSelection();
-
-                if (R_SUCCEEDED(rc)) {
-                    App::Notify("Dump successfull!");
-                    log_write("dump successfull!!!\n");
-                }
-            }));
-        }
-
-    ));
+    auto source = std::make_shared<NspSource>(nsp_entries);
+    dump::Dump(source, paths, [this](Result rc){
+        ClearSelection();
+    });
 }
 
 } // namespace sphaira::ui::menu::game

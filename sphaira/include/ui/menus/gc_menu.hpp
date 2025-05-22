@@ -78,7 +78,7 @@ private:
     Result UpdateStorageSize();
     void FreeImage();
     void OnChangeIndex(s64 new_index);
-    void DumpGames(u32 flags);
+    Result DumpGames(u32 flags);
 
 private:
     FsDeviceOperator m_dev_op{};

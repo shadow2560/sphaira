@@ -119,6 +119,7 @@ Result CreateDirectoryRecursively(FsFileSystem* fs, const FsPath& _path, bool ig
     R_UNLESS(ignore_read_only || !is_read_only_root(_path), Fs::ResultReadOnly);
 
     auto path_view = std::string_view{_path};
+    // todo: fix this for sdmc: and ums0:
     FsPath path{"/"};
 
     for (const auto dir : std::views::split(path_view, '/')) {
@@ -276,8 +277,12 @@ Result copy_entire_file(FsFileSystem* fs, const FsPath& dst, const FsPath& src, 
 Result CreateFile(const FsPath& path, u64 size, u32 option, bool ignore_read_only) {
     R_UNLESS(ignore_read_only || !is_read_only_root(path), Fs::ResultReadOnly);
 
-    auto fd = open(path, O_CREAT | S_IRUSR | S_IWUSR);
+    auto fd = open(path, O_WRONLY | O_CREAT, DEFFILEMODE);
     if (fd == -1) {
+        if (errno == EEXIST) {
+            return FsError_PathAlreadyExists;
+        }
+
         R_TRY(fsdevGetLastResult());
         return Fs::ResultUnknownStdioError;
     }
@@ -288,7 +293,11 @@ Result CreateFile(const FsPath& path, u64 size, u32 option, bool ignore_read_onl
 Result CreateDirectory(const FsPath& path, bool ignore_read_only) {
     R_UNLESS(ignore_read_only || !is_read_only_root(path), Fs::ResultReadOnly);
 
-    if (mkdir(path, 0777)) {
+    if (mkdir(path, ACCESSPERMS)) {
+        if (errno == EEXIST) {
+            return FsError_PathAlreadyExists;
+        }
+
         R_TRY(fsdevGetLastResult());
         return Fs::ResultUnknownStdioError;
     }

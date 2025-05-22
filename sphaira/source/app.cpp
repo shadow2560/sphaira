@@ -30,6 +30,7 @@
 #include <ctime>
 #include <span>
 #include <dirent.h>
+#include <usbhsfs.h>
 
 extern "C" {
     u32 __nx_applet_exit_mode = 0;
@@ -606,6 +607,10 @@ auto App::GetNxlinkEnable() -> bool {
     return g_app->m_nxlink_enabled.Get();
 }
 
+auto App::GetHddEnable() -> bool {
+    return g_app->m_hdd_enabled.Get();
+}
+
 auto App::GetLogEnable() -> bool {
     return g_app->m_log_enabled.Get();
 }
@@ -669,6 +674,17 @@ void App::SetNxlinkEnable(bool enable) {
             nxlinkInitialize(nxlink_callback);
         } else {
             nxlinkExit();
+        }
+    }
+}
+
+void App::SetHddEnable(bool enable) {
+    if (App::GetHddEnable() != enable) {
+        g_app->m_hdd_enabled.Set(enable);
+        if (enable) {
+            usbHsFsInitialize(1);
+        } else {
+            usbHsFsExit();
         }
     }
 }
@@ -1290,6 +1306,10 @@ App::App(const char* argv0) {
         nxlinkInitialize(nxlink_callback);
     }
 
+    if (App::GetHddEnable()) {
+        usbHsFsInitialize(1);
+    }
+
     curl::Init();
 
     // get current size of the framebuffer
@@ -1422,9 +1442,6 @@ App::App(const char* argv0) {
     // padInitializeDefault(&m_pad);
     padInitializeAny(&m_pad);
 
-    // usbHsFsSetFileSystemMountFlags(UsbHsFsMountFlags_ReadOnly);
-    // usbHsFsSetPopulateCallback();
-    // usbHsFsInitialize(0);
 
     const auto loader_info_size = envGetLoaderInfoSize();
     if (loader_info_size) {
@@ -1802,6 +1819,11 @@ App::~App() {
     if (App::GetNxlinkEnable()) {
         log_write("closing nxlink\n");
         nxlinkExit();
+    }
+
+    if (App::GetHddEnable()) {
+        log_write("closing hdd\n");
+        usbHsFsExit();
     }
 
     if (App::GetLogEnable()) {

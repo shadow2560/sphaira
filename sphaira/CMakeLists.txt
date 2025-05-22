@@ -66,6 +66,7 @@ add_executable(sphaira
 
     source/app.cpp
     source/download.cpp
+    source/dumper.cpp
     source/option.cpp
     source/evman.cpp
     source/fs.cpp
@@ -196,6 +197,13 @@ FetchContent_Declare(zstd
     SOURCE_SUBDIR build/cmake
 )
 
+FetchContent_Declare(libusbhsfs
+    # GIT_REPOSITORY https://github.com/DarkMatterCore/libusbhsfs.git
+    # GIT_TAG v0.2.9
+    GIT_REPOSITORY https://github.com/ITotalJustice/libusbhsfs.git
+    GIT_TAG sxos_disable
+)
+
 set(USE_NEW_ZSTD ON)
 
 set(ZSTD_BUILD_STATIC ON)
@@ -234,6 +242,10 @@ set(YYJSON_DISABLE_NON_STANDARD ON)
 set(YYJSON_DISABLE_UTF8_VALIDATION ON)
 set(YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS OFF)
 
+# enable this if you want ntfs and ext4 support, at the cost of a huge final binary size.
+set(USBHSFS_GPL OFF)
+set(USBHSFS_SXOS_DISABLE ON)
+
 FetchContent_MakeAvailable(
     ftpsrv
     libhaze
@@ -243,6 +255,7 @@ FetchContent_MakeAvailable(
     minIni
     yyjson
     zstd
+    libusbhsfs
 )
 
 set(FTPSRV_LIB_BUILD TRUE)
@@ -317,6 +330,7 @@ target_link_libraries(sphaira PRIVATE
     nanovg
     stb
     yyjson
+    libusbhsfs
 
     ${minizip_lib}
     ZLIB::ZLIB

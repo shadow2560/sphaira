@@ -1,8 +1,10 @@
 #include "location.hpp"
 #include "fs.hpp"
+#include "app.hpp"
 
 #include <cstring>
 #include <minIni.h>
+#include <usbhsfs.h>
 
 namespace sphaira::location {
 namespace {
@@ -68,6 +70,36 @@ auto Load() -> Entries {
     };
 
     ini_browse(cb, &out, location_path);
+
+    return out;
+}
+
+auto GetStdio(bool write) -> StdioEntries {
+    if (!App::GetHddEnable()) {
+        log_write("[USBHSFS] not enabled\n");
+        return {};
+    }
+
+    static UsbHsFsDevice devices[0x20];
+    const auto count = usbHsFsListMountedDevices(devices, std::size(devices));
+    log_write("[USBHSFS] got connected: %u\n", usbHsFsGetPhysicalDeviceCount());
+    log_write("[USBHSFS] got count: %u\n", count);
+
+    StdioEntries out{};
+    for (s32 i = 0; i < count; i++) {
+        const auto& e = devices[i];
+
+        if (write && e.write_protect) {
+            log_write("[USBHSFS] skipping write protect\n");
+            continue;
+        }
+
+        char display_name[0x100];
+        std::snprintf(display_name, sizeof(display_name), "%s (%s - %s - %zu GB)", e.name, LIBUSBHSFS_FS_TYPE_STR(e.fs_type), e.product_name, e.capacity / 1024 / 1024 / 1024);
+
+        out.emplace_back(e.name, display_name, e.write_protect);
+        log_write("\t[USBHSFS] %s name: %s serial: %s man: %s\n", e.name, e.product_name, e.serial_number, e.manufacturer);
+    }
 
     return out;
 }
