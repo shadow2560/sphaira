@@ -197,10 +197,8 @@ FetchContent_Declare(zstd
 )
 
 FetchContent_Declare(libusbhsfs
-    # GIT_REPOSITORY https://github.com/DarkMatterCore/libusbhsfs.git
-    # GIT_TAG v0.2.9
     GIT_REPOSITORY https://github.com/ITotalJustice/libusbhsfs.git
-    GIT_TAG sxos_disable
+    GIT_TAG d2395e9
 )
 
 set(USE_NEW_ZSTD ON)
@@ -217,7 +215,7 @@ set(ZSTD_BUILD_TESTS OFF)
 
 set(MININI_LIB_NAME minIni)
 set(MININI_USE_STDIO ON)
-set(MININI_USE_NX ON)
+set(MININI_USE_NX OFF)
 set(MININI_USE_FLOAT OFF)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
