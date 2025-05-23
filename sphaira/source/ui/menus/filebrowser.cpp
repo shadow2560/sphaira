@@ -931,7 +931,7 @@ void Menu::InstallFiles() {
                     if (m_fs->IsNative()) {
                         R_TRY(yati::InstallFromFile(pbox, &GetNative()->m_fs, GetNewPath(e)));
                     } else {
-                        R_TRY(yati::InstallFromStdioFile(pbox, GetNewPath(e)));
+                        R_TRY(yati::InstallFromFile(pbox, GetNewPath(e)));
                     }
                     App::Notify("Installed " + e.GetName());
                 }

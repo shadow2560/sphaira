@@ -1,7 +1,6 @@
 #include "yati/yati.hpp"
 #include "yati/source/file.hpp"
 #include "yati/source/stream_file.hpp"
-#include "yati/source/stdio.hpp"
 #include "yati/container/nsp.hpp"
 #include "yati/container/xci.hpp"
 
@@ -1393,8 +1392,8 @@ Result InstallFromFile(ui::ProgressBox* pbox, FsFileSystem* fs, const fs::FsPath
     // return InstallFromSource(pbox, std::make_shared<source::StreamFile>(fs, path), path, override);
 }
 
-Result InstallFromStdioFile(ui::ProgressBox* pbox, const fs::FsPath& path, const ConfigOverride& override) {
-    return InstallFromSource(pbox, std::make_shared<source::Stdio>(path), path, override);
+Result InstallFromFile(ui::ProgressBox* pbox, const fs::FsPath& path, const ConfigOverride& override) {
+    return InstallFromFile(pbox, nullptr, path, override);
 }
 
 Result InstallFromSource(ui::ProgressBox* pbox, std::shared_ptr<source::Base> source, const fs::FsPath& path, const ConfigOverride& override) {

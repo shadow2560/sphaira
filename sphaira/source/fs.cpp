@@ -465,9 +465,9 @@ Result OpenFile(fs::Fs* fs, const fs::FsPath& path, u32 mode, File* f) {
             // todo:
             R_THROW(0x1);
         } else if (mode & FsOpenMode_Read) {
-            f->m_stdio = fopen(path, "rb");
+            f->m_stdio = std::fopen(path, "rb");
         } else if (mode & FsOpenMode_Write) {
-            f->m_stdio = fopen(path, "wb");
+            f->m_stdio = std::fopen(path, "wb");
         }
 
         R_UNLESS(f->m_stdio, 0x1);

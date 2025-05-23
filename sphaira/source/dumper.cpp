@@ -102,12 +102,9 @@ private:
     s64 m_pull_offset{};
 };
 
-Result DumpToFile(ui::ProgressBox* pbox, BaseSource* source, std::span<const fs::FsPath> paths) {
-    static constexpr fs::FsPath DUMP_PATH{"/dumps/NSP"};
+Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, BaseSource* source, std::span<const fs::FsPath> paths) {
+    const auto DUMP_PATH = fs::AppendPath(root, "/dumps/NSP");
     constexpr s64 BIG_FILE_SIZE = 1024ULL*1024ULL*1024ULL*4ULL;
-
-    fs::FsNativeSd fs{};
-    R_TRY(fs.GetFsOpenResult());
 
     for (auto path : paths) {
         const auto file_size = source->GetSize(path);
@@ -115,76 +112,44 @@ Result DumpToFile(ui::ProgressBox* pbox, BaseSource* source, std::span<const fs:
         pbox->NewTransfer(path);
 
         const auto temp_path = fs::AppendPath(DUMP_PATH, path + ".temp");
-        fs.CreateDirectoryRecursivelyWithPath(temp_path);
-        fs.DeleteFile(temp_path);
+        fs->CreateDirectoryRecursivelyWithPath(temp_path);
+        fs->DeleteFile(temp_path);
 
         const auto flags = file_size >= BIG_FILE_SIZE ? FsCreateOption_BigFile : 0;
-        R_TRY(fs.CreateFile(temp_path, file_size, flags));
-        ON_SCOPE_EXIT(fs.DeleteFile(temp_path));
+        R_TRY(fs->CreateFile(temp_path, file_size, flags));
+        ON_SCOPE_EXIT(fs->DeleteFile(temp_path));
 
         {
-            FsFile file;
-            R_TRY(fs.OpenFile(temp_path, FsOpenMode_Write, &file));
-            ON_SCOPE_EXIT(fsFileClose(&file));
+            fs::File file;
+            R_TRY(fs->OpenFile(temp_path, FsOpenMode_Write, &file));
+            ON_SCOPE_EXIT(fs->FileClose(&file));
 
             R_TRY(thread::Transfer(pbox, file_size,
                 [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
                     return source->Read(path, data, off, size, bytes_read);
                 },
                 [&](const void* data, s64 off, s64 size) -> Result {
-                    return fsFileWrite(&file, off, data, size, FsWriteOption_None);
+                    return fs->FileWrite(&file, off, data, size, FsWriteOption_None);
                 }
             ));
         }
 
         path = fs::AppendPath(DUMP_PATH, path);
-        fs.DeleteFile(path);
-        R_TRY(fs.RenameFile(temp_path, path));
+        fs->DeleteFile(path);
+        R_TRY(fs->RenameFile(temp_path, path));
     }
 
     R_SUCCEED();
 }
 
+Result DumpToFileNative(ui::ProgressBox* pbox, BaseSource* source, std::span<const fs::FsPath> paths) {
+    fs::FsNative fs{};
+    return DumpToFile(pbox, &fs, "/", source, paths);
+}
+
 Result DumpToStdio(ui::ProgressBox* pbox, const location::StdioEntry& loc, BaseSource* source, std::span<const fs::FsPath> paths) {
-    const fs::FsPath DUMP_PATH = loc.mount + "/dumps/NSP";
-
     fs::FsStdio fs{};
-
-    for (auto path : paths) {
-        const auto file_size = source->GetSize(path);
-        pbox->SetTitle(source->GetName(path));
-        pbox->NewTransfer(path);
-
-        const auto temp_path = fs::AppendPath(DUMP_PATH, path + ".temp");
-        fs.CreateDirectoryRecursivelyWithPath(temp_path);
-        fs.DeleteFile(temp_path);
-
-        R_TRY(fs.CreateFile(temp_path, file_size));
-        ON_SCOPE_EXIT(fs.DeleteFile(temp_path));
-
-        {
-            auto file = std::fopen(temp_path, "wb");
-            R_UNLESS(file, 0x1);
-            ON_SCOPE_EXIT(std::fclose(file));
-
-            R_TRY(thread::Transfer(pbox, file_size,
-                [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                    return source->Read(path, data, off, size, bytes_read);
-                },
-                [&](const void* data, s64 off, s64 size) -> Result {
-                    const auto written = std::fwrite(data, 1, size, file);
-                    R_UNLESS(written >= 1, 0x1);
-                    R_SUCCEED();
-                }
-            ));
-        }
-
-        path = fs::AppendPath(DUMP_PATH, path);
-        fs.DeleteFile(path);
-        R_TRY(fs.RenameFile(temp_path, path));
-    }
-
-    R_SUCCEED();
+    return DumpToFile(pbox, &fs, loc.mount, source, paths);
 }
 
 Result DumpToUsbS2SStream(ui::ProgressBox* pbox, UsbTest* usb, std::span<const fs::FsPath> paths) {
@@ -389,7 +354,7 @@ void Dump(std::shared_ptr<BaseSource> source, const std::vector<fs::FsPath>& pat
                 } else if (dump_entry.type == DumpLocationType_Stdio) {
                     R_TRY(DumpToStdio(pbox, stdio_locations[dump_entry.index], source.get(), paths));
                 } else if (dump_entry.type == DumpLocationType_SdCard) {
-                    R_TRY(DumpToFile(pbox, source.get(), paths));
+                    R_TRY(DumpToFileNative(pbox, source.get(), paths));
                 } else if (dump_entry.type == DumpLocationType_UsbS2S) {
                     R_TRY(DumpToUsbS2S(pbox, source.get(), paths));
                 } else if (dump_entry.type == DumpLocationType_DevNull) {

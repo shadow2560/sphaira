@@ -91,7 +91,6 @@ add_executable(sphaira
     source/yati/container/nsp.cpp
     source/yati/container/xci.cpp
     source/yati/source/file.cpp
-    source/yati/source/stdio.cpp
     source/yati/source/usb.cpp
     source/yati/source/stream.cpp
     source/yati/source/stream_file.cpp
