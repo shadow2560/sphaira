@@ -30,11 +30,11 @@ struct DumpEntry {
 
 struct DumpLocation {
     const DumpLocationType type;
-    const char* display_name;
+    const char* name;
 };
 
 constexpr DumpLocation DUMP_LOCATIONS[]{
-    { DumpLocationType_SdCard, "microSD card (/dumps/NSP/)" },
+    { DumpLocationType_SdCard, "microSD card (/dumps/)" },
     { DumpLocationType_UsbS2S, "USB transfer (Switch 2 Switch)" },
     { DumpLocationType_DevNull, "/dev/null (Speed Test)" },
 };
@@ -103,7 +103,6 @@ private:
 };
 
 Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, BaseSource* source, std::span<const fs::FsPath> paths) {
-    const auto DUMP_PATH = fs::AppendPath(root, "/dumps/NSP");
     constexpr s64 BIG_FILE_SIZE = 1024ULL*1024ULL*1024ULL*4ULL;
 
     for (auto path : paths) {
@@ -111,7 +110,7 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
         pbox->SetTitle(source->GetName(path));
         pbox->NewTransfer(path);
 
-        const auto temp_path = fs::AppendPath(DUMP_PATH, path + ".temp");
+        const auto temp_path = fs::AppendPath(root, path + ".temp");
         fs->CreateDirectoryRecursivelyWithPath(temp_path);
         fs->DeleteFile(temp_path);
 
@@ -134,7 +133,7 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
             ));
         }
 
-        path = fs::AppendPath(DUMP_PATH, path);
+        path = fs::AppendPath(root, path);
         fs->DeleteFile(path);
         R_TRY(fs->RenameFile(temp_path, path));
     }
@@ -143,7 +142,7 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
 }
 
 Result DumpToFileNative(ui::ProgressBox* pbox, BaseSource* source, std::span<const fs::FsPath> paths) {
-    fs::FsNative fs{};
+    fs::FsNativeSd fs{};
     return DumpToFile(pbox, &fs, "/", source, paths);
 }
 
@@ -335,7 +334,7 @@ void Dump(std::shared_ptr<BaseSource> source, const std::vector<fs::FsPath>& pat
     for (s32 i = 0; i < std::size(DUMP_LOCATIONS); i++) {
         if (location_flags & (1 << DUMP_LOCATIONS[i].type)) {
             dump_entries.emplace_back(DUMP_LOCATIONS[i].type, i);
-            items.emplace_back(i18n::get(DUMP_LOCATIONS[i].display_name));
+            items.emplace_back(i18n::get(DUMP_LOCATIONS[i].name));
         }
     }
 

@@ -1108,7 +1108,7 @@ void Menu::DumpGames(u32 flags) {
 
     std::vector<fs::FsPath> paths;
     for (auto& e : nsp_entries) {
-        paths.emplace_back(e.path);
+        paths.emplace_back(fs::AppendPath("/dumps/NSP", e.path));
     }
 
     auto source = std::make_shared<NspSource>(nsp_entries);

@@ -130,15 +130,19 @@ auto BuildFilePath(DumpFileType type, std::span<const ApplicationEntry> entries)
 // builds path suiteable for file dumps.
 auto BuildFullDumpPath(DumpFileType type, std::span<const ApplicationEntry> entries) -> fs::FsPath {
     const auto base_path = BuildXciBasePath(entries);
+    fs::FsPath out;
+
     if (App::GetApp()->m_dump_app_folder.Get()) {
         if (App::GetApp()->m_dump_append_folder_with_xci.Get()) {
-            return base_path + ".xci/" + base_path + GetDumpTypeStr(type);
+            out = base_path + ".xci/" + base_path + GetDumpTypeStr(type);
         } else {
-            return base_path + "/" + base_path + GetDumpTypeStr(type);
+            out = base_path + "/" + base_path + GetDumpTypeStr(type);
         }
     } else {
-        return base_path + GetDumpTypeStr(type);
+        out = base_path + GetDumpTypeStr(type);
     }
+
+    return fs::AppendPath("/dumps/XCI", out);
 }
 
 // @Gc is the mount point, S is for secure partion, the remaining is the
