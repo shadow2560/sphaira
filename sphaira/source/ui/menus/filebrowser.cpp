@@ -42,6 +42,16 @@
 namespace sphaira::ui::menu::filebrowser {
 namespace {
 
+constexpr FsEntry FS_ENTRY_DEFAULT{
+    "Sd", "/", FsType::Sd, FsEntryFlag_Assoc,
+};
+
+constexpr FsEntry FS_ENTRIES[]{
+    FS_ENTRY_DEFAULT,
+    { "Image System memory", "/", FsType::ImageNand },
+    { "Image microSD card", "/", FsType::ImageSd},
+};
+
 struct ExtDbEntry {
     std::string_view db_name;
     std::span<const std::string_view> ext;
@@ -198,7 +208,7 @@ auto GetRomDatabaseFromPath(std::string_view path) -> RomDatabaseIndexs {
 }
 
 //
-auto GetRomIcon(fs::FsNative* fs, ProgressBox* pbox, std::string filename, const RomDatabaseIndexs& db_indexs, const NroEntry& nro) {
+auto GetRomIcon(fs::Fs* fs, ProgressBox* pbox, std::string filename, const RomDatabaseIndexs& db_indexs, const NroEntry& nro) {
     // if no db entries, use nro icon
     if (db_indexs.empty()) {
         log_write("using nro image\n");
@@ -315,7 +325,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 return;
             }
 
-            if (m_fs_type == FsType::Sd && m_is_update_folder && m_daybreak_path.has_value()) {
+            if (IsSd() && m_is_update_folder && m_daybreak_path.has_value()) {
                 App::Push(std::make_shared<OptionBox>("Open with DayBreak?"_i18n, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
                     if (op_index && *op_index) {
                         // daybreak uses native fs so do not use nro_add_arg_file
@@ -330,9 +340,9 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
             if (entry.type == FsDirEntryType_Dir) {
                 Scan(GetNewPathCurrent());
-            } else if (m_fs_type == FsType::Sd) {
+            } else {
                 // special case for nro
-                if (entry.GetExtension() == "nro") {
+                if (IsSd() && entry.GetExtension() == "nro") {
                     App::Push(std::make_shared<OptionBox>("Launch "_i18n + entry.GetName() + '?',
                         "No"_i18n, "Launch"_i18n, 1, [this](auto op_index){
                             if (op_index && *op_index) {
@@ -341,7 +351,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                         }));
                 } else if (App::GetInstallEnable() && IsExtension(entry.GetExtension(), INSTALL_EXTENSIONS)) {
                     InstallFiles();
-                } else {
+                } else if (IsSd()) {
                     const auto assoc_list = FindFileAssocFor();
                     if (!assoc_list.empty()) {
                         // for (auto&e : assoc_list) {
@@ -374,12 +384,12 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
         std::make_pair(Button::B, Action{"Back"_i18n, [this](){
             std::string_view view{m_path};
-            if (view != "/") {
+            if (view != m_fs->Root()) {
                 const auto end = view.find_last_of('/');
                 assert(end != view.npos);
 
                 if (end == 0) {
-                    Scan("/", true);
+                    Scan(m_fs->Root(), true);
                 } else {
                     Scan(view.substr(0, end), true);
                 }
@@ -519,7 +529,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 }
             }
 
-            if (m_fs_type == FsType::Sd && m_entries_current.size()) {
+            if (IsSd() && m_entries_current.size()) {
                 if (App::GetInstallEnable() && HasTypeInSelectedEntries(FsDirEntryType_File) && !m_selected_count && (GetEntry().GetExtension() == "nro" || !FindFileAssocFor().empty())) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
                         if (App::GetInstallPrompt()) {
@@ -552,7 +562,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                             App::Push(std::make_shared<OptionBox>("Are you sure you want to extract to root?"_i18n,
                                 "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
                                 if (op_index && *op_index) {
-                                    UnzipFiles("/");
+                                    UnzipFiles(m_fs->Root());
                                 }
                             }));
                         }));
@@ -591,11 +601,11 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
                 options->Add(std::make_shared<SidebarEntryCallback>("Create File"_i18n, [this](){
                     std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Set File Name"_i18n.c_str())) && !out.empty()) {
+                    if (R_SUCCEEDED(swkbd::ShowText(out, "Set File Name"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
                         App::PopToMenu();
 
                         fs::FsPath full_path;
-                        if (out[0] == '/') {
+                        if (out.starts_with(m_fs_entry.root.s)) {
                             full_path = out;
                         } else {
                             full_path = fs::AppendPath(m_path, out);
@@ -617,7 +627,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                         App::PopToMenu();
 
                         fs::FsPath full_path;
-                        if (out[0] == '/') {
+                        if (out.starts_with(m_fs_entry.root.s)) {
                             full_path = out;
                         } else {
                             full_path = fs::AppendPath(m_path, out);
@@ -632,13 +642,13 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     }
                 }));
 
-                if (m_fs_type == FsType::Sd && m_entries_current.size() && !m_selected_count && GetEntry().IsFile() && GetEntry().file_size < 1024*64) {
+                if (IsSd() && m_entries_current.size() && !m_selected_count && GetEntry().IsFile() && GetEntry().file_size < 1024*64) {
                     options->Add(std::make_shared<SidebarEntryCallback>("View as text (unfinished)"_i18n, [this](){
                         App::Push(std::make_shared<fileview::Menu>(GetNewPathCurrent()));
                     }));
                 }
 
-                if (m_fs_type == FsType::Sd && m_entries_current.size()) {
+                if (m_entries_current.size()) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Upload"_i18n, [this](){
                         UploadFiles();
                     }));
@@ -650,15 +660,27 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 }));
 
                 SidebarEntryArray::Items mount_items;
-                mount_items.push_back("Sd"_i18n);
-                mount_items.push_back("Image System memory"_i18n);
-                mount_items.push_back("Image microSD card"_i18n);
+                std::vector<FsEntry> fs_entries;
+                for (const auto& e: FS_ENTRIES) {
+                    fs_entries.emplace_back(e);
+                    mount_items.push_back(i18n::get(e.name));
+                }
 
-                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this](s64& index_out){
+                const auto stdio_locations = location::GetStdio(false);
+                for (const auto& e: stdio_locations) {
+                    u32 flags{};
+                    if (e.write_protect) {
+                        flags |= FsEntryFlag_ReadOnly;
+                    }
+
+                    fs_entries.emplace_back(e.name, e.mount, FsType::Stdio, flags);
+                    mount_items.push_back(e.name);
+                }
+
+                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
                     App::PopToMenu();
-                    m_mount.Set(index_out);
-                    SetFs("/", index_out);
-                }, m_mount.Get()));
+                    SetFs(fs_entries[index_out].root, fs_entries[index_out]);
+                }, m_fs_entry.name));
             }));
         }})
     );
@@ -668,11 +690,14 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
 
     fs::FsPath buf;
     ini_gets("paths", "last_path", "/", buf, sizeof(buf), App::CONFIG_PATH);
-    SetFs(buf, m_mount.Get());
+    SetFs(buf, FS_ENTRY_DEFAULT);
 }
 
 Menu::~Menu() {
-    ini_puts("paths", "last_path", m_path, App::CONFIG_PATH);
+    // don't store mount points for non-sd card paths.
+    if (IsSd()) {
+        ini_puts("paths", "last_path", m_path, App::CONFIG_PATH);
+    }
 }
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
@@ -704,10 +729,10 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         auto& e = GetEntry(i);
 
         if (e.IsDir()) {
-            if (e.file_count == -1 && e.dir_count == -1) {
+            if (m_fs->IsNative() && e.file_count == -1 && e.dir_count == -1) {
                 const auto full_path = GetNewPath(e);
-                m_fs->DirGetEntryCount(full_path, FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &e.file_count);
-                m_fs->DirGetEntryCount(full_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_NoFileSize, &e.dir_count);
+                GetNative()->DirGetEntryCount(full_path, FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &e.file_count);
+                GetNative()->DirGetEntryCount(full_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_NoFileSize, &e.dir_count);
             }
         } else if (!e.checked_extension) {
             e.checked_extension = true;
@@ -759,13 +784,17 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             gfx::drawText(vg, x + text_xoffset+65, y + (h / 2.f), 20.f, e.name, NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id));
         nvgRestore(vg);
 
-        if (e.IsDir()) {
+        if (m_fs->IsNative() && e.IsDir()) {
             gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%zd files"_i18n.c_str(), e.file_count);
             gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(text_id), "%zd dirs"_i18n.c_str(), e.dir_count);
-        } else {
+        } else if (e.IsFile()) {
             if (!e.time_stamp.is_valid) {
                 const auto path = GetNewPath(e);
-                m_fs->GetFileTimeStampRaw(path, &e.time_stamp);
+                if (m_fs->IsNative()) {
+                    m_fs->GetFileTimeStampRaw(path, &e.time_stamp);
+                } else {
+                    m_fs->FileGetSizeAndTimestamp(path, &e.time_stamp, &e.file_size);
+                }
             }
             const auto t = (time_t)(e.time_stamp.modified);
             struct tm tm{};
@@ -784,7 +813,7 @@ void Menu::OnFocusGained() {
     MenuBase::OnFocusGained();
     if (m_entries.empty()) {
         if (m_path.empty()) {
-            Scan("/");
+            Scan(m_fs->Root());
         } else {
             Scan(m_path);
         }
@@ -899,7 +928,11 @@ void Menu::InstallFiles() {
 
             App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this, targets](auto pbox) -> Result {
                 for (auto& e : targets) {
-                    R_TRY(yati::InstallFromFile(pbox, &m_fs->m_fs, GetNewPath(e)));
+                    if (m_fs->IsNative()) {
+                        R_TRY(yati::InstallFromFile(pbox, &GetNative()->m_fs, GetNewPath(e)));
+                    } else {
+                        R_TRY(yati::InstallFromStdioFile(pbox, GetNewPath(e)));
+                    }
                     App::Notify("Installed " + e.GetName());
                 }
 
@@ -919,7 +952,6 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
 
     App::Push(std::make_shared<ui::ProgressBox>(0, "Extracting "_i18n, "", [this, dir_path, targets](auto pbox) -> Result {
         constexpr auto chunk_size = 1024 * 512; // 512KiB
-        auto& fs = *m_fs.get();
 
         for (auto& e : targets) {
             pbox->SetTitle(e.GetName());
@@ -959,19 +991,19 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
                 pbox->NewTransfer(name);
 
                 // create directories
-                fs.CreateDirectoryRecursivelyWithPath(file_path);
+                m_fs->CreateDirectoryRecursivelyWithPath(file_path);
 
                 Result rc;
-                if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
+                if (R_FAILED(rc = m_fs->CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
                     log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
                     R_THROW(rc);
                 }
 
-                FsFile f;
-                R_TRY(fs.OpenFile(file_path, FsOpenMode_Write, &f));
-                ON_SCOPE_EXIT(fsFileClose(&f));
+                fs::File f;
+                R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Write, &f));
+                ON_SCOPE_EXIT(m_fs->FileClose(&f));
 
-                R_TRY(fsFileSetSize(&f, info.uncompressed_size));
+                R_TRY(m_fs->FileSetSize(&f, info.uncompressed_size));
 
                 std::vector<char> buf(chunk_size);
                 s64 offset{};
@@ -984,7 +1016,7 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
                         R_THROW(0x1);
                     }
 
-                    R_TRY(fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None));
+                    R_TRY(m_fs->FileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None));
 
                     pbox->UpdateTransfer(offset, info.uncompressed_size);
                     offset += bytes_read;
@@ -1030,7 +1062,7 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
                 }
 
                 zip_out = fs::AppendPath(m_path, file_path);
-                if (!fs::FileExists(&m_fs->m_fs, zip_out)) {
+                if (!m_fs->FileExists(zip_out)) {
                     break;
                 }
             }
@@ -1043,7 +1075,6 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
 
     App::Push(std::make_shared<ui::ProgressBox>(0, "Compressing "_i18n, "", [this, zip_out, targets](auto pbox) -> Result {
         constexpr auto chunk_size = 1024 * 512; // 512KiB
-        auto& fs = *m_fs.get();
 
         const auto t = std::time(NULL);
         const auto tm = std::localtime(&t);
@@ -1080,12 +1111,12 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
             }
             ON_SCOPE_EXIT(zipCloseFileInZip(zfile));
 
-            FsFile f;
-            R_TRY(fs.OpenFile(file_path, FsOpenMode_Read, &f));
-            ON_SCOPE_EXIT(fsFileClose(&f));
+            fs::File f;
+            R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Read, &f));
+            ON_SCOPE_EXIT(m_fs->FileClose(&f));
 
             s64 file_size;
-            R_TRY(fsFileGetSize(&f, &file_size));
+            R_TRY(m_fs->FileGetSize(&f, &file_size));
 
             std::vector<char> buf(chunk_size);
             s64 offset{};
@@ -1093,7 +1124,7 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
                 R_TRY(pbox->ShouldExitResult());
 
                 u64 bytes_read;
-                R_TRY(fsFileRead(&f, offset, buf.data(), buf.size(), FsReadOption_None, &bytes_read));
+                R_TRY(m_fs->FileRead(&f, offset, buf.data(), buf.size(), FsReadOption_None, &bytes_read));
 
                 if (ZIP_OK != zipWriteInFileInZip(zfile, buf.data(), bytes_read)) {
                     log_write("failed to write zip file: %s\n", file_path.s);
@@ -1168,13 +1199,13 @@ void Menu::UploadFiles() {
                     pbox->SetTitle(name);
                     pbox->NewTransfer(relative_file_name);
 
-                    FsFile file;
-                    R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Read, &file));
-                    ON_SCOPE_EXIT(fsFileClose(&file));
+                    fs::File f;
+                    R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Read, &f));
+                    ON_SCOPE_EXIT(m_fs->FileClose(&f));
 
                     return thread::TransferPull(pbox, file_size,
                         [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                            return fsFileRead(&file, off, data, size, FsReadOption_None, bytes_read);
+                            return m_fs->FileRead(&f, off, data, size, FsReadOption_None, bytes_read);
                         },
                         [&](thread::PullCallback pull) -> Result {
                             s64 offset{};
@@ -1256,20 +1287,16 @@ auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
         ResetSelection();
     }
 
-    FsDir d;
+    fs::Dir d;
     R_TRY(m_fs->OpenDirectory(new_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles, &d));
-    ON_SCOPE_EXIT(fsDirClose(&d));
-
-    s64 count;
-    R_TRY(m_fs->DirGetEntryCount(&d, &count));
+    ON_SCOPE_EXIT(m_fs->DirClose(&d));
 
     // we won't run out of memory here (tm)
-    std::vector<FsDirectoryEntry> dir_entries(count);
+    std::vector<FsDirectoryEntry> dir_entries;
 
-    R_TRY(m_fs->DirRead(&d, &count, dir_entries.size(), dir_entries.data()));
+    R_TRY(m_fs->DirReadAll(&d, dir_entries));
 
-    // size may of changed
-    dir_entries.resize(count);
+    const auto count = dir_entries.size();
     m_entries.reserve(count);
 
     m_entries_index.clear();
@@ -1581,9 +1608,9 @@ void Menu::OnDeleteCallback() {
         const auto full_path = GetNewPath(m_selected_path, entry.name);
 
         if (entry.IsDir()) {
-            s64 count{};
-            m_fs->DirGetEntryCount(full_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &count);
-            if (!count) {
+            bool empty{};
+            m_fs->IsDirEmpty(full_path, &empty);
+            if (empty) {
                 m_fs->DeleteDirectory(full_path);
                 use_progress_box = false;
             }
@@ -1726,7 +1753,7 @@ void Menu::OnPasteCallback() {
                         m_fs->CreateDirectory(dst_path);
                     } else {
                         pbox->NewTransfer("Copying "_i18n + src_path);
-                        R_TRY(pbox->CopyFile(src_path, dst_path));
+                        R_TRY(pbox->CopyFile(m_fs.get(), src_path, dst_path));
                     }
                 }
 
@@ -1755,7 +1782,7 @@ void Menu::OnPasteCallback() {
 
                         pbox->NewTransfer("Copying "_i18n + src_path);
                         log_write("copying: %s to %s\n", src_path.s, dst_path.s);
-                        R_TRY(pbox->CopyFile(src_path, dst_path));
+                        R_TRY(pbox->CopyFile(m_fs.get(), src_path, dst_path));
                     }
                 }
             }
@@ -1776,7 +1803,8 @@ void Menu::OnRenameCallback() {
 }
 
 auto Menu::CheckIfUpdateFolder() -> Result {
-    R_UNLESS(m_fs_type == FsType::Sd, FsError_InvalidMountName);
+    R_UNLESS(IsSd(), FsError_InvalidMountName);
+    R_UNLESS(m_fs->IsNative(), 0x1);
 
     // check if we have already tried to find daybreak
     if (m_daybreak_path.has_value() && m_daybreak_path.value().empty()) {
@@ -1799,12 +1827,8 @@ auto Menu::CheckIfUpdateFolder() -> Result {
         log_write("found daybreak in: %s\n", m_daybreak_path.value().s);
     }
 
-    FsDir d;
-    R_TRY(m_fs->OpenDirectory(m_path, FsDirOpenMode_ReadDirs, &d));
-    ON_SCOPE_EXIT(m_fs->DirClose(&d));
-
     s64 count;
-    R_TRY(m_fs->DirGetEntryCount(&d, &count));
+    R_TRY(GetNative()->DirGetEntryCount(m_path, FsDirOpenMode_ReadDirs, &count));
 
     // check that we are at the bottom level
     R_UNLESS(count == 0, 0x1);
@@ -1826,15 +1850,10 @@ auto Menu::get_collection(const fs::FsPath& path, const fs::FsPath& parent_name,
     out.parent_name = parent_name;
 
     const auto fetch = [this, &path](std::vector<FsDirectoryEntry>& out, u32 flags) -> Result {
-        FsDir d;
+        fs::Dir d;
         R_TRY(m_fs->OpenDirectory(path, flags, &d));
         ON_SCOPE_EXIT(m_fs->DirClose(&d));
-
-        s64 count;
-        R_TRY(m_fs->DirGetEntryCount(&d, &count));
-
-        out.resize(count);
-        return m_fs->DirRead(&d, &count, out.size(), out.data());
+        return m_fs->DirReadAll(&d, out);
     };
 
     if (inc_file) {
@@ -1871,9 +1890,9 @@ auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name
     R_SUCCEED();
 }
 
-void Menu::SetFs(const fs::FsPath& new_path, u32 _new_type) {
-    const auto new_type = static_cast<FsType>(_new_type);
-    if (m_fs && new_type == m_fs_type) {
+void Menu::SetFs(const fs::FsPath& new_path, const FsEntry& new_entry) {
+    if (m_fs && m_fs_entry.root == new_entry.root && m_fs_entry.type == new_entry.type) {
+        log_write("same fs, ignoring\n");
         return;
     }
 
@@ -1888,28 +1907,26 @@ void Menu::SetFs(const fs::FsPath& new_path, u32 _new_type) {
     m_selected_path.clear();
     m_selected_count = 0;
     m_selected_type = SelectedType::None;
+    m_fs_entry = new_entry;
 
-    switch (new_type) {
-        default: case FsType::Sd:
+    switch (new_entry.type) {
+         case FsType::Sd:
             m_fs = std::make_unique<fs::FsNativeSd>(m_ignore_read_only.Get());
-            m_fs_type = FsType::Sd;
-            log_write("doing fs: %u\n", _new_type);
             break;
         case FsType::ImageNand:
             m_fs = std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Nand);
-            m_fs_type = FsType::ImageNand;
-            log_write("doing image nand\n");
             break;
         case FsType::ImageSd:
             m_fs = std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Sd);
-            m_fs_type = FsType::ImageSd;
-            log_write("doing image sd\n");
+            break;
+        case FsType::Stdio:
+            m_fs = std::make_unique<fs::FsStdio>(true, new_entry.root);
             break;
     }
 
     if (HasFocus()) {
         if (m_path.empty()) {
-            Scan("/");
+            Scan(m_fs->Root());
         } else {
             Scan(m_path);
         }

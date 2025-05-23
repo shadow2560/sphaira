@@ -1,6 +1,7 @@
 #pragma once
 
 #include <switch.h>
+#include <dirent.h>
 #include <cstring>
 #include <vector>
 #include <string>
@@ -169,6 +170,26 @@ static_assert(FsPath::TestFrom(std::string_view{"abc"}));
 static_assert(FsPath::TestFrom(std::string{"abc"}));
 static_assert(FsPath::TestFrom(FsPath{"abc"}));
 
+// fwd
+struct Fs;
+
+struct File {
+    fs::Fs* m_fs;
+    FsFile m_native;
+    std::FILE* m_stdio;
+    s64 m_stdio_off;
+    // sadly, fatfs doesn't support fstat, so we have to manually
+    // stat the file to get it's size.
+    FsPath m_path;
+};
+
+struct Dir {
+    fs::Fs* m_fs;
+    FsDir m_native;
+    DIR* m_stdio;
+    u32 m_mode;
+};
+
 FsPath AppendPath(const fs::FsPath& root_path, const fs::FsPath& file_path);
 
 Result CreateFile(FsFileSystem* fs, const FsPath& path, u64 size = 0, u32 option = 0, bool ignore_read_only = true);
@@ -205,6 +226,24 @@ Result read_entire_file(const FsPath& path, std::vector<u8>& out);
 Result write_entire_file(const FsPath& path, const std::vector<u8>& in, bool ignore_read_only = true);
 Result copy_entire_file(const FsPath& dst, const FsPath& src, bool ignore_read_only = true);
 
+Result OpenFile(fs::Fs* fs, const fs::FsPath& path, u32 mode, File* f);
+Result FileRead(File* f, s64 off, void* buf, u64 read_size, u32 option, u64* bytes_read);
+Result FileWrite(File* f, s64 off, const void* buf, u64 write_size, u32 option);
+Result FileSetSize(File* f, s64 sz);
+Result FileGetSize(File* f, s64* out);
+void FileClose(File* f);
+
+Result OpenDirectory(fs::Fs* fs, const fs::FsPath& path, u32 mode, Dir* d);
+Result DirReadAll(Dir* d, std::vector<FsDirectoryEntry>& buf);
+void DirClose(Dir* d);
+
+// optimised for stdio calls as stat returns size and timestamp in a single call.
+// whereas for native, this is 2 function calls.
+// however if you need both, you will need 2 calls for native anyway,
+// but can avoid the second (expensive) stat call.
+Result FileGetSizeAndTimestamp(fs::Fs* fs, const FsPath& path, FsTimeStampRaw* ts, s64* size);
+Result IsDirEmpty(fs::Fs* m_fs, const fs::FsPath& path, bool* out);
+
 struct Fs {
     static constexpr inline u32 FsModule = 505;
     static constexpr inline Result ResultTooManyEntries = MAKERESULT(FsModule, 1);
@@ -238,9 +277,47 @@ struct Fs {
     virtual Result GetFileTimeStampRaw(const FsPath& path, FsTimeStampRaw *out) = 0;
     virtual bool FileExists(const FsPath& path) = 0;
     virtual bool DirExists(const FsPath& path) = 0;
+    virtual bool IsNative() const = 0;
+    virtual FsPath Root() const { return "/"; }
     virtual Result read_entire_file(const FsPath& path, std::vector<u8>& out) = 0;
     virtual Result write_entire_file(const FsPath& path, const std::vector<u8>& in) = 0;
     virtual Result copy_entire_file(const FsPath& dst, const FsPath& src) = 0;
+
+    Result OpenFile(const fs::FsPath& path, u32 mode, File* f) {
+        return fs::OpenFile(this, path, mode, f);
+    }
+    Result FileRead(File* f, s64 off, void* buf, u64 read_size, u32 option, u64* bytes_read) {
+        return fs::FileRead(f, off, buf, read_size, option, bytes_read);
+    }
+    Result FileWrite(File* f, s64 off, const void* buf, u64 write_size, u32 option) {
+        return fs::FileWrite(f, off, buf, write_size, option);
+    }
+    Result FileSetSize(File* f, s64 sz) {
+        return fs::FileSetSize(f, sz);
+    }
+    Result FileGetSize(File* f, s64* out) {
+        return fs::FileGetSize(f, out);
+    }
+    void FileClose(File* f) {
+        fs::FileClose(f);
+    }
+
+    Result OpenDirectory(const fs::FsPath& path, u32 mode, Dir* d) {
+        return fs::OpenDirectory(this, path, mode, d);
+    }
+    Result DirReadAll(Dir* d, std::vector<FsDirectoryEntry>& buf) {
+        return fs::DirReadAll(d, buf);
+    }
+    void DirClose(Dir* d) {
+        fs::DirClose(d);
+    }
+
+    Result FileGetSizeAndTimestamp(const FsPath& path, FsTimeStampRaw* ts, s64* size) {
+        return fs::FileGetSizeAndTimestamp(this, path, ts, size);
+    }
+    Result IsDirEmpty(const fs::FsPath& path, bool* out) {
+        return fs::IsDirEmpty(this, path, out);
+    }
 
     void SetIgnoreReadOnly(bool enable) {
         m_ignore_read_only = enable;
@@ -251,7 +328,7 @@ protected:
 };
 
 struct FsStdio : Fs {
-    FsStdio(bool ignore_read_only = true) : Fs{ignore_read_only} {}
+    FsStdio(bool ignore_read_only = true, const FsPath& root = "/") : Fs{ignore_read_only}, m_root{root} {}
     virtual ~FsStdio() = default;
 
     Result CreateFile(const FsPath& path, u64 size = 0, u32 option = 0) override {
@@ -293,6 +370,12 @@ struct FsStdio : Fs {
     bool DirExists(const FsPath& path) override {
         return fs::DirExists(path);
     }
+    bool IsNative() const override {
+        return false;
+    }
+    FsPath Root() const override {
+        return m_root;
+    }
     Result read_entire_file(const FsPath& path, std::vector<u8>& out) override {
         return fs::read_entire_file(path, out);
     }
@@ -302,6 +385,8 @@ struct FsStdio : Fs {
     Result copy_entire_file(const FsPath& dst, const FsPath& src) override {
         return fs::copy_entire_file(dst, src, m_ignore_read_only);
     }
+
+    const FsPath m_root;
 };
 
 struct FsNative : Fs {
@@ -406,6 +491,9 @@ struct FsNative : Fs {
     }
     bool DirExists(const FsPath& path) override {
         return fs::DirExists(&m_fs, path);
+    }
+    bool IsNative() const override {
+        return true;
     }
     Result read_entire_file(const FsPath& path, std::vector<u8>& out) override {
         return fs::read_entire_file(&m_fs, path, out);

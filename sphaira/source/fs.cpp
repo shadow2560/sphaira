@@ -121,12 +121,18 @@ Result CreateDirectoryRecursively(FsFileSystem* fs, const FsPath& _path, bool ig
     auto path_view = std::string_view{_path};
     // todo: fix this for sdmc: and ums0:
     FsPath path{"/"};
+    if (auto s = std::strchr(_path.s, ':')) {
+        const int len = (s - _path.s) + 1;
+        std::snprintf(path, sizeof(path), "%.*s/", len, _path.s);
+        path_view = path_view.substr(len);
+    }
 
     for (const auto dir : std::views::split(path_view, '/')) {
         if (dir.empty()) {
             continue;
         }
         std::strncat(path, dir.data(), dir.size());
+        log_write("[FS] dir creation path is now: %s\n", path.s);
 
         Result rc;
         if (fs) {
@@ -445,6 +451,235 @@ Result copy_entire_file(const FsPath& dst, const FsPath& src, bool ignore_read_o
     std::vector<u8> data;
     R_TRY(read_entire_file(src, data));
     return write_entire_file(dst, data, ignore_read_only);
+}
+
+Result OpenFile(fs::Fs* fs, const fs::FsPath& path, u32 mode, File* f) {
+    *f = {};
+    f->m_fs = fs;
+
+    if (f->m_fs->IsNative()) {
+        auto fs = (fs::FsNative*)f->m_fs;
+        R_TRY(fs->OpenFile(path, mode, &f->m_native));
+    } else {
+        if ((mode & FsOpenMode_Read) && (mode & FsOpenMode_Write)) {
+            // todo:
+            R_THROW(0x1);
+        } else if (mode & FsOpenMode_Read) {
+            f->m_stdio = fopen(path, "rb");
+        } else if (mode & FsOpenMode_Write) {
+            f->m_stdio = fopen(path, "wb");
+        }
+
+        R_UNLESS(f->m_stdio, 0x1);
+    }
+
+    std::strcpy(f->m_path, path);
+    R_SUCCEED();
+}
+
+Result FileRead(File* f, s64 off, void* buf, u64 read_size, u32 option, u64* bytes_read) {
+    if (f->m_fs->IsNative()) {
+        R_TRY(fsFileRead(&f->m_native, off, buf, read_size, option, bytes_read));
+    } else {
+        if (f->m_stdio_off != off) {
+            f->m_stdio_off = off;
+            std::fseek(f->m_stdio, off, SEEK_SET);
+        }
+
+        *bytes_read = std::fread(buf, 1, read_size, f->m_stdio);
+        f->m_stdio_off += *bytes_read;
+    }
+
+    R_SUCCEED();
+}
+
+Result FileWrite(File* f, s64 off, const void* buf, u64 write_size, u32 option) {
+    if (f->m_fs->IsNative()) {
+        R_TRY(fsFileWrite(&f->m_native, off, buf, write_size, option));
+    } else {
+        if (f->m_stdio_off != off) {
+            log_write("[FS] diff seek\n");
+            f->m_stdio_off = off;
+            std::fseek(f->m_stdio, off, SEEK_SET);
+        }
+
+        const auto result = std::fwrite(buf, 1, write_size, f->m_stdio);
+        // log_write("[FS] fwrite res: %zu vs %zu\n", result, write_size);
+        R_UNLESS(result == write_size, 0x1);
+
+        f->m_stdio_off += write_size;
+    }
+
+    R_SUCCEED();
+}
+
+Result FileSetSize(File* f, s64 sz) {
+    if (f->m_fs->IsNative()) {
+        R_TRY(fsFileSetSize(&f->m_native, sz));
+    } else {
+        R_SUCCEED();
+        // const auto fd = fileno(f->m_stdio);
+        // R_UNLESS(fd > 0, 0x1);
+        // R_UNLESS(!ftruncate(fd, sz), 0x1);
+    }
+
+    R_SUCCEED();
+}
+
+Result FileGetSize(File* f, s64* out) {
+    if (f->m_fs->IsNative()) {
+        R_TRY(fsFileGetSize(&f->m_native, out));
+    } else {
+        struct stat st;
+        const auto fd = fileno(f->m_stdio);
+        bool did_stat{};
+
+        if (fd && !fstat(fd, &st)) {
+            did_stat = true;
+        }
+
+        if (!did_stat) {
+            R_UNLESS(!lstat(f->m_path, &st), 0x1);
+        }
+
+        *out = st.st_size;
+    }
+
+    R_SUCCEED();
+}
+
+void FileClose(File* f) {
+    if (f->m_fs->IsNative()) {
+        fsFileClose(&f->m_native);
+    } else {
+        std::fclose(f->m_stdio);
+    }
+
+    *f = {};
+}
+
+Result OpenDirectory(fs::Fs* fs, const fs::FsPath& path, u32 mode, Dir* d) {
+    *d = {};
+    d->m_fs = fs;
+    d->m_mode = mode;
+
+    if (d->m_fs->IsNative()) {
+        auto fs = (fs::FsNative*)d->m_fs;
+        R_TRY(fs->OpenDirectory(path, mode, &d->m_native));
+    } else {
+        d->m_stdio = opendir(path);
+        R_UNLESS(d->m_stdio, 0x1);
+    }
+
+    R_SUCCEED();
+}
+
+Result DirReadAll(Dir* d, std::vector<FsDirectoryEntry>& buf) {
+    buf.clear();
+
+    if (d->m_fs->IsNative()) {
+        auto fs = (fs::FsNative*)d->m_fs;
+
+        s64 count;
+        R_TRY(fs->DirGetEntryCount(&d->m_native, &count));
+
+        buf.resize(count);
+        R_TRY(fs->DirRead(&d->m_native, &count, buf.size(), buf.data()));
+        buf.resize(count);
+    } else {
+        buf.reserve(1000);
+
+        struct dirent* dirent;
+        while ((dirent = readdir(d->m_stdio))) {
+            if (!std::strcmp(dirent->d_name, ".") || !std::strcmp(dirent->d_name, "..")) {
+                continue;
+            }
+
+            FsDirectoryEntry entry{};
+
+            if (dirent->d_type == DT_DIR) {
+                if (!(d->m_mode & FsDirOpenMode_ReadDirs)) {
+                    continue;
+                }
+                entry.type = FsDirEntryType_Dir;
+            } else if (dirent->d_type == DT_REG) {
+                if (!(d->m_mode & FsDirOpenMode_ReadFiles)) {
+                    continue;
+                }
+                entry.type = FsDirEntryType_File;
+            }
+
+            std::strcpy(entry.name, dirent->d_name);
+            buf.emplace_back(entry);
+        }
+    }
+
+    R_SUCCEED();
+}
+
+void DirClose(Dir* d) {
+    if (d->m_fs->IsNative()) {
+        fsDirClose(&d->m_native);
+    } else {
+        closedir(d->m_stdio);
+    }
+
+    *d = {};
+}
+
+Result FileGetSizeAndTimestamp(fs::Fs* m_fs, const FsPath& path, FsTimeStampRaw* ts, s64* size) {
+    *ts = {};
+    *size = {};
+
+    if (m_fs->IsNative()) {
+        auto fs = (fs::FsNative*)m_fs;
+        R_TRY(fs->GetFileTimeStampRaw(path, ts));
+
+        File f;
+        R_TRY(m_fs->OpenFile(path, FsOpenMode_Read, &f));
+        ON_SCOPE_EXIT(fs->FileClose(&f));
+
+        R_TRY(m_fs->FileGetSize(&f, size));
+    } else {
+        struct stat st;
+        R_UNLESS(!lstat(path, &st), 0x1);
+
+        ts->is_valid = true;
+        ts->created = st.st_ctim.tv_sec;
+        ts->modified = st.st_mtim.tv_sec;
+        ts->accessed = st.st_atim.tv_sec;
+        *size = st.st_size;
+    }
+
+    R_SUCCEED();
+}
+
+Result IsDirEmpty(fs::Fs* m_fs, const fs::FsPath& path, bool* out) {
+    *out = true;
+
+    if (m_fs->IsNative()) {
+        auto fs = (fs::FsNative*)m_fs;
+
+        s64 count;
+        R_TRY(fs->DirGetEntryCount(path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &count));
+        *out = !count;
+    } else {
+        auto dir = opendir(path);
+        R_UNLESS(dir, 0x1);
+        ON_SCOPE_EXIT(closedir(dir));
+
+        struct dirent* dirent;
+        while ((dirent = readdir(dir))) {
+            if (!std::strcmp(dirent->d_name, ".") || !std::strcmp(dirent->d_name, "..")) {
+                continue;
+            }
+
+            *out = false;
+            break;
+        }
+    }
+
+    R_SUCCEED();
 }
 
 } // namespace fs

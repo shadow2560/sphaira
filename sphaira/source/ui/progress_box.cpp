@@ -219,41 +219,36 @@ auto ProgressBox::ShouldExitResult() -> Result {
     R_SUCCEED();
 }
 
-auto ProgressBox::CopyFile(const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
-    fs::FsNativeSd fs;
-    R_TRY(fs.GetFsOpenResult());
-
-    FsFile src_file;
-    R_TRY(fs.OpenFile(src_path, FsOpenMode_Read, &src_file));
-    ON_SCOPE_EXIT(fsFileClose(&src_file));
+auto ProgressBox::CopyFile(fs::Fs* fs, const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
+    fs::File src_file;
+    R_TRY(fs->OpenFile(src_path, FsOpenMode_Read, &src_file));
+    ON_SCOPE_EXIT(fs->FileClose(&src_file));
 
     s64 src_size;
-    R_TRY(fsFileGetSize(&src_file, &src_size));
+    R_TRY(fs->FileGetSize(&src_file, &src_size));
 
     // this can fail if it already exists so we ignore the result.
     // if the file actually failed to be created, the result is implicitly
     // handled when we try and open it for writing.
-    fs.CreateFile(dst_path, src_size, 0);
+    fs->CreateFile(dst_path, src_size, 0);
 
-    FsFile dst_file;
-    R_TRY(fs.OpenFile(dst_path, FsOpenMode_Write, &dst_file));
-    ON_SCOPE_EXIT(fsFileClose(&dst_file));
+    fs::File dst_file;
+    R_TRY(fs->OpenFile(dst_path, FsOpenMode_Write, &dst_file));
+    ON_SCOPE_EXIT(fs->FileClose(&dst_file));
 
-    R_TRY(fsFileSetSize(&dst_file, src_size));
+    R_TRY(fs->FileSetSize(&dst_file, src_size));
 
     s64 offset{};
     std::vector<u8> buf(1024*1024*4); // 4MiB
 
     while (offset < src_size) {
-        if (ShouldExit()) {
-            R_THROW(0xFFFF);
-        }
+        R_TRY(ShouldExitResult());
 
         u64 bytes_read;
-        R_TRY(fsFileRead(&src_file, offset, buf.data(), buf.size(), 0, &bytes_read));
+        R_TRY(fs->FileRead(&src_file, offset, buf.data(), buf.size(), 0, &bytes_read));
         Yield();
 
-        R_TRY(fsFileWrite(&dst_file, offset, buf.data(), bytes_read, FsWriteOption_None));
+        R_TRY(fs->FileWrite(&dst_file, offset, buf.data(), bytes_read, FsWriteOption_None));
         Yield();
 
         UpdateTransfer(offset, src_size);
@@ -261,6 +256,12 @@ auto ProgressBox::CopyFile(const fs::FsPath& src_path, const fs::FsPath& dst_pat
     }
 
     R_SUCCEED();
+}
+
+auto ProgressBox::CopyFile(const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
+    fs::FsNativeSd fs;
+    R_TRY(fs.GetFsOpenResult());
+    return CopyFile(&fs, src_path, dst_path);
 }
 
 void ProgressBox::Yield() {

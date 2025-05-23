@@ -36,6 +36,7 @@ struct ProgressBox final : Widget {
     auto ShouldExitResult() -> Result;
 
     // helper functions
+    auto CopyFile(fs::Fs* fs, const fs::FsPath& src, const fs::FsPath& dst) -> Result;
     auto CopyFile(const fs::FsPath& src, const fs::FsPath& dst) -> Result;
     void Yield();
 
