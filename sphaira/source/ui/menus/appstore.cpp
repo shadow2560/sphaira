@@ -13,6 +13,7 @@
 #include "yyjson_helper.hpp"
 #include "swkbd.hpp"
 #include "i18n.hpp"
+#include "hasher.hpp"
 #include "nro.hpp"
 
 #include <minIni.h>
@@ -21,7 +22,6 @@
 #include <yyjson.h>
 #include <stb_image.h>
 #include <minizip/unzip.h>
-#include <mbedtls/md5.h>
 #include <ranges>
 #include <utility>
 
@@ -356,51 +356,11 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
         pbox->NewTransfer("Checking MD5"_i18n);
         log_write("starting md5 check\n");
 
-        FsFile f;
-        R_TRY(fs.OpenFile(zip_out, FsOpenMode_Read, &f));
-        ON_SCOPE_EXIT(fsFileClose(&f));
+        std::string hash_out;
+        R_TRY(hash::Hash(pbox, hash::Type::Md5, &fs, zip_out, hash_out));
 
-        s64 size;
-        R_TRY(fsFileGetSize(&f, &size));
-
-        mbedtls_md5_context ctx;
-        mbedtls_md5_init(&ctx);
-        ON_SCOPE_EXIT(mbedtls_md5_free(&ctx));
-
-        if (mbedtls_md5_starts_ret(&ctx)) {
-            log_write("failed to start ret\n");
-        }
-
-        std::vector<u8> chunk(chunk_size);
-        s64 offset{};
-        while (offset < size) {
-            R_TRY(pbox->ShouldExitResult());
-
-            u64 bytes_read;
-            R_TRY(fsFileRead(&f, offset, chunk.data(), chunk.size(), 0, &bytes_read));
-
-            if (mbedtls_md5_update_ret(&ctx, chunk.data(), bytes_read)) {
-                log_write("failed to update ret\n");
-                R_THROW(0x1);
-            }
-
-            offset += bytes_read;
-            pbox->UpdateTransfer(offset, size);
-        }
-
-        u8 md5_out[16];
-        if (mbedtls_md5_finish_ret(&ctx, (u8*)md5_out)) {
-            R_THROW(0x1);
-        }
-
-        // convert md5 to hex string
-        char md5_str[sizeof(md5_out) * 2 + 1];
-        for (u32 i = 0; i < sizeof(md5_out); i++) {
-            std::sprintf(md5_str + i * 2, "%02x", md5_out[i]);
-        }
-
-        if (strncasecmp(md5_str, entry.md5.data(), entry.md5.length())) {
-            log_write("bad md5: %.*s vs %.*s\n", 32, md5_str, 32, entry.md5.c_str());
+        if (strncasecmp(hash_out.data(), entry.md5.data(), entry.md5.length())) {
+            log_write("bad md5: %.*s vs %.*s\n", 32, hash_out.data(), 32, entry.md5.c_str());
             R_THROW(0x1);
         }
     }

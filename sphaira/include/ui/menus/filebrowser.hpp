@@ -5,6 +5,7 @@
 #include "nro.hpp"
 #include "fs.hpp"
 #include "option.hpp"
+#include "hasher.hpp"
 // #include <optional>
 #include <span>
 
@@ -271,6 +272,8 @@ private:
     auto GetNative() -> fs::FsNative* {
         return (fs::FsNative*)m_fs.get();
     }
+
+    void DisplayHash(hash::Type type);
 
 private:
     static constexpr inline const char* INI_SECTION = "filebrowser";

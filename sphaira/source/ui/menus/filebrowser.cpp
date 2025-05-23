@@ -18,6 +18,7 @@
 #include "owo.hpp"
 #include "swkbd.hpp"
 #include "i18n.hpp"
+#include "hasher.hpp"
 #include "location.hpp"
 #include "threaded_file_transfer.hpp"
 
@@ -43,7 +44,7 @@ namespace sphaira::ui::menu::filebrowser {
 namespace {
 
 constexpr FsEntry FS_ENTRY_DEFAULT{
-    "Sd", "/", FsType::Sd, FsEntryFlag_Assoc,
+    "microSD card", "/", FsType::Sd, FsEntryFlag_Assoc,
 };
 
 constexpr FsEntry FS_ENTRIES[]{
@@ -599,6 +600,29 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 auto options = std::make_shared<Sidebar>("Advanced Options"_i18n, Sidebar::Side::RIGHT);
                 ON_SCOPE_EXIT(App::Push(options));
 
+                SidebarEntryArray::Items mount_items;
+                std::vector<FsEntry> fs_entries;
+                for (const auto& e: FS_ENTRIES) {
+                    fs_entries.emplace_back(e);
+                    mount_items.push_back(i18n::get(e.name));
+                }
+
+                const auto stdio_locations = location::GetStdio(false);
+                for (const auto& e: stdio_locations) {
+                    u32 flags{};
+                    if (e.write_protect) {
+                        flags |= FsEntryFlag_ReadOnly;
+                    }
+
+                    fs_entries.emplace_back(e.name, e.mount, FsType::Stdio, flags);
+                    mount_items.push_back(e.name);
+                }
+
+                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
+                    App::PopToMenu();
+                    SetFs(fs_entries[index_out].root, fs_entries[index_out]);
+                }, m_fs_entry.name));
+
                 options->Add(std::make_shared<SidebarEntryCallback>("Create File"_i18n, [this](){
                     std::string out;
                     if (R_SUCCEEDED(swkbd::ShowText(out, "Set File Name"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
@@ -654,33 +678,28 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     }));
                 }
 
+                options->Add(std::make_shared<SidebarEntryCallback>("Hash"_i18n, [this](){
+                    auto options = std::make_shared<Sidebar>("Hash Options"_i18n, Sidebar::Side::RIGHT);
+                    ON_SCOPE_EXIT(App::Push(options));
+
+                    options->Add(std::make_shared<SidebarEntryCallback>("CRC32"_i18n, [this](){
+                        DisplayHash(hash::Type::Crc32);
+                    }));
+                    options->Add(std::make_shared<SidebarEntryCallback>("MD5"_i18n, [this](){
+                        DisplayHash(hash::Type::Md5);
+                    }));
+                    options->Add(std::make_shared<SidebarEntryCallback>("SHA1"_i18n, [this](){
+                        DisplayHash(hash::Type::Sha1);
+                    }));
+                    options->Add(std::make_shared<SidebarEntryCallback>("SHA256"_i18n, [this](){
+                        DisplayHash(hash::Type::Sha256);
+                    }));
+                }));
+
                 options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_ignore_read_only.Get(), [this](bool& v_out){
                     m_ignore_read_only.Set(v_out);
                     m_fs->SetIgnoreReadOnly(v_out);
                 }));
-
-                SidebarEntryArray::Items mount_items;
-                std::vector<FsEntry> fs_entries;
-                for (const auto& e: FS_ENTRIES) {
-                    fs_entries.emplace_back(e);
-                    mount_items.push_back(i18n::get(e.name));
-                }
-
-                const auto stdio_locations = location::GetStdio(false);
-                for (const auto& e: stdio_locations) {
-                    u32 flags{};
-                    if (e.write_protect) {
-                        flags |= FsEntryFlag_ReadOnly;
-                    }
-
-                    fs_entries.emplace_back(e.name, e.mount, FsType::Stdio, flags);
-                    mount_items.push_back(e.name);
-                }
-
-                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
-                    App::PopToMenu();
-                    SetFs(fs_entries[index_out].root, fs_entries[index_out]);
-                }, m_fs_entry.name));
             }));
         }})
     );
@@ -1931,6 +1950,27 @@ void Menu::SetFs(const fs::FsPath& new_path, const FsEntry& new_entry) {
             Scan(m_path);
         }
     }
+}
+
+void Menu::DisplayHash(hash::Type type) {
+    // hack because we cannot share output between threaded calls...
+    static std::string hash_out;
+    hash_out.clear();
+
+    App::Push(std::make_shared<ProgressBox>(0, "Hashing"_i18n, GetEntry().name, [this, type](auto pbox) -> Result {
+        R_TRY(hash::Hash(pbox, type, m_fs.get(), GetNewPathCurrent(), hash_out));
+
+        R_SUCCEED();
+    }, [this, type](Result rc){
+        App::PushErrorBox(rc, "Failed to hash file..."_i18n);
+
+        if (R_SUCCEEDED(rc)) {
+            char buf[0x100];
+            // std::snprintf(buf, sizeof(buf), "%s\n%s\n%s", hash::GetTypeStr(type), hash_out.c_str(), GetEntry().GetName());
+            std::snprintf(buf, sizeof(buf), "%s\n%s", hash::GetTypeStr(type), hash_out.c_str());
+            App::Push(std::make_shared<OptionBox>(buf, "OK"_i18n));
+        }
+    }));
 }
 
 } // namespace sphaira::ui::menu::filebrowser
