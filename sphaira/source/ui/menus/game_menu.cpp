@@ -488,6 +488,7 @@ Result BuildContentEntry(const NsApplicationContentMetaStatus& status, ContentIn
     R_UNLESS(meta_total == 1, 0x1);
     R_UNLESS(meta_entries_written == 1, 0x1);
 
+    std::vector<NcmContentInfo> cnmt_infos;
     for (s32 i = 0; ; i++) {
         s32 entries_written;
         NcmContentInfo info_out;
@@ -512,9 +513,15 @@ Result BuildContentEntry(const NsApplicationContentMetaStatus& status, ContentIn
             }
         }
 
-        out.content_infos.emplace_back(info_out);
+        if (info_out.content_type == NcmContentType_Meta) {
+            cnmt_infos.emplace_back(info_out);
+        } else {
+            out.content_infos.emplace_back(info_out);
+        }
     }
 
+    // append cnmt at the end of the list, following StandardNSP spec.
+    out.content_infos.insert_range(out.content_infos.end(), cnmt_infos);
     out.status = status;
     R_SUCCEED();
 }
