@@ -600,10 +600,6 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
 
                 SidebarEntryArray::Items mount_items;
                 std::vector<FsEntry> fs_entries;
-                for (const auto& e: FS_ENTRIES) {
-                    fs_entries.emplace_back(e);
-                    mount_items.push_back(i18n::get(e.name));
-                }
 
                 const auto stdio_locations = location::GetStdio(false);
                 for (const auto& e: stdio_locations) {
@@ -614,6 +610,11 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
 
                     fs_entries.emplace_back(e.name, e.mount, FsType::Stdio, flags);
                     mount_items.push_back(e.name);
+                }
+
+                for (const auto& e: FS_ENTRIES) {
+                    fs_entries.emplace_back(e);
+                    mount_items.push_back(i18n::get(e.name));
                 }
 
                 options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){

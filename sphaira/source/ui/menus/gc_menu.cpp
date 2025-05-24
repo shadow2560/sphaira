@@ -142,7 +142,7 @@ auto BuildFullDumpPath(DumpFileType type, std::span<const ApplicationEntry> entr
         out = base_path + GetDumpTypeStr(type);
     }
 
-    return fs::AppendPath("/dumps/XCI", out);
+    return fs::AppendPath("/dumps/Gamecard", out);
 }
 
 // @Gc is the mount point, S is for secure partion, the remaining is the
