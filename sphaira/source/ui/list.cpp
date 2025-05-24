@@ -12,7 +12,8 @@ List::List(s64 row, s64 page, const Vec4& pos, const Vec4& v, const Vec2& pad)
 , m_v{v}
 , m_pad{pad} {
     m_pos = pos;
-    SetScrollBarPos(SCREEN_WIDTH - 50, 100, SCREEN_HEIGHT-200);
+    // SetScrollBarPos(SCREEN_WIDTH - 50, 100, SCREEN_HEIGHT-200);
+    SetScrollBarPos(pos.x + pos.w, 100, SCREEN_HEIGHT-200);
 }
 
 auto List::ClampX(float x, s64 count) const -> float {
@@ -165,8 +166,8 @@ void List::OnUpdateHome(Controller* controller, TouchInfo* touch, s64 index, s64
 }
 
 void List::OnUpdateGrid(Controller* controller, TouchInfo* touch, s64 index, s64 count, TouchCallback callback) {
-    const auto page_up_button = m_row == 1 ? Button::DPAD_LEFT : Button::L2;
-    const auto page_down_button = m_row == 1 ? Button::DPAD_RIGHT : Button::R2;
+    const auto page_up_button = GetPageJump() ? (m_row == 1 ? Button::DPAD_LEFT : Button::L2) : (Button::NONE);
+    const auto page_down_button = GetPageJump() ? (m_row == 1 ? Button::DPAD_RIGHT : Button::R2) : (Button::NONE);
 
     if (controller->GotDown(Button::DOWN)) {
         if (ScrollDown(index, m_row, count)) {
@@ -277,7 +278,11 @@ void List::DrawGrid(NVGcontext* vg, Theme* theme, s64 count, Callback callback) 
 
         const auto x = v.x;
 
-        for (; i < count; i++, v.x += v.w + m_pad.x) {
+        for (s64 row = 0; i < count; row++, i++, v.x += v.w + m_pad.x) {
+            if (row >= m_row) {
+                break;
+            }
+
             // only draw if full x is in bounds
             if (v.x + v.w > GetX() + GetW()) {
                 break;

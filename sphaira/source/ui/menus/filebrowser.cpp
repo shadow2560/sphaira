@@ -288,11 +288,11 @@ auto GetRomIcon(fs::Fs* fs, ProgressBox* pbox, std::string filename, const RomDa
 
 } // namespace
 
-Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i18n}, m_nro_entries{nro_entries} {
+FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSide side) : m_menu{menu}, m_side{side} {
     this->SetActions(
         std::make_pair(Button::L2, Action{[this](){
-            if (!m_selected_files.empty()) {
-                ResetSelection();
+            if (!m_menu->m_selected.Empty()) {
+                m_menu->ResetSelection();
             }
 
             const auto set = m_selected_count != m_entries_current.size();
@@ -310,8 +310,8 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
             }
         }}),
         std::make_pair(Button::R2, Action{[this](){
-            if (!m_selected_files.empty()) {
-                ResetSelection();
+            if (!m_menu->m_selected.Empty()) {
+                m_menu->ResetSelection();
             }
 
             GetEntry().selected ^= 1;
@@ -353,7 +353,7 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 } else if (App::GetInstallEnable() && IsExtension(entry.GetExtension(), INSTALL_EXTENSIONS)) {
                     InstallFiles();
                 } else if (IsSd()) {
-                    const auto assoc_list = FindFileAssocFor();
+                    const auto assoc_list = m_menu->FindFileAssocFor();
                     if (!assoc_list.empty()) {
                         // for (auto&e : assoc_list) {
                         //     log_write("assoc got: %s\n", e.path.c_str());
@@ -414,59 +414,44 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 order_items.push_back("Ascending"_i18n);
 
                 options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
-                    m_sort.Set(index_out);
+                    m_menu->m_sort.Set(index_out);
                     SortAndFindLastFile();
-                }, m_sort.Get()));
+                }, m_menu->m_sort.Get()));
 
                 options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
-                    m_order.Set(index_out);
+                    m_menu->m_order.Set(index_out);
                     SortAndFindLastFile();
-                }, m_order.Get()));
+                }, m_menu->m_order.Get()));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Show Hidden"_i18n, m_show_hidden.Get(), [this](bool& v_out){
-                    m_show_hidden.Set(v_out);
-                    SortAndFindLastFile();
-                }));
-
-                options->Add(std::make_shared<SidebarEntryBool>("Folders First"_i18n, m_folders_first.Get(), [this](bool& v_out){
-                    m_folders_first.Set(v_out);
+                options->Add(std::make_shared<SidebarEntryBool>("Show Hidden"_i18n, m_menu->m_show_hidden.Get(), [this](bool& v_out){
+                    m_menu->m_show_hidden.Set(v_out);
                     SortAndFindLastFile();
                 }));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Hidden Last"_i18n, m_hidden_last.Get(), [this](bool& v_out){
-                    m_hidden_last.Set(v_out);
+                options->Add(std::make_shared<SidebarEntryBool>("Folders First"_i18n, m_menu->m_folders_first.Get(), [this](bool& v_out){
+                    m_menu->m_folders_first.Set(v_out);
+                    SortAndFindLastFile();
+                }));
+
+                options->Add(std::make_shared<SidebarEntryBool>("Hidden Last"_i18n, m_menu->m_hidden_last.Get(), [this](bool& v_out){
+                    m_menu->m_hidden_last.Set(v_out);
                     SortAndFindLastFile();
                 }));
             }));
 
             if (m_entries_current.size()) {
                 options->Add(std::make_shared<SidebarEntryCallback>("Cut"_i18n, [this](){
-                    AddSelectedEntries(SelectedType::Cut);
+                    m_menu->AddSelectedEntries(SelectedType::Cut);
                 }, true));
 
                 options->Add(std::make_shared<SidebarEntryCallback>("Copy"_i18n, [this](){
-                    AddSelectedEntries(SelectedType::Copy);
+                    m_menu->AddSelectedEntries(SelectedType::Copy);
                 }, true));
-
-                options->Add(std::make_shared<SidebarEntryCallback>("Delete"_i18n, [this](){
-                    AddSelectedEntries(SelectedType::Delete);
-
-                    log_write("clicked on delete\n");
-                    App::Push(std::make_shared<OptionBox>(
-                        "Delete Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
-                            if (op_index && *op_index) {
-                                App::PopToMenu();
-                                OnDeleteCallback();
-                            }
-                        }
-                    ));
-                    log_write("pushed delete\n");
-                }));
             }
 
-            if (!m_selected_files.empty() && (m_selected_type == SelectedType::Cut || m_selected_type == SelectedType::Copy)) {
+            if (!m_menu->m_selected.Empty() && (m_menu->m_selected.Type() == SelectedType::Cut || m_menu->m_selected.Type() == SelectedType::Copy)) {
                 options->Add(std::make_shared<SidebarEntryCallback>("Paste"_i18n, [this](){
-                    const std::string buf = "Paste "_i18n + std::to_string(m_selected_files.size()) + " file(s)?"_i18n;
+                    const std::string buf = "Paste file(s)?"_i18n;
                     App::Push(std::make_shared<OptionBox>(
                         buf, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
                         if (op_index && *op_index) {
@@ -506,16 +491,29 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 }));
             }
 
+            if (m_entries_current.size()) {
+                options->Add(std::make_shared<SidebarEntryCallback>("Delete"_i18n, [this](){
+                    m_menu->AddSelectedEntries(SelectedType::Delete);
+
+                    log_write("clicked on delete\n");
+                    App::Push(std::make_shared<OptionBox>(
+                        "Delete Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
+                            if (op_index && *op_index) {
+                                App::PopToMenu();
+                                OnDeleteCallback();
+                            }
+                        }
+                    ));
+                    log_write("pushed delete\n");
+                }));
+            }
+
             // returns true if all entries match the ext array.
             const auto check_all_ext = [this](auto& exts){
-                if (!m_selected_count) {
-                    return IsExtension(GetEntry().GetExtension(), exts);
-                } else {
-                    const auto entries = GetSelectedEntries();
-                    for (auto&e : entries) {
-                        if (!IsExtension(e.GetExtension(), exts)) {
-                            return false;
-                        }
+                const auto entries = GetSelectedEntries();
+                for (auto&e : entries) {
+                    if (!IsExtension(e.GetExtension(), exts)) {
+                        return false;
                     }
                 }
                 return true;
@@ -530,8 +528,8 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                 }
             }
 
-            if (IsSd() && m_entries_current.size()) {
-                if (App::GetInstallEnable() && HasTypeInSelectedEntries(FsDirEntryType_File) && !m_selected_count && (GetEntry().GetExtension() == "nro" || !FindFileAssocFor().empty())) {
+            if (IsSd() && m_entries_current.size() && !m_selected_count) {
+                if (App::GetInstallEnable() && GetEntry().IsFile() && (GetEntry().GetExtension() == "nro" || !m_menu->FindFileAssocFor().empty())) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
                         if (App::GetInstallPrompt()) {
                             App::Push(std::make_shared<OptionBox>(
@@ -696,31 +694,37 @@ Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i1
                     }));
                 }));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_ignore_read_only.Get(), [this](bool& v_out){
-                    m_ignore_read_only.Set(v_out);
+                options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_menu->m_ignore_read_only.Get(), [this](bool& v_out){
+                    m_menu->m_ignore_read_only.Set(v_out);
                     m_fs->SetIgnoreReadOnly(v_out);
                 }));
             }));
         }})
     );
 
-    const Vec4 v{75, GetY() + 1.f + 42.f, 1220.f-45.f*2, 60};
-    m_list = std::make_unique<List>(1, 8, m_pos, v);
+    SetSide(m_side);
 
-    fs::FsPath buf;
-    ini_gets("paths", "last_path", "/", buf, sizeof(buf), App::CONFIG_PATH);
-    SetFs(buf, FS_ENTRY_DEFAULT);
+    auto buf = path;
+    if (path.empty()) {
+        ini_gets("paths", "last_path", entry.root, buf, sizeof(buf), App::CONFIG_PATH);
+    }
+
+    SetFs(buf, entry);
 }
 
-Menu::~Menu() {
+FsView::FsView(Menu* menu, ViewSide side) : FsView{menu, "", FS_ENTRY_DEFAULT, side} {
+
+}
+
+FsView::~FsView() {
     // don't store mount points for non-sd card paths.
     if (IsSd()) {
         ini_puts("paths", "last_path", m_path, App::CONFIG_PATH);
     }
 }
 
-void Menu::Update(Controller* controller, TouchInfo* touch) {
-    MenuBase::Update(controller, touch);
+void FsView::Update(Controller* controller, TouchInfo* touch) {
+    Widget::Update(controller, touch);
     m_list->OnUpdate(controller, touch, m_index, m_entries_current.size(), [this](bool touch, auto i) {
         if (touch && m_index == i) {
             FireAction(Button::A);
@@ -731,13 +735,11 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
     });
 }
 
-void Menu::Draw(NVGcontext* vg, Theme* theme) {
-    MenuBase::Draw(vg, theme);
-
+void FsView::Draw(NVGcontext* vg, Theme* theme) {
     const auto& text_col = theme->GetColour(ThemeEntryID_TEXT);
 
     if (m_entries_current.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty..."_i18n.c_str());
+        gfx::drawTextArgs(vg, GetX() + GetW() / 2.f, GetY() + GetH() / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty..."_i18n.c_str());
         return;
     }
 
@@ -758,10 +760,6 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             if (auto ext = std::strrchr(e.name, '.')) {
                 e.extension = ext+1;
             }
-        }
-
-        if (e.IsSelected()) {
-            gfx::drawText(vg, Vec2{x - 10.f, y + (h / 2.f) - (24.f / 2)}, 24.f, "\uE14B", nullptr, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT_SELECTED));
         }
 
         auto text_id = ThemeEntryID_TEXT;
@@ -798,10 +796,11 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             DrawElement(x + text_xoffset, y + 5, 50, 50, icon);
         }
 
-        nvgSave(vg);
-        nvgIntersectScissor(vg, x + text_xoffset+65, y, w-(x+text_xoffset+65+50), h);
-            gfx::drawText(vg, x + text_xoffset+65, y + (h / 2.f), 20.f, e.name, NULL, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id));
-        nvgRestore(vg);
+        if (e.IsSelected()) {
+            gfx::drawText(vg, x + text_xoffset + 50 / 2, y + (h / 2.f) - (24.f / 2), 24.f, "\uE14B", nullptr, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT_SELECTED));
+        }
+
+        m_scroll_name.Draw(vg, selected, x + text_xoffset+65, y + (h / 2.f), w-(75+text_xoffset+65+50), 20, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id), e.name);
 
         if (m_fs->IsNative() && e.IsDir()) {
             gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%zd files"_i18n.c_str(), e.file_count);
@@ -815,6 +814,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                     m_fs->FileGetSizeAndTimestamp(path, &e.time_stamp, &e.file_size);
                 }
             }
+
             const auto t = (time_t)(e.time_stamp.modified);
             struct tm tm{};
             localtime_r(&t, &tm);
@@ -828,8 +828,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     });
 }
 
-void Menu::OnFocusGained() {
-    MenuBase::OnFocusGained();
+void FsView::OnFocusGained() {
+    Widget::OnFocusGained();
     if (m_entries.empty()) {
         if (m_path.empty()) {
             Scan(m_fs->Root());
@@ -837,15 +837,44 @@ void Menu::OnFocusGained() {
             Scan(m_path);
         }
     }
-
-    if (!m_loaded_assoc_entries) {
-        m_loaded_assoc_entries = true;
-        log_write("loading assoc entries\n");
-        LoadAssocEntries();
-    }
 }
 
-void Menu::SetIndex(s64 index) {
+void FsView::SetSide(ViewSide side) {
+    m_side = side;
+
+    const auto pos = m_menu->GetPos();
+    this->SetPos(pos);
+    Vec4 v{75, GetY() + 1.f + 42.f, 1220.f - 45.f * 2, 60};
+
+    if (m_menu->IsSplitScreen()) {
+        if (m_side == ViewSide::Left) {
+            this->SetW(pos.w / 2 - pos.x / 2);
+            this->SetX(pos.x / 2);
+        } else if (m_side == ViewSide::Right) {
+            this->SetW(pos.w / 2 - pos.x / 2);
+            this->SetX(pos.x / 2 + SCREEN_WIDTH / 2);
+        }
+
+        v.w /= 2;
+        v.w -= v.x / 2;
+
+        if (m_side == ViewSide::Left) {
+            v.x = v.x / 2;
+        } else if (m_side == ViewSide::Right) {
+            v.x = v.x / 2 + SCREEN_WIDTH / 2;
+        }
+    }
+
+    m_list = std::make_unique<List>(1, 8, m_pos, v);
+    if (m_menu->IsSplitScreen()) {
+        m_list->SetPageJump(false);
+    }
+
+    // reset scroll position.
+    m_scroll_name.Reset();
+}
+
+void FsView::SetIndex(s64 index) {
     m_index = index;
     if (!m_index) {
         m_list->SetYoff();
@@ -874,10 +903,10 @@ void Menu::SetIndex(s64 index) {
         }
     }
 
-    UpdateSubheading();
+    m_menu->UpdateSubheading();
 }
 
-void Menu::InstallForwarder() {
+void FsView::InstallForwarder() {
     if (GetEntry().GetExtension() == "nro") {
         if (R_FAILED(homebrew::Menu::InstallHomebrewFromPath(GetNewPathCurrent()))) {
             log_write("failed to create forwarder\n");
@@ -885,7 +914,7 @@ void Menu::InstallForwarder() {
         return;
     }
 
-    const auto assoc_list = FindFileAssocFor();
+    const auto assoc_list = m_menu->FindFileAssocFor();
     if (assoc_list.empty()) {
         log_write("failed to find assoc for: %s ext: %s\n", GetEntry().name, GetEntry().extension.c_str());
         return;
@@ -938,7 +967,7 @@ void Menu::InstallForwarder() {
     ));
 }
 
-void Menu::InstallFiles() {
+void FsView::InstallFiles() {
     const auto targets = GetSelectedEntries();
 
     App::Push(std::make_shared<OptionBox>("Install Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this, targets](auto op_index){
@@ -961,7 +990,7 @@ void Menu::InstallFiles() {
     }));
 }
 
-void Menu::UnzipFiles(fs::FsPath dir_path) {
+void FsView::UnzipFiles(fs::FsPath dir_path) {
     const auto targets = GetSelectedEntries();
 
     // set to current path.
@@ -1056,7 +1085,7 @@ void Menu::UnzipFiles(fs::FsPath dir_path) {
     }));
 }
 
-void Menu::ZipFiles(fs::FsPath zip_out) {
+void FsView::ZipFiles(fs::FsPath zip_out) {
     const auto targets = GetSelectedEntries();
 
     // set to current path.
@@ -1188,7 +1217,7 @@ void Menu::ZipFiles(fs::FsPath zip_out) {
     }));
 }
 
-void Menu::UploadFiles() {
+void FsView::UploadFiles() {
     const auto targets = GetSelectedEntries();
 
     const auto network_locations = location::Load();
@@ -1278,7 +1307,7 @@ void Menu::UploadFiles() {
                 R_SUCCEED();
             }, [this](Result rc){
                 App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
-                ResetSelection();
+                m_menu->ResetSelection();
 
                 if (R_SUCCEEDED(rc)) {
                     App::Notify("Upload successfull!");
@@ -1289,7 +1318,7 @@ void Menu::UploadFiles() {
     ));
 }
 
-auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
+auto FsView::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
     log_write("new scan path: %s\n", new_path.s);
     if (!is_walk_up && !m_path.empty() && !m_entries_current.empty()) {
         const LastFile f(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
@@ -1300,11 +1329,13 @@ auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
     m_entries.clear();
     m_index = 0;
     m_list->SetYoff(0);
-    SetTitleSubHeading(m_path);
+    m_menu->SetTitleSubHeading(m_path);
 
-    if (m_selected_type == SelectedType::None) {
-        ResetSelection();
-    }
+    // todo: verify this works as expected.
+    m_selected_count = 0;
+    // if (m_selected_type == SelectedType::None) {
+    //     ResetSelection();
+    // }
 
     fs::Dir d;
     R_TRY(m_fs->OpenDirectory(new_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles, &d));
@@ -1355,10 +1386,558 @@ auto Menu::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
     R_SUCCEED();
 }
 
+void FsView::Sort() {
+    // returns true if lhs should be before rhs
+    const auto sort = m_menu->m_sort.Get();
+    const auto order = m_menu->m_order.Get();
+    const auto folders_first = m_menu->m_folders_first.Get();
+    const auto hidden_last = m_menu->m_hidden_last.Get();
+
+    const auto sorter = [this, sort, order, folders_first, hidden_last](u32 _lhs, u32 _rhs) -> bool {
+        const auto& lhs = m_entries[_lhs];
+        const auto& rhs = m_entries[_rhs];
+
+        if (hidden_last) {
+            if (lhs.IsHidden() && !rhs.IsHidden()) {
+                return false;
+            } else if (!lhs.IsHidden() && rhs.IsHidden()) {
+                return true;
+            }
+        }
+
+        if (folders_first) {
+            if (lhs.type == FsDirEntryType_Dir && !(rhs.type == FsDirEntryType_Dir)) { // left is folder
+                return true;
+            } else if (!(lhs.type == FsDirEntryType_Dir) && rhs.type == FsDirEntryType_Dir) { // right is folder
+                return false;
+            }
+        }
+
+        switch (sort) {
+            case SortType_Size: {
+                if (lhs.file_size == rhs.file_size) {
+                    return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) < 0;
+                } else if (order == OrderType_Descending) {
+                    return lhs.file_size > rhs.file_size;
+                } else {
+                    return lhs.file_size < rhs.file_size;
+                }
+            } break;
+            case SortType_Alphabetical: {
+                if (order == OrderType_Descending) {
+                    return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) < 0;
+                } else {
+                    return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) > 0;
+                }
+            } break;
+        }
+
+        std::unreachable();
+    };
+
+    if (m_menu->m_show_hidden.Get()) {
+        m_entries_current = m_entries_index_hidden;
+    } else {
+        m_entries_current = m_entries_index;
+    }
+
+    std::sort(m_entries_current.begin(), m_entries_current.end(), sorter);
+}
+
+void FsView::SortAndFindLastFile() {
+    std::optional<LastFile> last_file;
+    if (!m_path.empty() && !m_entries_current.empty()) {
+        last_file = LastFile(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
+    }
+
+    Sort();
+
+    if (last_file.has_value()) {
+        SetIndexFromLastFile(*last_file);
+    }
+}
+
+void FsView::SetIndexFromLastFile(const LastFile& last_file) {
+    SetIndex(0);
+
+    s64 index = -1;
+    for (u64 i = 0; i < m_entries_current.size(); i++) {
+        if (last_file.name == GetEntry(i).name) {
+            index = i;
+            break;
+        }
+    }
+    if (index >= 0) {
+        if (index == last_file.index && m_entries_current.size() == last_file.entries_count) {
+            m_list->SetYoff(last_file.offset);
+            log_write("index is the same as last time\n");
+        } else {
+            // file position changed!
+            log_write("file position changed\n");
+            // guesstimate where the position is
+            if (index >= 8) {
+                m_list->SetYoff(((index - 8) + 1) * m_list->GetMaxY());
+            } else {
+                m_list->SetYoff(0);
+            }
+        }
+        SetIndex(index);
+    }
+}
+
+void FsView::OnDeleteCallback() {
+    bool use_progress_box{true};
+
+    // check if we only have 1 file / folder
+    if (m_menu->m_selected.m_files.size() == 1) {
+        const auto& entry = m_menu->m_selected.m_files[0];
+        const auto full_path = GetNewPath(m_menu->m_selected.m_path, entry.name);
+
+        if (entry.IsDir()) {
+            bool empty{};
+            m_fs->IsDirEmpty(full_path, &empty);
+            if (empty) {
+                m_fs->DeleteDirectory(full_path);
+                use_progress_box = false;
+            }
+        } else {
+            m_fs->DeleteFile(full_path);
+            use_progress_box = false;
+        }
+    }
+
+    if (!use_progress_box) {
+        m_menu->RefreshViews();
+        log_write("did delete\n");
+    } else {
+        App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox) -> Result {
+            FsDirCollections collections;
+            auto& selected = m_menu->m_selected;
+            auto src_fs = selected.m_view->GetFs();
+
+            // build list of dirs / files
+            for (const auto&p : selected.m_files) {
+                pbox->Yield();
+                R_TRY(pbox->ShouldExitResult());
+
+                const auto full_path = GetNewPath(selected.m_path, p.name);
+                if (p.IsDir()) {
+                    pbox->NewTransfer("Scanning "_i18n + full_path);
+                    R_TRY(get_collections(src_fs, full_path, p.name, collections));
+                }
+            }
+
+            return DeleteAllCollections(pbox, src_fs, selected, collections);
+        }, [this](Result rc){
+            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
+            m_menu->RefreshViews();
+            log_write("did delete\n");
+        }));
+    }
+}
+
+void FsView::OnPasteCallback() {
+    // check if we only have 1 file / folder and is cut (rename)
+    if (m_menu->m_selected.SameFs(this) && m_menu->m_selected.m_files.size() == 1 && m_menu->m_selected.m_type == SelectedType::Cut) {
+        const auto& entry = m_menu->m_selected.m_files[0];
+        const auto full_path = GetNewPath(m_menu->m_selected.m_path, entry.name);
+
+        if (entry.IsDir()) {
+            m_fs->RenameDirectory(full_path, GetNewPath(entry));
+        } else {
+            m_fs->RenameFile(full_path, GetNewPath(entry));
+        }
+
+        m_menu->RefreshViews();
+    } else {
+        App::Push(std::make_shared<ProgressBox>(0, "Pasting"_i18n, "", [this](auto pbox) -> Result {
+            auto& selected = m_menu->m_selected;
+            auto src_fs = selected.m_view->GetFs();
+
+            if (selected.SameFs(this) && selected.m_type == SelectedType::Cut) {
+                for (const auto& p : selected.m_files) {
+                    pbox->Yield();
+                    R_TRY(pbox->ShouldExitResult());
+
+                    const auto src_path = GetNewPath(selected.m_path, p.name);
+                    const auto dst_path = GetNewPath(m_path, p.name);
+
+                    pbox->SetTitle(p.name);
+                    pbox->NewTransfer("Pasting "_i18n + src_path);
+
+                    if (p.IsDir()) {
+                        m_fs->RenameDirectory(src_path, dst_path);
+                    } else {
+                        m_fs->RenameFile(src_path, dst_path);
+                    }
+                }
+            } else {
+                FsDirCollections collections;
+
+                // build list of dirs / files
+                for (const auto&p : selected.m_files) {
+                    pbox->Yield();
+                    R_TRY(pbox->ShouldExitResult());
+
+                    const auto full_path = GetNewPath(selected.m_path, p.name);
+                    if (p.IsDir()) {
+                        pbox->NewTransfer("Scanning "_i18n + full_path);
+                        R_TRY(get_collections(src_fs, full_path, p.name, collections));
+                    }
+                }
+
+                for (const auto& p : selected.m_files) {
+                    pbox->Yield();
+                    R_TRY(pbox->ShouldExitResult());
+
+                    const auto src_path = GetNewPath(selected.m_path, p.name);
+                    const auto dst_path = GetNewPath(p);
+
+                    if (p.IsDir()) {
+                        pbox->SetTitle(p.name);
+                        pbox->NewTransfer("Creating "_i18n + dst_path);
+                        m_fs->CreateDirectory(dst_path);
+                    } else {
+                        pbox->SetTitle(p.name);
+                        pbox->NewTransfer("Copying "_i18n + src_path);
+                        R_TRY(pbox->CopyFile(src_fs, m_fs.get(), src_path, dst_path));
+
+                        // delete src file. folders are removed after.
+                        if (selected.m_type == SelectedType::Cut) {
+                            R_TRY(src_fs->DeleteFile(src_path));
+                        }
+                    }
+                }
+
+                // copy everything in collections
+                for (const auto& c : collections) {
+                    const auto base_dst_path = GetNewPath(m_path, c.parent_name);
+
+                    for (const auto& p : c.dirs) {
+                        pbox->Yield();
+                        R_TRY(pbox->ShouldExitResult());
+
+                        // const auto src_path = GetNewPath(c.path, p.name);
+                        const auto dst_path = GetNewPath(base_dst_path, p.name);
+
+                        pbox->SetTitle(p.name);
+                        pbox->NewTransfer("Creating "_i18n + dst_path);
+                        m_fs->CreateDirectory(dst_path);
+                    }
+
+                    for (const auto& p : c.files) {
+                        pbox->Yield();
+                        R_TRY(pbox->ShouldExitResult());
+
+                        const auto src_path = GetNewPath(c.path, p.name);
+                        const auto dst_path = GetNewPath(base_dst_path, p.name);
+
+                        pbox->SetTitle(p.name);
+                        pbox->NewTransfer("Copying "_i18n + src_path);
+                        R_TRY(pbox->CopyFile(src_fs, m_fs.get(), src_path, dst_path));
+
+                        // delete src file. folders are removed after.
+                        if (selected.m_type == SelectedType::Cut) {
+                            R_TRY(src_fs->DeleteFile(src_path));
+                        }
+                    }
+                }
+
+                // moving accross fs is not possible, thus files have to be copied.
+                // this leaves the files on the src_fs.
+                // the files are deleted one by one after a successfull copy (see above)
+                // however this leaves the folders.
+                // the folders cannot be deleted until the end as they have to be removed in
+                // reverse order so that the folder can be deleted (it must be empty).
+                if (selected.m_type == SelectedType::Cut) {
+                    R_TRY(DeleteAllCollections(pbox, src_fs, selected, collections, FsDirOpenMode_ReadDirs));
+                }
+            }
+
+            R_SUCCEED();
+        }, [this](Result rc){
+            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+
+            m_menu->RefreshViews();
+            log_write("did paste\n");
+        }));
+    }
+}
+
+void FsView::OnRenameCallback() {
+
+}
+
+auto FsView::CheckIfUpdateFolder() -> Result {
+    R_UNLESS(IsSd(), FsError_InvalidMountName);
+    R_UNLESS(m_fs->IsNative(), 0x1);
+
+    // check if we have already tried to find daybreak
+    if (m_daybreak_path.has_value() && m_daybreak_path.value().empty()) {
+        return FsError_FileNotFound;
+    }
+
+    // check that we have daybreak installed
+    if (!m_daybreak_path.has_value()) {
+        auto daybreak_path = DAYBREAK_PATH;
+        if (!m_fs->FileExists(DAYBREAK_PATH)) {
+            if (auto e = nro_find(m_menu->m_nro_entries, "Daybreak", "Atmosphere-NX", {}); e.has_value()) {
+                daybreak_path = e.value().path;
+            } else {
+                log_write("failed to find daybreak\n");
+                m_daybreak_path = "";
+                return FsError_FileNotFound;
+            }
+        }
+        m_daybreak_path = daybreak_path;
+        log_write("found daybreak in: %s\n", m_daybreak_path.value().s);
+    }
+
+    s64 count;
+    R_TRY(GetNative()->DirGetEntryCount(m_path, FsDirOpenMode_ReadDirs, &count));
+
+    // check that we are at the bottom level
+    R_UNLESS(count == 0, 0x1);
+    // check that we have enough ncas and not too many
+    R_UNLESS(m_entries.size() > 150 && m_entries.size() < 300, 0x1);
+
+    // check that all entries end in .nca
+    const auto nca_ext = std::string_view{".nca"};
+    for (auto& e : m_entries) {
+        const auto ext = std::strrchr(e.name, '.');
+        R_UNLESS(ext && ext == nca_ext, 0x1);
+    }
+
+    R_SUCCEED();
+}
+
+auto FsView::get_collection(fs::Fs* fs, const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollection& out, bool inc_file, bool inc_dir, bool inc_size) -> Result {
+    out.path = path;
+    out.parent_name = parent_name;
+
+    const auto fetch = [fs, &path](std::vector<FsDirectoryEntry>& out, u32 flags) -> Result {
+        fs::Dir d;
+        R_TRY(fs->OpenDirectory(path, flags, &d));
+        ON_SCOPE_EXIT(fs->DirClose(&d));
+        return fs->DirReadAll(&d, out);
+    };
+
+    if (inc_file) {
+        u32 flags = FsDirOpenMode_ReadFiles;
+        if (!inc_size) {
+            flags |= FsDirOpenMode_NoFileSize;
+        }
+        R_TRY(fetch(out.files, flags));
+    }
+
+    if (inc_dir) {
+        R_TRY(fetch(out.dirs, FsDirOpenMode_ReadDirs));
+    }
+
+    R_SUCCEED();
+}
+
+auto FsView::get_collections(fs::Fs* fs, const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out, bool inc_size) -> Result {
+    // get a list of all the files / dirs
+    FsDirCollection collection;
+    R_TRY(get_collection(fs, path, parent_name, collection, true, true, inc_size));
+    log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path.s, parent_name.s, collection.files.size(), collection.dirs.size());
+    out.emplace_back(collection);
+
+    // for (size_t i = 0; i < collection.dirs.size(); i++) {
+    for (const auto&p : collection.dirs) {
+        // use heap as to not explode the stack
+        const auto new_path = std::make_unique<fs::FsPath>(FsView::GetNewPath(path, p.name));
+        const auto new_parent_name = std::make_unique<fs::FsPath>(FsView::GetNewPath(parent_name, p.name));
+        log_write("trying to get nested collection: %s parent_name: %s\n", new_path->s, new_parent_name->s);
+        R_TRY(get_collections(fs, *new_path, *new_parent_name, out, inc_size));
+    }
+
+    R_SUCCEED();
+}
+
+auto FsView::get_collection(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollection& out, bool inc_file, bool inc_dir, bool inc_size) -> Result {
+    return get_collection(m_fs.get(), path, parent_name, out, true, true, inc_size);
+}
+
+auto FsView::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out, bool inc_size) -> Result {
+    return get_collections(m_fs.get(), path, parent_name, out, inc_size);
+}
+
+static Result DeleteAllCollections(ProgressBox* pbox, fs::Fs* fs, const SelectedStash& selected, const FsDirCollections& collections, u32 mode = FsDirOpenMode_ReadDirs|FsDirOpenMode_ReadFiles) {
+    // delete everything in collections, reversed
+    for (const auto& c : std::views::reverse(collections)) {
+        const auto delete_func = [&](auto& array) -> Result {
+            for (const auto& p : array) {
+                pbox->Yield();
+                R_TRY(pbox->ShouldExitResult());
+
+                const auto full_path = FsView::GetNewPath(c.path, p.name);
+                pbox->SetTitle(p.name);
+                pbox->NewTransfer("Deleting "_i18n + full_path);
+                if ((mode & FsDirOpenMode_ReadDirs) && p.type == FsDirEntryType_Dir) {
+                    log_write("deleting dir: %s\n", full_path.s);
+                    R_TRY(fs->DeleteDirectory(full_path));
+                } else if ((mode & FsDirOpenMode_ReadFiles) && p.type == FsDirEntryType_File) {
+                    log_write("deleting file: %s\n", full_path.s);
+                    R_TRY(fs->DeleteFile(full_path));
+                }
+            }
+
+            R_SUCCEED();
+        };
+
+        R_TRY(delete_func(c.files));
+        R_TRY(delete_func(c.dirs));
+    }
+
+    for (const auto& p : selected.m_files) {
+        pbox->Yield();
+        R_TRY(pbox->ShouldExitResult());
+
+        const auto full_path = FsView::GetNewPath(selected.m_path, p.name);
+        pbox->SetTitle(p.name);
+        pbox->NewTransfer("Deleting "_i18n + full_path);
+
+        if ((mode & FsDirOpenMode_ReadDirs) && p.type == FsDirEntryType_Dir) {
+            log_write("deleting dir: %s\n", full_path.s);
+            R_TRY(fs->DeleteDirectory(full_path));
+        } else if ((mode & FsDirOpenMode_ReadFiles) && p.type == FsDirEntryType_File) {
+            log_write("deleting file: %s\n", full_path.s);
+            R_TRY(fs->DeleteFile(full_path));
+        }
+    }
+
+    R_SUCCEED();
+}
+
+void FsView::SetFs(const fs::FsPath& new_path, const FsEntry& new_entry) {
+    if (m_fs && m_fs_entry.root == new_entry.root && m_fs_entry.type == new_entry.type) {
+        log_write("same fs, ignoring\n");
+        return;
+    }
+
+    // m_fs.reset();
+    m_path = new_path;
+    m_entries.clear();
+    m_entries_index.clear();
+    m_entries_index_hidden.clear();
+    m_entries_index_search.clear();
+    m_entries_current = {};
+    m_previous_highlighted_file.clear();
+    m_menu->m_selected.Reset();
+    m_selected_count = 0;
+    m_fs_entry = new_entry;
+
+    switch (new_entry.type) {
+         case FsType::Sd:
+            m_fs = std::make_unique<fs::FsNativeSd>(m_menu->m_ignore_read_only.Get());
+            break;
+        case FsType::ImageNand:
+            m_fs = std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Nand);
+            break;
+        case FsType::ImageSd:
+            m_fs = std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Sd);
+            break;
+        case FsType::Stdio:
+            m_fs = std::make_unique<fs::FsStdio>(true, new_entry.root);
+            break;
+    }
+
+    if (HasFocus()) {
+        if (m_path.empty()) {
+            Scan(m_fs->Root());
+        } else {
+            Scan(m_path);
+        }
+    }
+}
+
+void FsView::DisplayHash(hash::Type type) {
+    // hack because we cannot share output between threaded calls...
+    static std::string hash_out;
+    hash_out.clear();
+
+    App::Push(std::make_shared<ProgressBox>(0, "Hashing"_i18n, GetEntry().name, [this, type](auto pbox) -> Result {
+        R_TRY(hash::Hash(pbox, type, m_fs.get(), GetNewPathCurrent(), hash_out));
+
+        R_SUCCEED();
+    }, [this, type](Result rc){
+        App::PushErrorBox(rc, "Failed to hash file..."_i18n);
+
+        if (R_SUCCEEDED(rc)) {
+            char buf[0x100];
+            // std::snprintf(buf, sizeof(buf), "%s\n%s\n%s", hash::GetTypeStr(type), hash_out.c_str(), GetEntry().GetName());
+            std::snprintf(buf, sizeof(buf), "%s\n%s", hash::GetTypeStr(type), hash_out.c_str());
+            App::Push(std::make_shared<OptionBox>(buf, "OK"_i18n));
+        }
+    }));
+}
+
+Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i18n}, m_nro_entries{nro_entries} {
+    SetAction(Button::L3, Action{"Split"_i18n, [this](){
+        SetSplitScreen(IsSplitScreen() ^ 1);
+    }});
+
+    view = view_left = std::make_shared<FsView>(this, ViewSide::Left);
+}
+
+Menu::~Menu() {
+}
+
+void Menu::Update(Controller* controller, TouchInfo* touch) {
+    MenuBase::Update(controller, touch);
+    view->Update(controller, touch);
+}
+
+void Menu::Draw(NVGcontext* vg, Theme* theme) {
+    // workaround the buttons not being display properly.
+    // basically, inherit all actions from the view, draw them,
+    // then restore state after.
+    const auto actions_copy = GetActions();
+    ON_SCOPE_EXIT(m_actions = actions_copy);
+    m_actions.insert_range(view->GetActions());
+
+    MenuBase::Draw(vg, theme);
+
+    if (IsSplitScreen()) {
+        view_left->Draw(vg, theme);
+        view_right->Draw(vg, theme);
+
+        if (view == view_left) {
+            gfx::drawRect(vg, view_right->GetPos(), nvgRGBA(0, 0, 0, 180), 5);
+        } else {
+            gfx::drawRect(vg, view_left->GetPos(), nvgRGBA(0, 0, 0, 180), 5);
+        }
+
+        gfx::drawRect(vg, SCREEN_WIDTH/2, GetY(), 1, GetH(), theme->GetColour(ThemeEntryID_LINE));
+    } else {
+        view->Draw(vg, theme);
+    }
+}
+
+void Menu::OnFocusGained() {
+    MenuBase::OnFocusGained();
+
+    if (IsSplitScreen()) {
+        view_left->OnFocusGained();
+        view_right->OnFocusGained();
+    } else {
+        view->OnFocusGained();
+    }
+
+    if (!m_loaded_assoc_entries) {
+        m_loaded_assoc_entries = true;
+        log_write("loading assoc entries\n");
+        LoadAssocEntries();
+    }
+}
+
 auto Menu::FindFileAssocFor() -> std::vector<FileAssocEntry> {
     // only support roms in correctly named folders, sorry!
-    const auto db_indexs = GetRomDatabaseFromPath(m_path);
-    const auto& entry = GetEntry();
+    const auto db_indexs = GetRomDatabaseFromPath(view->m_path);
+    const auto& entry = view->GetEntry();
     const auto extension = entry.extension;
     const auto internal_extension = entry.internal_extension.empty() ? entry.extension : entry.internal_extension;
     if (extension.empty() && internal_extension.empty()) {
@@ -1469,7 +2048,7 @@ void Menu::LoadAssocEntriesPath(const fs::FsPath& path) {
         // if path isn't empty, check if the file exists
         bool file_exists{};
         if (!assoc.path.empty()) {
-            file_exists = m_fs->FileExists(assoc.path);
+            file_exists = view->m_fs->FileExists(assoc.path);
         } else {
             const auto nro_name = assoc.name + ".nro";
             for (const auto& nro : m_nro_entries) {
@@ -1514,469 +2093,59 @@ void Menu::LoadAssocEntries() {
     LoadAssocEntriesPath("/config/sphaira/assoc/");
 }
 
-void Menu::Sort() {
-    // returns true if lhs should be before rhs
-    const auto sort = m_sort.Get();
-    const auto order = m_order.Get();
-    const auto folders_first = m_folders_first.Get();
-    const auto hidden_last = m_hidden_last.Get();
-
-    const auto sorter = [this, sort, order, folders_first, hidden_last](u32 _lhs, u32 _rhs) -> bool {
-        const auto& lhs = m_entries[_lhs];
-        const auto& rhs = m_entries[_rhs];
-
-        if (hidden_last) {
-            if (lhs.IsHidden() && !rhs.IsHidden()) {
-                return false;
-            } else if (!lhs.IsHidden() && rhs.IsHidden()) {
-                return true;
-            }
-        }
-
-        if (folders_first) {
-            if (lhs.type == FsDirEntryType_Dir && !(rhs.type == FsDirEntryType_Dir)) { // left is folder
-                return true;
-            } else if (!(lhs.type == FsDirEntryType_Dir) && rhs.type == FsDirEntryType_Dir) { // right is folder
-                return false;
-            }
-        }
-
-        switch (sort) {
-            case SortType_Size: {
-                if (lhs.file_size == rhs.file_size) {
-                    return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) < 0;
-                } else if (order == OrderType_Descending) {
-                    return lhs.file_size > rhs.file_size;
-                } else {
-                    return lhs.file_size < rhs.file_size;
-                }
-            } break;
-            case SortType_Alphabetical: {
-                if (order == OrderType_Descending) {
-                    return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) < 0;
-                } else {
-                    return strncasecmp(lhs.name, rhs.name, sizeof(lhs.name)) > 0;
-                }
-            } break;
-        }
-
-        std::unreachable();
-    };
-
-    if (m_show_hidden.Get()) {
-        m_entries_current = m_entries_index_hidden;
-    } else {
-        m_entries_current = m_entries_index;
-    }
-
-    std::sort(m_entries_current.begin(), m_entries_current.end(), sorter);
-}
-
-void Menu::SortAndFindLastFile() {
-    std::optional<LastFile> last_file;
-    if (!m_path.empty() && !m_entries_current.empty()) {
-        last_file = LastFile(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
-    }
-
-    Sort();
-
-    if (last_file.has_value()) {
-        SetIndexFromLastFile(*last_file);
-    }
-}
-
-void Menu::SetIndexFromLastFile(const LastFile& last_file) {
-    SetIndex(0);
-
-    s64 index = -1;
-    for (u64 i = 0; i < m_entries_current.size(); i++) {
-        if (last_file.name == GetEntry(i).name) {
-            index = i;
-            break;
-        }
-    }
-    if (index >= 0) {
-        if (index == last_file.index && m_entries_current.size() == last_file.entries_count) {
-            m_list->SetYoff(last_file.offset);
-            log_write("index is the same as last time\n");
-        } else {
-            // file position changed!
-            log_write("file position changed\n");
-            // guesstimate where the position is
-            if (index >= 8) {
-                m_list->SetYoff(((index - 8) + 1) * m_list->GetMaxY());
-            } else {
-                m_list->SetYoff(0);
-            }
-        }
-        SetIndex(index);
-    }
-}
-
 void Menu::UpdateSubheading() {
-    const auto index = m_entries_current.empty() ? 0 : m_index + 1;
-    this->SetSubHeading(std::to_string(index) + " / " + std::to_string(m_entries_current.size()));
+    const auto index = view->m_entries_current.empty() ? 0 : view->m_index + 1;
+    this->SetSubHeading(std::to_string(index) + " / " + std::to_string(view->m_entries_current.size()));
 }
 
-void Menu::OnDeleteCallback() {
-    bool use_progress_box{true};
+void Menu::SetSplitScreen(bool enable) {
+    if (m_split_screen != enable) {
+        m_split_screen = enable;
 
-    // check if we only have 1 file / folder
-    if (m_selected_files.size() == 1) {
-        const auto& entry = m_selected_files[0];
-        const auto full_path = GetNewPath(m_selected_path, entry.name);
+        if (m_split_screen) {
+            // load second screen as a copy of the left side.
+            view->SetSide(ViewSide::Left);
+            view_right = std::make_shared<FsView>(this, view->m_path, view->GetFsEntry(), ViewSide::Right);
+            view_right->OnFocusGained();
 
-        if (entry.IsDir()) {
-            bool empty{};
-            m_fs->IsDirEmpty(full_path, &empty);
-            if (empty) {
-                m_fs->DeleteDirectory(full_path);
-                use_progress_box = false;
-            }
+            static const auto change_view = [this](auto& new_view){
+                if (view != new_view) {
+                    view->OnFocusLost();
+                    view = new_view;
+                    view->OnFocusGained();
+                    SetTitleSubHeading(view->m_path);
+                    UpdateSubheading();
+                }
+            };
+
+            SetAction(Button::LEFT, Action{[this](){
+                change_view(view_left);
+            }});
+            SetAction(Button::RIGHT, Action{[this](){
+                change_view(view_right);
+            }});
         } else {
-            m_fs->DeleteFile(full_path);
-            use_progress_box = false;
-        }
-    }
+            view_left = {};
+            view_right = {};
+            view_left = view;
+            view->SetSide(ViewSide::Left);
 
-    if (!use_progress_box) {
-        ResetSelection();
-        Scan(m_path);
-        log_write("did delete\n");
-    } else {
-        App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox) -> Result {
-            FsDirCollections collections;
-
-            // build list of dirs / files
-            for (const auto&p : m_selected_files) {
-                pbox->Yield();
-                R_TRY(pbox->ShouldExitResult());
-
-                const auto full_path = GetNewPath(m_selected_path, p.name);
-                if (p.IsDir()) {
-                    pbox->NewTransfer("Scanning "_i18n + full_path);
-                    R_TRY(get_collections(full_path, p.name, collections));
-                }
-            }
-
-            // delete everything in collections, reversed
-            for (const auto& c : std::views::reverse(collections)) {
-                const auto delete_func = [&](auto& array) -> Result {
-                    for (const auto& p : array) {
-                        pbox->Yield();
-                        R_TRY(pbox->ShouldExitResult());
-
-                        const auto full_path = GetNewPath(c.path, p.name);
-                        pbox->NewTransfer("Deleting "_i18n + full_path);
-                        if (p.type == FsDirEntryType_Dir) {
-                            log_write("deleting dir: %s\n", full_path.s);
-                            R_TRY(m_fs->DeleteDirectory(full_path));
-                        } else {
-                            log_write("deleting file: %s\n", full_path.s);
-                            R_TRY(m_fs->DeleteFile(full_path));
-                        }
-                    }
-
-                    R_SUCCEED();
-                };
-
-                R_TRY(delete_func(c.files));
-                R_TRY(delete_func(c.dirs));
-            }
-
-            for (const auto& p : m_selected_files) {
-                pbox->Yield();
-                R_TRY(pbox->ShouldExitResult());
-
-                const auto full_path = GetNewPath(m_selected_path, p.name);
-                pbox->NewTransfer("Deleting "_i18n + full_path);
-
-                if (p.IsDir()) {
-                    log_write("deleting dir: %s\n", full_path.s);
-                    R_TRY(m_fs->DeleteDirectory(full_path));
-                } else {
-                    log_write("deleting file: %s\n", full_path.s);
-                    R_TRY(m_fs->DeleteFile(full_path));
-                }
-            }
-
-            R_SUCCEED();
-        }, [this](Result rc){
-            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
-
+            RemoveAction(Button::LEFT);
+            RemoveAction(Button::RIGHT);
             ResetSelection();
-            Scan(m_path);
-            log_write("did delete\n");
-        }));
+        }
     }
 }
 
-void Menu::OnPasteCallback() {
-    // check if we only have 1 file / folder and is cut (rename)
-    if (m_selected_files.size() == 1 && m_selected_type == SelectedType::Cut) {
-        const auto& entry = m_selected_files[0];
-        const auto full_path = GetNewPath(m_selected_path, entry.name);
+void Menu::RefreshViews() {
+    ResetSelection();
 
-        if (entry.IsDir()) {
-            m_fs->RenameDirectory(full_path, GetNewPath(entry));
-        } else {
-            m_fs->RenameFile(full_path, GetNewPath(entry));
-        }
-
-        ResetSelection();
-        Scan(m_path);
-        log_write("did paste\n");
+    if (IsSplitScreen()) {
+        view_left->Scan(view_left->m_path);
+        view_right->Scan(view_right->m_path);
     } else {
-        App::Push(std::make_shared<ProgressBox>(0, "Pasting"_i18n, "", [this](auto pbox) -> Result {
-
-            if (m_selected_type == SelectedType::Cut) {
-                for (const auto& p : m_selected_files) {
-                    pbox->Yield();
-                    R_TRY(pbox->ShouldExitResult());
-
-                    const auto src_path = GetNewPath(m_selected_path, p.name);
-                    const auto dst_path = GetNewPath(m_path, p.name);
-
-                    pbox->NewTransfer("Pasting "_i18n + src_path);
-
-                    if (p.IsDir()) {
-                        m_fs->RenameDirectory(src_path, dst_path);
-                    } else {
-                        m_fs->RenameFile(src_path, dst_path);
-                    }
-                }
-            } else {
-                FsDirCollections collections;
-
-                // build list of dirs / files
-                for (const auto&p : m_selected_files) {
-                    pbox->Yield();
-                    R_TRY(pbox->ShouldExitResult());
-
-                    const auto full_path = GetNewPath(m_selected_path, p.name);
-                    if (p.IsDir()) {
-                        pbox->NewTransfer("Scanning "_i18n + full_path);
-                        R_TRY(get_collections(full_path, p.name, collections));
-                    }
-                }
-
-                for (const auto& p : m_selected_files) {
-                    pbox->Yield();
-                    R_TRY(pbox->ShouldExitResult());
-
-                    const auto src_path = GetNewPath(m_selected_path, p.name);
-                    const auto dst_path = GetNewPath(p);
-
-                    if (p.IsDir()) {
-                        pbox->NewTransfer("Creating "_i18n + dst_path);
-                        m_fs->CreateDirectory(dst_path);
-                    } else {
-                        pbox->NewTransfer("Copying "_i18n + src_path);
-                        R_TRY(pbox->CopyFile(m_fs.get(), src_path, dst_path));
-                    }
-                }
-
-                // copy everything in collections
-                for (const auto& c : collections) {
-                    const auto base_dst_path = GetNewPath(m_path, c.parent_name);
-
-                    for (const auto& p : c.dirs) {
-                        pbox->Yield();
-                        R_TRY(pbox->ShouldExitResult());
-
-                        const auto src_path = GetNewPath(c.path, p.name);
-                        const auto dst_path = GetNewPath(base_dst_path, p.name);
-
-                        log_write("creating: %s to %s\n", src_path.s, dst_path.s);
-                        pbox->NewTransfer("Creating "_i18n + dst_path);
-                        m_fs->CreateDirectory(dst_path);
-                    }
-
-                    for (const auto& p : c.files) {
-                        pbox->Yield();
-                        R_TRY(pbox->ShouldExitResult());
-
-                        const auto src_path = GetNewPath(c.path, p.name);
-                        const auto dst_path = GetNewPath(base_dst_path, p.name);
-
-                        pbox->NewTransfer("Copying "_i18n + src_path);
-                        log_write("copying: %s to %s\n", src_path.s, dst_path.s);
-                        R_TRY(pbox->CopyFile(m_fs.get(), src_path, dst_path));
-                    }
-                }
-            }
-
-            R_SUCCEED();
-        }, [this](Result rc){
-            App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
-
-            ResetSelection();
-            Scan(m_path);
-            log_write("did paste\n");
-        }));
+        view->Scan(view->m_path);
     }
-}
-
-void Menu::OnRenameCallback() {
-
-}
-
-auto Menu::CheckIfUpdateFolder() -> Result {
-    R_UNLESS(IsSd(), FsError_InvalidMountName);
-    R_UNLESS(m_fs->IsNative(), 0x1);
-
-    // check if we have already tried to find daybreak
-    if (m_daybreak_path.has_value() && m_daybreak_path.value().empty()) {
-        return FsError_FileNotFound;
-    }
-
-    // check that we have daybreak installed
-    if (!m_daybreak_path.has_value()) {
-        auto daybreak_path = DAYBREAK_PATH;
-        if (!m_fs->FileExists(DAYBREAK_PATH)) {
-            if (auto e = nro_find(m_nro_entries, "Daybreak", "Atmosphere-NX", {}); e.has_value()) {
-                daybreak_path = e.value().path;
-            } else {
-                log_write("failed to find daybreak\n");
-                m_daybreak_path = "";
-                return FsError_FileNotFound;
-            }
-        }
-        m_daybreak_path = daybreak_path;
-        log_write("found daybreak in: %s\n", m_daybreak_path.value().s);
-    }
-
-    s64 count;
-    R_TRY(GetNative()->DirGetEntryCount(m_path, FsDirOpenMode_ReadDirs, &count));
-
-    // check that we are at the bottom level
-    R_UNLESS(count == 0, 0x1);
-    // check that we have enough ncas and not too many
-    R_UNLESS(m_entries.size() > 150 && m_entries.size() < 300, 0x1);
-
-    // check that all entries end in .nca
-    const auto nca_ext = std::string_view{".nca"};
-    for (auto& e : m_entries) {
-        const auto ext = std::strrchr(e.name, '.');
-        R_UNLESS(ext && ext == nca_ext, 0x1);
-    }
-
-    R_SUCCEED();
-}
-
-auto Menu::get_collection(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollection& out, bool inc_file, bool inc_dir, bool inc_size) -> Result {
-    out.path = path;
-    out.parent_name = parent_name;
-
-    const auto fetch = [this, &path](std::vector<FsDirectoryEntry>& out, u32 flags) -> Result {
-        fs::Dir d;
-        R_TRY(m_fs->OpenDirectory(path, flags, &d));
-        ON_SCOPE_EXIT(m_fs->DirClose(&d));
-        return m_fs->DirReadAll(&d, out);
-    };
-
-    if (inc_file) {
-        u32 flags = FsDirOpenMode_ReadFiles;
-        if (!inc_size) {
-            flags |= FsDirOpenMode_NoFileSize;
-        }
-        R_TRY(fetch(out.files, flags));
-    }
-
-    if (inc_dir) {
-        R_TRY(fetch(out.dirs, FsDirOpenMode_ReadDirs));
-    }
-
-    R_SUCCEED();
-}
-
-auto Menu::get_collections(const fs::FsPath& path, const fs::FsPath& parent_name, FsDirCollections& out, bool inc_size) -> Result {
-    // get a list of all the files / dirs
-    FsDirCollection collection;
-    R_TRY(get_collection(path, parent_name, collection, true, true, inc_size));
-    log_write("got collection: %s parent_name: %s files: %zu dirs: %zu\n", path.s, parent_name.s, collection.files.size(), collection.dirs.size());
-    out.emplace_back(collection);
-
-    // for (size_t i = 0; i < collection.dirs.size(); i++) {
-    for (const auto&p : collection.dirs) {
-        // use heap as to not explode the stack
-        const auto new_path = std::make_unique<fs::FsPath>(Menu::GetNewPath(path, p.name));
-        const auto new_parent_name = std::make_unique<fs::FsPath>(Menu::GetNewPath(parent_name, p.name));
-        log_write("trying to get nested collection: %s parent_name: %s\n", new_path->s, new_parent_name->s);
-        R_TRY(get_collections(*new_path, *new_parent_name, out, inc_size));
-    }
-
-    R_SUCCEED();
-}
-
-void Menu::SetFs(const fs::FsPath& new_path, const FsEntry& new_entry) {
-    if (m_fs && m_fs_entry.root == new_entry.root && m_fs_entry.type == new_entry.type) {
-        log_write("same fs, ignoring\n");
-        return;
-    }
-
-    // m_fs.reset();
-    m_path = new_path;
-    m_entries.clear();
-    m_entries_index.clear();
-    m_entries_index_hidden.clear();
-    m_entries_index_search.clear();
-    m_entries_current = {};
-    m_previous_highlighted_file.clear();
-    m_selected_path.clear();
-    m_selected_count = 0;
-    m_selected_type = SelectedType::None;
-    m_fs_entry = new_entry;
-
-    switch (new_entry.type) {
-         case FsType::Sd:
-            m_fs = std::make_unique<fs::FsNativeSd>(m_ignore_read_only.Get());
-            break;
-        case FsType::ImageNand:
-            m_fs = std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Nand);
-            break;
-        case FsType::ImageSd:
-            m_fs = std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Sd);
-            break;
-        case FsType::Stdio:
-            m_fs = std::make_unique<fs::FsStdio>(true, new_entry.root);
-            break;
-    }
-
-    if (HasFocus()) {
-        if (m_path.empty()) {
-            Scan(m_fs->Root());
-        } else {
-            Scan(m_path);
-        }
-    }
-}
-
-void Menu::DisplayHash(hash::Type type) {
-    // hack because we cannot share output between threaded calls...
-    static std::string hash_out;
-    hash_out.clear();
-
-    App::Push(std::make_shared<ProgressBox>(0, "Hashing"_i18n, GetEntry().name, [this, type](auto pbox) -> Result {
-        R_TRY(hash::Hash(pbox, type, m_fs.get(), GetNewPathCurrent(), hash_out));
-
-        R_SUCCEED();
-    }, [this, type](Result rc){
-        App::PushErrorBox(rc, "Failed to hash file..."_i18n);
-
-        if (R_SUCCEEDED(rc)) {
-            char buf[0x100];
-            // std::snprintf(buf, sizeof(buf), "%s\n%s\n%s", hash::GetTypeStr(type), hash_out.c_str(), GetEntry().GetName());
-            std::snprintf(buf, sizeof(buf), "%s\n%s", hash::GetTypeStr(type), hash_out.c_str());
-            App::Push(std::make_shared<OptionBox>(buf, "OK"_i18n));
-        }
-    }));
 }
 
 } // namespace sphaira::ui::menu::filebrowser
-
-// options
-// Cancel
-// Skip
-// Rename
-// Overwrite

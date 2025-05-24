@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/widget.hpp"
+#include "ui/scrolling_text.hpp"
 #include <string>
 
 namespace sphaira::ui::menu {
@@ -32,6 +33,9 @@ private:
     std::string m_title{};
     std::string m_title_sub_heading{};
     std::string m_sub_heading{};
+
+    ScrollingText m_scroll_title_sub_heading{};
+    ScrollingText m_scroll_sub_heading{};
 
 protected:
     struct tm m_tm{};

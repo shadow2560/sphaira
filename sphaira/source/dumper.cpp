@@ -66,6 +66,7 @@ struct UsbTest final : usb::upload::Usb, yati::source::Stream {
             m_pull_offset = 0;
             Stream::Reset();
             m_size = m_source->GetSize(path);
+            m_pbox->SetImage(m_source->GetIcon(path));
             m_pbox->SetTitle(m_source->GetName(path));
             m_pbox->NewTransfer(m_path);
         }
@@ -107,6 +108,7 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
 
     for (auto path : paths) {
         const auto file_size = source->GetSize(path);
+        pbox->SetImage(source->GetIcon(path));
         pbox->SetTitle(source->GetName(path));
         pbox->NewTransfer(path);
 
@@ -246,6 +248,7 @@ Result DumpToDevNull(ui::ProgressBox* pbox, BaseSource* source, std::span<const 
         R_TRY(pbox->ShouldExitResult());
 
         const auto file_size = source->GetSize(path);
+        pbox->SetImage(source->GetIcon(path));
         pbox->SetTitle(source->GetName(path));
         pbox->NewTransfer(path);
 
@@ -267,6 +270,7 @@ Result DumpToNetwork(ui::ProgressBox* pbox, const location::Entry& loc, BaseSour
         R_TRY(pbox->ShouldExitResult());
 
         const auto file_size = source->GetSize(path);
+        pbox->SetImage(source->GetIcon(path));
         pbox->SetTitle(source->GetName(path));
         pbox->NewTransfer(path);
 
@@ -373,10 +377,6 @@ void Dump(std::shared_ptr<BaseSource> source, const std::vector<fs::FsPath>& pat
             }));
         }
     ));
-}
-
-void DumpSingle(std::shared_ptr<BaseSource> source, const fs::FsPath& path, OnExit on_exit, DumpLocationType type) {
-
 }
 
 } // namespace sphaira::dump

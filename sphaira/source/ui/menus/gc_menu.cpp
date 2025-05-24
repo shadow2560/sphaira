@@ -171,6 +171,7 @@ struct XciSource final : dump::BaseSource {
     // size of the entire xci.
     s64 xci_size{};
     Menu* menu{};
+    int icon{};
 
     Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
         if (path.ends_with(GetDumpTypeStr(DumpFileType_XCI))) {
@@ -216,6 +217,10 @@ struct XciSource final : dump::BaseSource {
             return initial.size();
         }
         return 0;
+    }
+
+    auto GetIcon(const std::string& path) const -> int override {
+        return icon;
     }
 
 private:
@@ -944,6 +949,7 @@ Result Menu::DumpGames(u32 flags) {
     auto source = std::make_shared<XciSource>();
     source->menu = this;
     source->application_name = m_entries[m_entry_index].lang_entry.name;
+    source->icon = m_icon;
 
     std::vector<fs::FsPath> paths;
     if (flags & DumpFileFlag_XCI) {

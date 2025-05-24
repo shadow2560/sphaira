@@ -35,6 +35,7 @@ struct BaseSource {
     virtual Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) = 0;
     virtual auto GetName(const std::string& path) const -> std::string = 0;
     virtual auto GetSize(const std::string& path) const -> s64 = 0;
+    virtual auto GetIcon(const std::string& path) const -> int { return 0; }
 };
 
 // called after dump has finished.

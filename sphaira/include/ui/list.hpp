@@ -60,6 +60,14 @@ struct List final : Object {
         return m_page;
     }
 
+    auto SetPageJump(bool enable) {
+        m_page_jump = enable;
+    }
+
+    auto GetPageJump() const {
+        return m_page_jump;
+    }
+
 private:
     auto Draw(NVGcontext* vg, Theme* theme) -> void override {}
     auto ClampX(float x, s64 count) const -> float;
@@ -85,6 +93,7 @@ private:
     float m_y_prog{};
 
     Layout m_layout{Layout::GRID};
+    bool m_page_jump{true};
 };
 
 } // namespace sphaira::ui

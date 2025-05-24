@@ -129,6 +129,8 @@ struct NspEntry {
     s64 nsp_size{};
     // copy of ncm cs, it is not closed.
     NcmContentStorage cs{};
+    // copy of the icon, if invalid, it will use the default icon.
+    int icon{};
 
     // todo: benchmark manual sdcard read and decryption vs ncm.
     Result Read(void* buf, s64 off, s64 size, u64* bytes_read) {
@@ -185,7 +187,7 @@ struct NspSource final : dump::BaseSource {
 
     Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path == e.path;
+            return path.find(e.path.s) != path.npos;
         });
         R_UNLESS(it != m_entries.end(), 0x1);
 
@@ -194,7 +196,7 @@ struct NspSource final : dump::BaseSource {
 
     auto GetName(const std::string& path) const -> std::string {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path == e.path;
+            return path.find(e.path.s) != path.npos;
         });
 
         if (it != m_entries.end()) {
@@ -206,7 +208,7 @@ struct NspSource final : dump::BaseSource {
 
     auto GetSize(const std::string& path) const -> s64 {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path == e.path;
+            return path.find(e.path.s) != path.npos;
         });
 
         if (it != m_entries.end()) {
@@ -214,6 +216,18 @@ struct NspSource final : dump::BaseSource {
         }
 
         return 0;
+    }
+
+    auto GetIcon(const std::string& path) const -> int override {
+        const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
+            return path.find(e.path.s) != path.npos;
+        });
+
+        if (it != m_entries.end()) {
+            return it->icon;
+        }
+
+        return App::GetDefaultImage();
     }
 
 private:
@@ -568,7 +582,7 @@ Result BuildNspEntries(Entry& e, u32 flags, std::vector<NspEntry>& out) {
 
         NspEntry nsp;
         R_TRY(BuildNspEntry(e, info, nsp));
-        out.emplace_back(nsp);
+        out.emplace_back(nsp).icon = e.image;
     }
 
     R_UNLESS(!out.empty(), 0x1);

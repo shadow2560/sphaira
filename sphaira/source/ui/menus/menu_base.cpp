@@ -70,10 +70,13 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
 
     nvgFontSize(vg, 28);
     gfx::textBounds(vg, 0, 0, bounds, m_title.c_str());
-    gfx::drawTextArgs(vg, 80, start_y, 28.f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str());
-    gfx::drawTextArgs(vg, 80 + (bounds[2] - bounds[0]) + 10, start_y, 16, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT_INFO), m_title_sub_heading.c_str());
 
-    gfx::drawTextArgs(vg, 80, 685.f, 18, NVG_ALIGN_LEFT, theme->GetColour(ThemeEntryID_TEXT), "%s", m_sub_heading.c_str());
+    const auto text_w = SCREEN_WIDTH / 2 - 30;
+    const auto title_sub_x = 80 + (bounds[2] - bounds[0]) + 10;
+
+    gfx::drawTextArgs(vg, 80, start_y, 28.f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT), m_title.c_str());
+    m_scroll_title_sub_heading.Draw(vg, true, title_sub_x, start_y, text_w - title_sub_x, 16, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(ThemeEntryID_TEXT_INFO), m_title_sub_heading.c_str());
+    m_scroll_sub_heading.Draw(vg, true, 80, 685, text_w - 80, 18, NVG_ALIGN_LEFT, theme->GetColour(ThemeEntryID_TEXT), m_sub_heading.c_str());
 }
 
 void MenuBase::SetTitle(std::string title) {
