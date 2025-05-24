@@ -369,7 +369,7 @@ void Dump(std::shared_ptr<BaseSource> source, const std::vector<fs::FsPath>& pat
                 App::PushErrorBox(rc, "Dump failed!"_i18n);
 
                 if (R_SUCCEEDED(rc)) {
-                    App::Notify("Dump successfull!");
+                    App::Notify("Dump successfull!"_i18n);
                     log_write("dump successfull!!!\n");
                 }
 

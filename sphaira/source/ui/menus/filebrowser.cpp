@@ -984,7 +984,7 @@ void FsView::InstallFiles() {
                     } else {
                         R_TRY(yati::InstallFromFile(pbox, GetNewPath(e)));
                     }
-                    App::Notify("Installed " + e.GetName());
+                    App::Notify("Installed "_i18n + e.GetName());
                 }
 
                 R_SUCCEED();
@@ -1077,7 +1077,7 @@ void FsView::UnzipFiles(fs::FsPath dir_path) {
 
         R_SUCCEED();
     }, [this](Result rc){
-        App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+        App::PushErrorBox(rc, "Extract failed!"_i18n);
 
         if (R_SUCCEEDED(rc)) {
             App::Notify("Extract success!");
@@ -1209,7 +1209,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
 
         R_SUCCEED();
     }, [this](Result rc){
-        App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
+        App::PushErrorBox(rc, "Compress failed!"_i18n);
 
         if (R_SUCCEEDED(rc)) {
             App::Notify("Compress success!");
@@ -1225,7 +1225,7 @@ void FsView::UploadFiles() {
 
     const auto network_locations = location::Load();
     if (network_locations.empty()) {
-        App::Notify("No upload locations set!");
+        App::Notify("No upload locations set!"_i18n);
         return;
     }
 
@@ -1313,8 +1313,11 @@ void FsView::UploadFiles() {
                 m_menu->ResetSelection();
 
                 if (R_SUCCEEDED(rc)) {
-                    App::Notify("Upload successfull!");
+                    App::Notify("Upload successfull!"_i18n);
                     log_write("Upload successfull!!!\n");
+                } else {
+                    App::Notify("Upload failed!"_i18n);
+                    log_write("Upload failed!!!\n");
                 }
             }));
         }

@@ -240,7 +240,7 @@ Result Notify(Result rc, const std::string& error_message) {
             i18n::get(error_message)
         ));
     } else {
-        App::Notify("Success");
+        App::Notify("Success"_i18n);
     }
 
     return rc;
@@ -796,7 +796,7 @@ Menu::Menu() : grid::Menu{"Games"_i18n} {
                     }
 
                     if (meta_entries.empty()) {
-                        App::Notify("No meta entries found...\n");
+                        App::Notify("No meta entries found...\n"_i18n);
                         return;
                     }
 
@@ -808,7 +808,7 @@ Menu::Menu() : grid::Menu{"Games"_i18n} {
                     }
 
                     App::Push(std::make_shared<PopupList>(
-                        "Entries", items, [this, meta_entries](auto op_index){
+                        "Entries"_i18n, items, [this, meta_entries](auto op_index){
                             #if 0
                             if (op_index) {
                                 const auto& e = meta_entries[*op_index];
@@ -889,7 +889,7 @@ Menu::~Menu() {
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     if (m_dirty) {
-        App::Notify("Updating application record list");
+        App::Notify("Updating application record list"_i18n);
         SortAndFindLastFile(true);
     }
 
@@ -1101,13 +1101,13 @@ void Menu::DeleteGames() {
 
         R_SUCCEED();
     }, [this](Result rc){
-        App::PushErrorBox(rc, "Delete failed"_i18n);
+        App::PushErrorBox(rc, "Delete failed!"_i18n);
 
         ClearSelection();
         m_dirty = true;
 
         if (R_SUCCEEDED(rc)) {
-            App::Notify("Delete successfull!");
+            App::Notify("Delete successfull!"_i18n);
         }
     }));
 }
