@@ -6,11 +6,44 @@
 
 namespace sphaira::ui::menu {
 
+auto MenuBase::GetPolledData(bool force_refresh) -> PolledData {
+    static PolledData data{};
+    static TimeStamp timestamp{};
+    static bool has_init = false;
+
+    if (!has_init) {
+        has_init = true;
+        force_refresh = true;
+    }
+
+    // update every second, do this in Draw because Update() isn't called if it
+    // doesn't have focus.
+    if (force_refresh || timestamp.GetSeconds() >= 1) {
+        data.tm = {};
+        data.battery_percetange = {};
+        data.charger_type = {};
+        data.type = {};
+        data.status = {};
+        data.strength = {};
+        data.ip = {};
+
+        const auto t = std::time(NULL);
+        localtime_r(&t, &data.tm);
+        psmGetBatteryChargePercentage(&data.battery_percetange);
+        psmGetChargerType(&data.charger_type);
+        nifmGetInternetConnectionStatus(&data.type, &data.strength, &data.status);
+        nifmGetCurrentIpAddress(&data.ip);
+
+        timestamp.Update();
+    }
+
+    return data;
+}
+
 MenuBase::MenuBase(std::string title) : m_title{title} {
     // this->SetParent(this);
     this->SetPos(30, 87, 1220 - 30, 646 - 87);
     SetAction(Button::START, Action{App::Exit});
-    UpdateVars();
 }
 
 MenuBase::~MenuBase() {
@@ -24,11 +57,7 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
     DrawElement(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ThemeEntryID_BACKGROUND);
     Widget::Draw(vg, theme);
 
-    // update every second, do this in Draw because Update() isn't called if it
-    // doesn't have focus.
-    if (m_poll_timestamp.GetSeconds() >= 1) {
-        UpdateVars();
-    }
+    const auto pdata = GetPolledData();
 
     const float start_y = 70;
     const float font_size = 22;
@@ -39,28 +68,30 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
 
     nvgFontSize(vg, font_size);
 
-    #define draw(colour, ...) \
-        gfx::textBounds(vg, 0, 0, bounds, __VA_ARGS__); \
-        start_x -= bounds[2] - bounds[0]; \
-        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->GetColour(colour), __VA_ARGS__); \
-        start_x -= spacing;
+    #define draw(colour, fixed, ...) \
+        gfx::drawTextArgs(vg, start_x, start_y, font_size, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(colour), __VA_ARGS__); \
+        if (fixed) { \
+            start_x -= fixed; \
+        } else { \
+            gfx::textBounds(vg, 0, 0, bounds, __VA_ARGS__); \
+            start_x -= spacing - (bounds[2] - bounds[0]); \
+        }
 
-    // draw("version %s", APP_VERSION);
-    draw(ThemeEntryID_TEXT, "%u\uFE6A", m_battery_percetange);
+    draw(ThemeEntryID_TEXT, 83, "%u\uFE6A", pdata.battery_percetange);
 
     if (App::Get12HourTimeEnable()) {
-        draw(ThemeEntryID_TEXT, "%02u:%02u:%02u %s", (m_tm.tm_hour == 0 || m_tm.tm_hour == 12) ? 12 : m_tm.tm_hour % 12, m_tm.tm_min, m_tm.tm_sec, (m_tm.tm_hour < 12) ? "AM" : "PM");
+        draw(ThemeEntryID_TEXT, 175, "%02u:%02u:%02u %s", (pdata.tm.tm_hour == 0 || pdata.tm.tm_hour == 12) ? 12 : pdata.tm.tm_hour % 12, pdata.tm.tm_min, pdata.tm.tm_sec, (pdata.tm.tm_hour < 12) ? "AM" : "PM");
     } else {
-        draw(ThemeEntryID_TEXT, "%02u:%02u:%02u", m_tm.tm_hour, m_tm.tm_min, m_tm.tm_sec);
+        draw(ThemeEntryID_TEXT, 133, "%02u:%02u:%02u", pdata.tm.tm_hour, pdata.tm.tm_min, pdata.tm.tm_sec);
     }
 
-    if (m_ip) {
-        draw(ThemeEntryID_TEXT, "%u.%u.%u.%u", m_ip&0xFF, (m_ip>>8)&0xFF, (m_ip>>16)&0xFF, (m_ip>>24)&0xFF);
+    if (pdata.ip) {
+        draw(ThemeEntryID_TEXT, 0, "%u.%u.%u.%u", pdata.ip&0xFF, (pdata.ip>>8)&0xFF, (pdata.ip>>16)&0xFF, (pdata.ip>>24)&0xFF);
     } else {
-        draw(ThemeEntryID_TEXT, ("No Internet"_i18n).c_str());
+        draw(ThemeEntryID_TEXT, 0, ("No Internet"_i18n).c_str());
     }
     if (!App::IsApplication()) {
-        draw(ThemeEntryID_ERROR, ("[Applet Mode]"_i18n).c_str());
+        draw(ThemeEntryID_ERROR, 0, ("[Applet Mode]"_i18n).c_str());
     }
 
     #undef draw
@@ -89,26 +120,6 @@ void MenuBase::SetTitleSubHeading(std::string sub_heading) {
 
 void MenuBase::SetSubHeading(std::string sub_heading) {
     m_sub_heading = sub_heading;
-}
-
-void MenuBase::UpdateVars() {
-    m_tm = {};
-    m_poll_timestamp = {};
-    m_battery_percetange = {};
-    m_charger_type = {};
-    m_type = {};
-    m_status = {};
-    m_strength = {};
-    m_ip = {};
-
-    const auto t = time(NULL);
-    localtime_r(&t, &m_tm);
-    psmGetBatteryChargePercentage(&m_battery_percetange);
-    psmGetChargerType(&m_charger_type);
-    nifmGetInternetConnectionStatus(&m_type, &m_strength, &m_status);
-    nifmGetCurrentIpAddress(&m_ip);
-
-    m_poll_timestamp.Update();
 }
 
 } // namespace sphaira::ui::menu

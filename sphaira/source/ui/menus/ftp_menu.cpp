@@ -239,9 +239,10 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     mutexLock(&m_mutex);
     ON_SCOPE_EXIT(mutexUnlock(&m_mutex));
 
-    if (m_ip) {
-        if (m_type == NifmInternetConnectionType_WiFi) {
-            SetSubHeading("Connection Type: WiFi | Strength: "_i18n + std::to_string(m_strength));
+    const auto pdata = GetPolledData();
+    if (pdata.ip) {
+        if (pdata.type == NifmInternetConnectionType_WiFi) {
+            SetSubHeading("Connection Type: WiFi | Strength: "_i18n + std::to_string(pdata.strength));
         } else {
             SetSubHeading("Connection Type: Ethernet"_i18n);
         }
@@ -264,15 +265,15 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         gfx::drawTextArgs(vg, bounds[2], start_y, font_size, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_SELECTED), __VA_ARGS__); \
         start_y += spacing;
 
-    if (m_ip) {
-        draw("Host:"_i18n, " %u.%u.%u.%u", m_ip&0xFF, (m_ip>>8)&0xFF, (m_ip>>16)&0xFF, (m_ip>>24)&0xFF);
+    if (pdata.ip) {
+        draw("Host:"_i18n, " %u.%u.%u.%u", pdata.ip&0xFF, (pdata.ip>>8)&0xFF, (pdata.ip>>16)&0xFF, (pdata.ip>>24)&0xFF);
         draw("Port:"_i18n, " %u", m_port);
         if (!m_anon) {
             draw("Username:"_i18n, " %s", m_user);
             draw("Password:"_i18n, " %s", m_pass);
         }
 
-        if (m_type == NifmInternetConnectionType_WiFi) {
+        if (pdata.type == NifmInternetConnectionType_WiFi) {
             NifmNetworkProfileData profile{};
             if (R_SUCCEEDED(nifmGetCurrentNetworkProfile(&profile))) {
                 const auto& settings = profile.wireless_setting_data;

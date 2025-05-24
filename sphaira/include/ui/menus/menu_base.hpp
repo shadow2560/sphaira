@@ -6,6 +6,16 @@
 
 namespace sphaira::ui::menu {
 
+struct PolledData {
+    struct tm tm{};
+    u32 battery_percetange{};
+    PsmChargerType charger_type{};
+    NifmInternetConnectionType type{};
+    NifmInternetConnectionStatus status{};
+    u32 strength{};
+    u32 ip{};
+};
+
 struct MenuBase : Widget {
     MenuBase(std::string title);
     virtual ~MenuBase();
@@ -26,8 +36,7 @@ struct MenuBase : Widget {
         return m_title;
     }
 
-private:
-    void UpdateVars();
+    static auto GetPolledData(bool force_refresh = false) -> PolledData;
 
 private:
     std::string m_title{};
@@ -36,16 +45,6 @@ private:
 
     ScrollingText m_scroll_title_sub_heading{};
     ScrollingText m_scroll_sub_heading{};
-
-protected:
-    struct tm m_tm{};
-    TimeStamp m_poll_timestamp{};
-    u32 m_battery_percetange{};
-    PsmChargerType m_charger_type{};
-    NifmInternetConnectionType m_type{};
-    NifmInternetConnectionStatus m_status{};
-    u32 m_strength{};
-    u32 m_ip{};
 };
 
 } // namespace sphaira::ui::menu
