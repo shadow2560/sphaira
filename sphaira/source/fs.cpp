@@ -325,7 +325,7 @@ Result CreateDirectoryRecursivelyWithPath(const FsPath& path, bool ignore_read_o
 Result DeleteFile(const FsPath& path, bool ignore_read_only) {
     R_UNLESS(ignore_read_only || !is_read_only(path), Fs::ResultReadOnly);
 
-    if (remove(path)) {
+    if (unlink(path)) {
         R_TRY(fsdevGetLastResult());
         return Fs::ResultUnknownStdioError;
     }
@@ -335,7 +335,11 @@ Result DeleteFile(const FsPath& path, bool ignore_read_only) {
 Result DeleteDirectory(const FsPath& path, bool ignore_read_only) {
     R_UNLESS(ignore_read_only || !is_read_only(path), Fs::ResultReadOnly);
 
-    return DeleteFile(path, ignore_read_only);
+    if (rmdir(path)) {
+        R_TRY(fsdevGetLastResult());
+        return Fs::ResultUnknownStdioError;
+    }
+    R_SUCCEED();
 }
 
 // ftw / ntfw isn't found by linker...
@@ -487,6 +491,14 @@ Result FileRead(File* f, s64 off, void* buf, u64 read_size, u32 option, u64* byt
         }
 
         *bytes_read = std::fread(buf, 1, read_size, f->m_stdio);
+
+        // if we read less bytes than expected, check if there was an error (ignoring eof).
+        if (*bytes_read < read_size) {
+            if (!std::feof(f->m_stdio) && std::ferror(f->m_stdio)) {
+                R_THROW(0x1);
+            }
+        }
+
         f->m_stdio_off += *bytes_read;
     }
 
