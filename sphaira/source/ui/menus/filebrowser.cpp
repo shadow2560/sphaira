@@ -676,23 +676,25 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
                     }));
                 }
 
-                options->Add(std::make_shared<SidebarEntryCallback>("Hash"_i18n, [this](){
-                    auto options = std::make_shared<Sidebar>("Hash Options"_i18n, Sidebar::Side::RIGHT);
-                    ON_SCOPE_EXIT(App::Push(options));
+                if (IsSd() && m_entries_current.size() && !m_selected_count && GetEntry().IsFile()) {
+                    options->Add(std::make_shared<SidebarEntryCallback>("Hash"_i18n, [this](){
+                        auto options = std::make_shared<Sidebar>("Hash Options"_i18n, Sidebar::Side::RIGHT);
+                        ON_SCOPE_EXIT(App::Push(options));
 
-                    options->Add(std::make_shared<SidebarEntryCallback>("CRC32"_i18n, [this](){
-                        DisplayHash(hash::Type::Crc32);
+                        options->Add(std::make_shared<SidebarEntryCallback>("CRC32"_i18n, [this](){
+                            DisplayHash(hash::Type::Crc32);
+                        }));
+                        options->Add(std::make_shared<SidebarEntryCallback>("MD5"_i18n, [this](){
+                            DisplayHash(hash::Type::Md5);
+                        }));
+                        options->Add(std::make_shared<SidebarEntryCallback>("SHA1"_i18n, [this](){
+                            DisplayHash(hash::Type::Sha1);
+                        }));
+                        options->Add(std::make_shared<SidebarEntryCallback>("SHA256"_i18n, [this](){
+                            DisplayHash(hash::Type::Sha256);
+                        }));
                     }));
-                    options->Add(std::make_shared<SidebarEntryCallback>("MD5"_i18n, [this](){
-                        DisplayHash(hash::Type::Md5);
-                    }));
-                    options->Add(std::make_shared<SidebarEntryCallback>("SHA1"_i18n, [this](){
-                        DisplayHash(hash::Type::Sha1);
-                    }));
-                    options->Add(std::make_shared<SidebarEntryCallback>("SHA256"_i18n, [this](){
-                        DisplayHash(hash::Type::Sha256);
-                    }));
-                }));
+                }
 
                 options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_menu->m_ignore_read_only.Get(), [this](bool& v_out){
                     m_menu->m_ignore_read_only.Set(v_out);
