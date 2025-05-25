@@ -295,30 +295,28 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
                 m_menu->ResetSelection();
             }
 
-            const auto set = m_selected_count != m_entries_current.size();
+            // if both set, select all.
+            if (App::GetApp()->m_controller.GotHeld(Button::R2)) {
+                const auto set = m_selected_count != m_entries_current.size();
 
-            for (u32 i = 0; i < m_entries_current.size(); i++) {
-                auto& e = GetEntry(i);
-                if (e.selected != set) {
-                    e.selected = set;
-                    if (set) {
-                        m_selected_count++;
-                    } else {
-                        m_selected_count--;
+                for (u32 i = 0; i < m_entries_current.size(); i++) {
+                    auto& e = GetEntry(i);
+                    if (e.selected != set) {
+                        e.selected = set;
+                        if (set) {
+                            m_selected_count++;
+                        } else {
+                            m_selected_count--;
+                        }
                     }
                 }
-            }
-        }}),
-        std::make_pair(Button::R2, Action{[this](){
-            if (!m_menu->m_selected.Empty()) {
-                m_menu->ResetSelection();
-            }
-
-            GetEntry().selected ^= 1;
-            if (GetEntry().selected) {
-                m_selected_count++;
             } else {
-                m_selected_count--;
+                GetEntry().selected ^= 1;
+                if (GetEntry().selected) {
+                    m_selected_count++;
+                } else {
+                    m_selected_count--;
+                }
             }
         }}),
         std::make_pair(Button::A, Action{"Open"_i18n, [this](){
