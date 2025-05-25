@@ -21,6 +21,7 @@ namespace sphaira::ui::menu::gc {
 namespace {
 
 constexpr u32 XCI_MAGIC = std::byteswap(0x48454144);
+constexpr u32 REMOUNT_ATTEMPT_MAX = 8; // same as nxdumptool.
 
 enum DumpFileType {
     DumpFileType_XCI,
@@ -88,6 +89,17 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
     *ptr2 = '\0';
 }
 
+struct DebugEventInfo {
+    u32 event_type;
+    u32 flags;
+    u64 thread_id;
+    u64 title_id;
+    u64 process_id;
+    char process_name[12];
+    u32 mmu_flags;
+    u8 _0x30[0x10];
+};
+
 auto GetDumpTypeStr(u8 type) -> const char* {
     switch (type) {
         case DumpFileType_XCI: return ".xci";
@@ -122,10 +134,12 @@ auto BuildXciBasePath(std::span<const ApplicationEntry> entries) -> fs::FsPath {
     return path;
 }
 
+#if 0
 // builds path suiteable for usb transfer.
 auto BuildFilePath(DumpFileType type, std::span<const ApplicationEntry> entries) -> fs::FsPath {
     return BuildXciBasePath(entries) + GetDumpTypeStr(type);
 }
+#endif
 
 // builds path suiteable for file dumps.
 auto BuildFullDumpPath(DumpFileType type, std::span<const ApplicationEntry> entries) -> fs::FsPath {
@@ -408,18 +422,19 @@ Menu::Menu() : MenuBase{"GameCard"_i18n} {
 }
 
 Menu::~Menu() {
-    GcUmountStorage();
     GcUnmount();
     eventClose(std::addressof(m_event));
     fsEventNotifierClose(std::addressof(m_event_notifier));
     fsDeviceOperatorClose(std::addressof(m_dev_op));
+    nsExit();
 }
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
     // poll for the gamecard first before handling inputs as the gamecard
     // may have been removed, thus pressing A would fail.
-    if (R_SUCCEEDED(eventWait(std::addressof(m_event), 0))) {
-        GcOnEvent();
+    if (m_dirty || R_SUCCEEDED(eventWait(std::addressof(m_event), 0))) {
+        GcOnEvent(m_dirty);
+        m_dirty = false;
     }
 
     MenuBase::Update(controller, touch);
@@ -499,9 +514,9 @@ void Menu::OnFocusGained() {
 Result Menu::GcMount() {
     GcUnmount();
 
-    // after storage has been mounted, it will take 2 attempts to mount
+    // after storage has been mounted, it will take X attempts to mount
     // the fs, same as mounting storage.
-    for (int i = 0; i < 2; i++) {
+    for (u32 i = 0; i < REMOUNT_ATTEMPT_MAX; i++) {
         R_TRY(fsDeviceOperatorGetGameCardHandle(std::addressof(m_dev_op), std::addressof(m_handle)));
         m_fs = std::make_unique<fs::FsNativeGameCard>(std::addressof(m_handle), FsGameCardPartition_Secure, false);
         if (R_SUCCEEDED(m_fs->GetFsOpenResult())) {
@@ -654,29 +669,20 @@ Result Menu::GcMount() {
                 auto options = std::make_shared<Sidebar>("Select content to dump"_i18n, Sidebar::Side::RIGHT);
                 ON_SCOPE_EXIT(App::Push(options));
 
-                options->Add(std::make_shared<SidebarEntryCallback>("Dump XCI"_i18n, [this](){
-                    DumpGames(DumpFileFlag_XCI);
-                }, true));
-                options->Add(std::make_shared<SidebarEntryCallback>("Dump All"_i18n, [this](){
-                    DumpGames(DumpFileFlag_All);
-                }, true));
-                options->Add(std::make_shared<SidebarEntryCallback>("Dump All Bins"_i18n, [this](){
-                    DumpGames(DumpFileFlag_AllBin);
-                }, true));
-                options->Add(std::make_shared<SidebarEntryCallback>("Dump Card ID Set"_i18n, [this](){
-                    DumpGames(DumpFileFlag_Set);
-                }, true));
-                // todo:
-                // options->Add(std::make_shared<SidebarEntryCallback>("Dump Card UID"_i18n, [this](){
-                //     DumpGames(DumpFileFlag_UID);
-                // }, true));
-                options->Add(std::make_shared<SidebarEntryCallback>("Dump Certificate"_i18n, [this](){
-                    DumpGames(DumpFileFlag_Cert);
-                }, true));
-                // todo:
-                // options->Add(std::make_shared<SidebarEntryCallback>("Dump Initial Data"_i18n, [this](){
-                //     DumpGames(DumpFileFlag_Initial);
-                // }, true));
+                const auto add = [&](const std::string& name, u32 flags){
+                    options->Add(std::make_shared<SidebarEntryCallback>(name, [this, flags](){
+                        DumpGames(flags);
+                        m_dirty = true;
+                    }, true));
+                };
+
+                add("Dump XCI"_i18n, DumpFileFlag_XCI);
+                add("Dump All"_i18n, DumpFileFlag_All);
+                add("Dump All Bins"_i18n, DumpFileFlag_AllBin);
+                add("Dump Card ID Set"_i18n, DumpFileFlag_Set);
+                add("Dump Card UID"_i18n, DumpFileFlag_UID);
+                add("Dump Certificate"_i18n, DumpFileFlag_Cert);
+                add("Dump Initial Data"_i18n, DumpFileFlag_Initial);
             }
         }
     }});
@@ -700,6 +706,8 @@ Result Menu::GcMount() {
 }
 
 void Menu::GcUnmount() {
+    GcUmountStorage();
+
     m_fs.reset();
     m_entries.clear();
     m_entry_index = 0;
@@ -722,6 +730,7 @@ Result Menu::GcMountStorage() {
     u32 trim_size;
     std::memcpy(&magic, header + 0x100, sizeof(magic));
     std::memcpy(&trim_size, header + 0x118, sizeof(trim_size));
+    std::memcpy(&m_package_id, header + 0x110, sizeof(m_package_id));
     std::memcpy(m_initial_data_hash, header + 0x160, sizeof(m_initial_data_hash));
     R_UNLESS(magic == XCI_MAGIC, 0x1);
 
@@ -754,7 +763,7 @@ Result Menu::GcMountPartition(FsGameCardStoragePartition partition) {
     // the 2nd attempt will succeeded, but qlaunch will fail to mount
     // the gamecard as it will only attempt to mount once.
     Result rc;
-    for (int i = 0; i < 2; i++) {
+    for (u32 i = 0; i < REMOUNT_ATTEMPT_MAX; i++) {
         R_TRY(fsDeviceOperatorGetGameCardHandle(&m_dev_op, &m_handle));
         if (R_SUCCEEDED(rc = fsOpenGameCardStorage(&m_storage, &m_handle, partition))){
             break;
@@ -843,11 +852,11 @@ Result Menu::GcPoll(bool* inserted) {
     R_SUCCEED();
 }
 
-Result Menu::GcOnEvent() {
+Result Menu::GcOnEvent(bool force) {
     bool inserted{};
     R_TRY(GcPoll(&inserted));
 
-    if (m_mounted != inserted) {
+    if (force || m_mounted != inserted) {
         log_write("gc state changed\n");
         m_mounted = inserted;
         if (m_mounted) {
@@ -946,6 +955,17 @@ void Menu::OnChangeIndex(s64 new_index) {
 Result Menu::DumpGames(u32 flags) {
     R_TRY(GcMountStorage());
 
+    u32 location_flags = dump::DumpLocationFlag_All;
+
+    // if we need to dump any of the bins, read fs memory until we find
+    // what we are looking for.
+    // the below code, along with the structs is taken from nxdumptool.
+    GameCardSecurityInformation security_info;
+    if ((flags &~ DumpFileFlag_XCI)) {
+        location_flags &= ~dump::DumpLocationFlag_UsbS2S;
+        R_TRY(GcGetSecurityInfo(security_info));
+    }
+
     auto source = std::make_shared<XciSource>();
     source->menu = this;
     source->application_name = m_entries[m_entry_index].lang_entry.name;
@@ -963,34 +983,103 @@ Result Menu::DumpGames(u32 flags) {
     }
 
     if (flags & DumpFileFlag_Set) {
-        source->id_set.resize(0xC);
+        source->id_set.resize(sizeof(FsGameCardIdSet));
         R_TRY(fsDeviceOperatorGetGameCardIdSet(&m_dev_op, source->id_set.data(), source->id_set.size(), source->id_set.size()));
         paths.emplace_back(BuildFullDumpPath(DumpFileType_Set, m_entries));
     }
 
-    // todo:
     if (flags & DumpFileFlag_UID) {
-        // paths.emplace_back(BuildFullDumpPath(DumpFileType_UID, m_entries));
+        source->uid.resize(sizeof(security_info.specific_data.card_uid));
+        std::memcpy(source->uid.data(), &security_info.specific_data.card_uid, source->uid.size());
+        paths.emplace_back(BuildFullDumpPath(DumpFileType_UID, m_entries));
     }
 
     if (flags & DumpFileFlag_Cert) {
-        s64 size;
-        source->cert.resize(0x200);
-        R_TRY(fsDeviceOperatorGetGameCardDeviceCertificate(&m_dev_op, &m_handle, source->cert.data(), source->cert.size(), &size, source->cert.size()));
+        source->cert.resize(sizeof(security_info.certificate));
+        std::memcpy(source->cert.data(), &security_info.certificate, source->cert.size());
         paths.emplace_back(BuildFullDumpPath(DumpFileType_Cert, m_entries));
     }
 
-    // todo:
     if (flags & DumpFileFlag_Initial) {
-        // paths.emplace_back(BuildFullDumpPath(DumpFileType_Initial, m_entries));
+        source->initial.resize(sizeof(security_info.initial_data));
+        std::memcpy(source->initial.data(), &security_info.initial_data, source->initial.size());
+        paths.emplace_back(BuildFullDumpPath(DumpFileType_Initial, m_entries));
     }
 
-    dump::Dump(source, paths, [this](Result rc){
-        GcUmountStorage();
-        GcUnmount();
-    });
+    dump::Dump(source, paths, [](Result){}, location_flags);
 
     R_SUCCEED();
+}
+
+Result Menu::GcGetSecurityInfo(GameCardSecurityInformation& out) {
+    R_TRY(GcMountPartition(FsGameCardStoragePartition_Secure));
+
+    constexpr u64 title_id = 0x0100000000000000; // FS
+    Handle handle{};
+    DebugEventInfo event_info{};
+    u64 pids[0x50]{};
+    s32 process_count{};
+
+    R_TRY(svcGetProcessList(&process_count, pids, std::size(pids)));
+    for (s32 i = 0; i < (process_count - 1); i++) {
+        if (R_SUCCEEDED(svcDebugActiveProcess(&handle, pids[i]))) {
+            ON_SCOPE_EXIT(svcCloseHandle(handle));
+
+            if (R_FAILED(svcGetDebugEvent(&event_info, handle)) || title_id != event_info.title_id) {
+                continue;
+            }
+
+            const auto package_id = m_package_id;
+            static u64 addr{};
+            MemoryInfo mem_info{};
+            u32 page_info{};
+            std::vector<u8> data{};
+
+            for (;;) {
+                R_TRY(svcQueryDebugProcessMemory(&mem_info, &page_info, handle, addr));
+
+                // if addr=0 then we hit the reserved memory section
+                addr = mem_info.addr + mem_info.size;
+                if (!addr) {
+                    break;
+                }
+
+                // skip memory that we don't want
+                if (mem_info.attr || !mem_info.size || (mem_info.perm & Perm_Rw) != Perm_Rw || (mem_info.type & MemState_Type) != MemType_CodeMutable) {
+                    continue;
+                }
+
+                data.resize(mem_info.size);
+                R_TRY(svcReadDebugProcessMemory(data.data(), handle, mem_info.addr, data.size()));
+
+                for (s64 i = 0; i < data.size(); i += 8) {
+                    if (i + sizeof(out.initial_data) >= data.size()) {
+                        break;
+                    }
+
+                    if (!std::memcmp(&package_id, data.data() + i, sizeof(m_package_id))) [[unlikely]] {
+                        log_write("[GC] found the package id\n");
+                        u8 hash[SHA256_HASH_SIZE];
+                        sha256CalculateHash(hash, data.data() + i, 0x200);
+
+                        if (!std::memcmp(hash, m_initial_data_hash, sizeof(hash))) {
+                            // successive calls will jump to the addr as the location will not change.
+                            addr = mem_info.addr;
+                            log_write("[GC] found the security info\n");
+                            log_write("\tperm: 0x%X\n", mem_info.perm);
+                            log_write("\ttype: 0x%X\n", mem_info.type & MemState_Type);
+                            log_write("\taddr: 0x%016lX\n", mem_info.addr);
+                            log_write("\toff: 0x%016lX\n", mem_info.addr + i);
+                            std::memcpy(&out, data.data() + i - offsetof(GameCardSecurityInformation, initial_data), sizeof(out));
+                            R_SUCCEED();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    R_THROW(0x1);
 }
 
 } // namespace sphaira::ui::menu::gc

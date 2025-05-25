@@ -96,4 +96,5 @@ The output will be found in `build/MinSizeRel/sphaira.nro`
 - GBATemp
 - hb-appstore
 - haze
+- nxdumptool (for gamecard bin dumping and rsa verify code)
 - Everyone who has contributed to this project!

@@ -15,6 +15,123 @@ typedef enum {
     FsGameCardStoragePartition_Secure = 1,
 } FsGameCardStoragePartition;
 
+////////////////////////////////////////////////
+// The below structs are taken from nxdumptool./
+////////////////////////////////////////////////
+
+/// Located at offset 0x7000 in the gamecard image.
+typedef struct {
+    u8 signature[0x100];        ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the data.
+    u32 magic;                  ///< "CERT".
+    u32 version;
+    u8 kek_index;
+    u8 reserved[0x7];
+    u8 t1_card_device_id[0x10];
+    u8 iv[0x10];
+    u8 hw_key[0x10];            ///< Encrypted.
+    u8 data[0xC0];              ///< Encrypted.
+} FsGameCardCertificate;
+
+static_assert(sizeof(FsGameCardCertificate) == 0x200);
+
+typedef struct {
+    u8 maker_code;      ///< FsCardId1MakerCode.
+    u8 memory_capacity; ///< Matches GameCardRomSize.
+    u8 reserved;        ///< Known values: 0x00, 0x01, 0x02, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0C, 0x0D, 0x0E, 0x80.
+    u8 memory_type;     ///< FsCardId1MemoryType.
+} FsCardId1;
+
+static_assert(sizeof(FsCardId1) == 0x4);
+
+typedef struct {
+    u8 card_security_number;    ///< FsCardId2CardSecurityNumber.
+    u8 card_type;               ///< FsCardId2CardType.
+    u8 reserved[0x2];           ///< Usually filled with zeroes.
+} FsCardId2;
+
+static_assert(sizeof(FsCardId2) == 0x4);
+
+typedef struct {
+    u8 reserved[0x4];   ///< Usually filled with zeroes.
+} FsCardId3;
+
+static_assert(sizeof(FsCardId3) == 0x4);
+
+/// Returned by fsDeviceOperatorGetGameCardIdSet.
+typedef struct {
+    FsCardId1 id1;  ///< Specifies maker code, memory capacity and memory type.
+    FsCardId2 id2;  ///< Specifies card security number and card type.
+    FsCardId3 id3;  ///< Always zero (so far).
+} FsGameCardIdSet;
+
+/// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
+typedef struct {
+    union {
+        u8 value[0x10];
+        struct {
+            u8 package_id[0x8]; ///< Matches package_id from GameCardHeader.
+            u8 reserved[0x8];   ///< Just zeroes.
+        };
+    };
+} GameCardKeySource;
+
+static_assert(sizeof(GameCardKeySource) == 0x10);
+
+/// Plaintext area. Dumped from FS program memory.
+typedef struct {
+    GameCardKeySource key_source;
+    u8 encrypted_titlekey[0x10];    ///< Encrypted using AES-128-CCM with the decrypted key_source and the nonce from this section.
+    u8 mac[0x10];                   ///< Used to verify the validity of the decrypted titlekey.
+    u8 nonce[0xC];                  ///< Used as the IV to decrypt encrypted_titlekey using AES-128-CCM.
+    u8 reserved[0x1C4];
+} GameCardInitialData;
+
+static_assert(sizeof(GameCardInitialData) == 0x200);
+
+typedef struct {
+    u8 maker_code;              ///< GameCardUidMakerCode.
+    u8 version;                 ///< TODO: determine whether this matches GameCardVersion or not.
+    u8 card_type;               ///< GameCardUidCardType.
+    u8 unique_data[0x9];
+    u32 random;
+    u8 platform_flag;
+    u8 reserved[0xB];
+    FsCardId1 card_id_1_mirror; ///< This field mirrors bit 5 of FsCardId1MemoryType.
+    u8 mac[0x20];
+} GameCardUid;
+
+static_assert(sizeof(GameCardUid) == 0x40);
+
+/// Plaintext area. Dumped from FS program memory.
+/// Overall structure may change with each new LAFW version.
+typedef struct {
+    u32 asic_security_mode; ///< Determines how the Lotus ASIC initialised the gamecard security mode. Usually 0xFFFFFFF9.
+    u32 asic_status;        ///< Bitmask of the internal gamecard interface status. Usually 0x20000000.
+    FsCardId1 card_id1;
+    FsCardId2 card_id2;
+    GameCardUid card_uid;
+    u8 reserved[0x190];
+    u8 mac[0x20];           ///< Changes with each gamecard (re)insertion.
+} GameCardSpecificData;
+
+static_assert(sizeof(GameCardSpecificData) == 0x200);
+
+/// Plaintext area. Dumped from FS program memory.
+/// This struct is returned by Lotus command "ChangeToSecureMode" (0xF). This means it is only available *after* the gamecard secure area has been mounted.
+/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardInfo precedes this struct in FS program memory.
+typedef struct {
+    GameCardSpecificData specific_data;
+    FsGameCardCertificate certificate;
+    u8 reserved[0x200];
+    GameCardInitialData initial_data;
+} GameCardSecurityInformation;
+
+static_assert(sizeof(GameCardSecurityInformation) == 0x800);
+
+///////////////////
+// nxdumptool fin./
+///////////////////
+
 struct GcCollection : yati::container::CollectionEntry {
     GcCollection(const char* _name, s64 _size, u8 _type, u8 _id_offset) {
         name = _name;
@@ -61,7 +178,7 @@ struct Menu final : MenuBase {
 
 private:
     Result GcPoll(bool* inserted);
-    Result GcOnEvent();
+    Result GcOnEvent(bool force = false);
 
     // GameCard FS api.
     Result GcMount();
@@ -73,6 +190,9 @@ private:
     Result GcMountPartition(FsGameCardStoragePartition partition);
     void GcUnmountPartition();
     Result GcStorageReadInternal(void* buf, s64 off, s64 size, u64* bytes_read);
+
+    // taken from nxdumptool.
+    Result GcGetSecurityInfo(GameCardSecurityInformation& out);
 
     Result LoadControlData(ApplicationEntry& e);
     Result UpdateStorageSize();
@@ -104,9 +224,13 @@ private:
     s64 m_parition_secure_size{};
     s64 m_storage_trimmed_size{};
     s64 m_storage_total_size{};
+    u64 m_package_id{};
     u8 m_initial_data_hash[SHA256_HASH_SIZE]{};
     FsGameCardStoragePartition m_partition{FsGameCardStoragePartition_None};
     bool m_storage_mounted{};
+
+    // set when the gc should be re-mounted, cleared when handled.
+    bool m_dirty{};
 };
 
 } // namespace sphaira::ui::menu::gc
