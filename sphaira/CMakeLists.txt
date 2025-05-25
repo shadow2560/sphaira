@@ -147,8 +147,6 @@ target_compile_options(sphaira PRIVATE
     -Wimplicit-fallthrough=5
     -Wsuggest-final-types
     -Wuninitialized
-    -fimplicit-constexpr
-    -Wmissing-requires
 )
 
 include(FetchContent)
@@ -314,9 +312,9 @@ if (NOT USE_NEW_ZSTD)
 endif()
 
 set_target_properties(sphaira PROPERTIES
-    C_STANDARD 11
+    C_STANDARD 23
     C_EXTENSIONS ON
-    CXX_STANDARD 23
+    CXX_STANDARD 26
     CXX_EXTENSIONS ON
 )
 
@@ -357,12 +355,13 @@ file(COPY ${CMAKE_SOURCE_DIR}/assets/romfs DESTINATION ${CMAKE_CURRENT_BINARY_DI
 # create assets target
 dkp_add_asset_target(sphaira_romfs ${CMAKE_CURRENT_BINARY_DIR}/romfs)
 
-# add hbl exefs to romfs, used for forwarders
-dkp_install_assets(sphaira_romfs
-    DESTINATION exefs
-    TARGETS
-        hbl_nso
-        hbl_npdm
+# wait until hbl is built first as we need the exefs to embed
+add_dependencies(sphaira hbl_nso hbl_npdm)
+
+# set the embed path for assets and hbl
+target_compile_options(sphaira PRIVATE
+    --embed-dir=${CMAKE_SOURCE_DIR}/assets/embed
+    --embed-dir=${CMAKE_BINARY_DIR}/hbl
 )
 
 # add nanovg shaders to romfs

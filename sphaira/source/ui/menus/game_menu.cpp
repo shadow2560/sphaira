@@ -981,6 +981,9 @@ void Menu::ScanHomebrew() {
     const auto hide_forwarders = m_hide_forwarders.Get();
     TimeStamp ts;
 
+    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+
     FreeEntries();
     m_entries.reserve(ENTRY_CHUNK_COUNT);
 

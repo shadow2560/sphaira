@@ -106,13 +106,14 @@ private:
 Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, BaseSource* source, std::span<const fs::FsPath> paths) {
     constexpr s64 BIG_FILE_SIZE = 1024ULL*1024ULL*1024ULL*4ULL;
 
-    for (auto path : paths) {
+    for (const auto& path : paths) {
+        const auto base_path = fs::AppendPath(root, path);
         const auto file_size = source->GetSize(path);
         pbox->SetImage(source->GetIcon(path));
         pbox->SetTitle(source->GetName(path));
-        pbox->NewTransfer(path);
+        pbox->NewTransfer(base_path);
 
-        const auto temp_path = fs::AppendPath(root, path + ".temp");
+        const auto temp_path = base_path + ".temp";
         fs->CreateDirectoryRecursivelyWithPath(temp_path);
         fs->DeleteFile(temp_path);
 
@@ -135,9 +136,8 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
             ));
         }
 
-        path = fs::AppendPath(root, path);
-        fs->DeleteFile(path);
-        R_TRY(fs->RenameFile(temp_path, path));
+        fs->DeleteFile(base_path);
+        R_TRY(fs->RenameFile(temp_path, base_path));
     }
 
     R_SUCCEED();

@@ -70,10 +70,6 @@ enum : Result {
 struct Config {
     bool sd_card_install{};
 
-    // sets the performance mode to FastLoad which boosts the CPU clock
-    // and lowers the GPU clock.
-    bool boost_mode{};
-
     // enables downgrading patch / data patch (dlc) version.
     bool allow_downgrade{};
 

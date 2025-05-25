@@ -767,16 +767,11 @@ Yati::~Yati() {
         ncmContentStorageClose(std::addressof(ncm_cs[i]));
     }
 
-    if (config.boost_mode) {
-        appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
-    }
-
     App::SetAutoSleepDisabled(false);
 }
 
 Result Yati::Setup(const ConfigOverride& override) {
     config.sd_card_install = override.sd_card_install.value_or(App::GetApp()->m_install_sd.Get());
-    config.boost_mode = App::GetApp()->m_boost_mode.Get();
     config.allow_downgrade = App::GetApp()->m_allow_downgrade.Get();
     config.skip_if_already_installed = App::GetApp()->m_skip_if_already_installed.Get();
     config.ticket_only = App::GetApp()->m_ticket_only.Get();
@@ -793,10 +788,6 @@ Result Yati::Setup(const ConfigOverride& override) {
     config.lower_master_key = override.lower_master_key.value_or(App::GetApp()->m_lower_master_key.Get());
     config.lower_system_version = override.lower_system_version.value_or(App::GetApp()->m_lower_system_version.Get());
     storage_id = config.sd_card_install ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser;
-
-    if (config.boost_mode) {
-        appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
-    }
 
     R_TRY(source->GetOpenResult());
     R_TRY(splCryptoInitialize());

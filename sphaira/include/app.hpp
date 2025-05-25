@@ -69,6 +69,7 @@ public:
     static auto GetThemeIndex() -> s64;
 
     static auto GetDefaultImage() -> int;
+    static auto GetDefaultImageData() -> std::span<const u8>;
 
     // returns argv[0]
     static auto GetExePath() -> fs::FsPath;
@@ -196,6 +197,7 @@ public:
     static constexpr inline auto CONFIG_PATH = "/config/sphaira/config.ini";
     static constexpr inline auto PLAYLOG_PATH = "/config/sphaira/playlog.ini";
     static constexpr inline auto INI_SECTION = "config";
+    static constexpr inline auto DEFAULT_THEME_PATH = "romfs:/themes/abyss_theme.ini";
 
     fs::FsPath m_app_path;
     u64 m_start_timestamp{};
@@ -229,17 +231,18 @@ public:
     option::OptionBool m_hdd_enabled{INI_SECTION, "hdd_enabled", false};
     option::OptionBool m_log_enabled{INI_SECTION, "log_enabled", false};
     option::OptionBool m_replace_hbmenu{INI_SECTION, "replace_hbmenu", false};
+    option::OptionString m_theme_path{INI_SECTION, "theme", DEFAULT_THEME_PATH};
     option::OptionBool m_theme_music{INI_SECTION, "theme_music", true};
     option::OptionBool m_12hour_time{INI_SECTION, "12hour_time", false};
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto
     option::OptionString m_right_side_menu{INI_SECTION, "right_side_menu", "Appstore"};
+    option::OptionBool m_progress_boost_mode{INI_SECTION, "progress_boost_mode", false};
 
     // install options
     option::OptionBool m_install_sysmmc{INI_SECTION, "install_sysmmc", false};
     option::OptionBool m_install_emummc{INI_SECTION, "install_emummc", false};
     option::OptionBool m_install_sd{INI_SECTION, "install_sd", true};
     option::OptionLong m_install_prompt{INI_SECTION, "install_prompt", true};
-    option::OptionLong m_boost_mode{INI_SECTION, "boost_mode", false};
     option::OptionBool m_allow_downgrade{INI_SECTION, "allow_downgrade", false};
     option::OptionBool m_skip_if_already_installed{INI_SECTION, "skip_if_already_installed", true};
     option::OptionBool m_ticket_only{INI_SECTION, "ticket_only", false};

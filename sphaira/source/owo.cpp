@@ -34,6 +34,14 @@ constexpr u32 PFS0_PADDING_SIZE = 0x200;
 constexpr u32 ROMFS_ENTRY_EMPTY = 0xFFFFFFFF;
 constexpr u32 ROMFS_FILEPARTITION_OFS = 0x200;
 
+constexpr const u8 HBL_MAIN_DATA[]{
+    #embed <exefs/main>
+};
+
+constexpr const u8 HBL_NPDM_DATA[]{
+    #embed <exefs/main.npdm>
+};
+
 // stdio-like wrapper for std::vector
 struct BufHelper {
     BufHelper() = default;
@@ -831,6 +839,9 @@ auto create_meta_nca(u64 tid, const keys::Keys& keys, NcmStorageId storage_id, c
 }
 
 auto install_forwader_internal(ui::ProgressBox* pbox, OwoConfig& config, NcmStorageId storage_id) -> Result {
+    pbox->SetTitle(config.name);
+    pbox->SetImageDataConst(config.icon);
+
     R_UNLESS(!config.nro_path.empty(), OwoError_BadArgs);
     // R_UNLESS(!config.icon.empty(), OwoError_BadArgs);
 
@@ -864,13 +875,10 @@ auto install_forwader_internal(ui::ProgressBox* pbox, OwoConfig& config, NcmStor
 
     // create program
     if (config.program_nca.empty()) {
-        R_UNLESS(!config.main.empty(), OwoError_BadArgs);
-        R_UNLESS(!config.npdm.empty(), OwoError_BadArgs);
-
         pbox->NewTransfer("Creating Program"_i18n).UpdateTransfer(0, 8);
         FileEntries exefs;
-        add_file_entry(exefs, "main", config.main);
-        add_file_entry(exefs, "main.npdm", config.npdm);
+        add_file_entry(exefs, "main", HBL_MAIN_DATA);
+        add_file_entry(exefs, "main.npdm", HBL_NPDM_DATA);
 
         FileEntries romfs;
         add_file_entry(romfs, "/nextArgv", config.args.data(), config.args.length());

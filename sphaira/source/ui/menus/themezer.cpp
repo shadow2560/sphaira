@@ -647,6 +647,9 @@ void Menu::PackListDownload() {
         curl::Flags{curl::Flag_Cache},
         curl::StopToken{this->GetToken()},
         curl::OnComplete{[this, page_index](auto& result){
+            appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+            ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+
             log_write("got themezer data\n");
             if (!result.success) {
                 auto& page = m_pages[page_index-1];

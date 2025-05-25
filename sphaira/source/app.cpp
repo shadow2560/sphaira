@@ -25,6 +25,7 @@
 #include <pulsar.h>
 #include <haze.h>
 #include <algorithm>
+#include <ranges>
 #include <cassert>
 #include <cstring>
 #include <ctime>
@@ -42,6 +43,10 @@ namespace {
 constexpr fs::FsPath DEFAULT_MUSIC_PATH = "/config/sphaira/themes/default_music.bfstm";
 constexpr const char* DEFAULT_MUSIC_URL = "https://files.catbox.moe/1ovji1.bfstm";
 // constexpr const char* DEFAULT_MUSIC_URL = "https://raw.githubusercontent.com/ITotalJustice/sphaira/refs/heads/master/assets/default_music.bfstm";
+
+constexpr const u8 DEFAULT_IMAGE_DATA[]{
+    #embed <icons/default.png>
+};
 
 void download_default_music() {
     App::Push(std::make_shared<ui::ProgressBox>(0, "Downloading "_i18n, "default_music.bfstm", [](auto pbox){
@@ -444,10 +449,7 @@ void App::Loop() {
 
                     // update timestamp
                     ini_putl(nro_path.c_str(), "timestamp", timestamp, App::PLAYLOG_PATH);
-                    // update launch_count
-                    const long old_launch_count = ini_getl(nro_path.c_str(), "launch_count", 0, App::PLAYLOG_PATH);
-                    ini_putl(nro_path.c_str(), "launch_count", old_launch_count + 1, App::PLAYLOG_PATH);
-                    log_write("updating timestamp and launch count for: %s %lu %ld\n", nro_path.c_str(), timestamp, old_launch_count + 1);
+                    log_write("updating timestamp for: %s %lu\n", nro_path.c_str(), timestamp);
 
                     // force disable pop-back to main menu.
                     __nx_applet_exit_mode = 0;
@@ -516,11 +518,11 @@ auto App::Push(std::shared_ptr<ui::Widget> widget) -> void {
 }
 
 auto App::PopToMenu() -> void {
-    for (auto it = g_app->m_widgets.rbegin(); it != g_app->m_widgets.rend(); it++) {
-        const auto& p = *it;
+    for (auto& p : std::ranges::views::reverse(g_app->m_widgets)) {
         if (p->IsMenu()) {
             break;
         }
+
         p->SetPop();
     }
 }
@@ -593,6 +595,10 @@ auto App::GetThemeIndex() -> s64 {
 
 auto App::GetDefaultImage() -> int {
     return g_app->m_default_image;
+}
+
+auto App::GetDefaultImageData() -> std::span<const u8> {
+    return DEFAULT_IMAGE_DATA;
 }
 
 auto App::GetExePath() -> fs::FsPath {
@@ -868,18 +874,7 @@ void App::SetTextScrollSpeed(long index) {
 }
 
 auto App::Install(OwoConfig& config) -> Result {
-    R_TRY(romfsInit());
-    ON_SCOPE_EXIT(romfsExit());
-
-    std::vector<u8> main_data, npdm_data, logo_data, gif_data;
-    R_TRY(fs::read_entire_file("romfs:/exefs/main", main_data));
-    R_TRY(fs::read_entire_file("romfs:/exefs/main.npdm", npdm_data));
-
     config.nro_path = nro_add_arg_file(config.nro_path);
-    config.main = main_data;
-    config.npdm = npdm_data;
-    config.logo = logo_data;
-    config.gif = gif_data;
     if (!config.icon.empty()) {
         config.icon = GetNroIcon(config.icon);
     }
@@ -898,18 +893,7 @@ auto App::Install(OwoConfig& config) -> Result {
 }
 
 auto App::Install(ui::ProgressBox* pbox, OwoConfig& config) -> Result {
-    R_TRY(romfsInit());
-    ON_SCOPE_EXIT(romfsExit());
-
-    std::vector<u8> main_data, npdm_data, logo_data, gif_data;
-    R_TRY(fs::read_entire_file("romfs:/exefs/main", main_data));
-    R_TRY(fs::read_entire_file("romfs:/exefs/main.npdm", npdm_data));
-
     config.nro_path = nro_add_arg_file(config.nro_path);
-    config.main = main_data;
-    config.npdm = npdm_data;
-    config.logo = logo_data;
-    config.gif = gif_data;
     if (!config.icon.empty()) {
         config.icon = GetNroIcon(config.icon);
     }
@@ -1268,6 +1252,9 @@ void App::ScanThemeEntries() {
 App::App(const char* argv0) {
     TimeStamp ts;
 
+    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+
     g_app = this;
     m_start_timestamp = armGetSystemTick();
     if (!std::strncmp(argv0, "sdmc:/", 6)) {
@@ -1283,10 +1270,55 @@ App::App(const char* argv0) {
     }
 
     fs::FsNativeSd fs;
-    fs.CreateDirectoryRecursively("/config/sphaira/assoc");
-    fs.CreateDirectoryRecursively("/config/sphaira/themes");
-    fs.CreateDirectoryRecursively("/config/sphaira/github");
-    fs.CreateDirectoryRecursively("/config/sphaira/i18n");
+    fs.CreateDirectoryRecursively("/config/sphaira");
+    fs.CreateDirectory("/config/sphaira/assoc");
+    fs.CreateDirectory("/config/sphaira/themes");
+    fs.CreateDirectory("/config/sphaira/github");
+    fs.CreateDirectory("/config/sphaira/i18n");
+
+    auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
+        auto app = static_cast<App*>(UserData);
+
+        if (!std::strcmp(Section, INI_SECTION)) {
+            if (app->m_nxlink_enabled.LoadFrom(Key, Value)) {}
+            else if (app->m_mtp_enabled.LoadFrom(Key, Value)) {}
+            else if (app->m_ftp_enabled.LoadFrom(Key, Value)) {}
+            else if (app->m_hdd_enabled.LoadFrom(Key, Value)) {}
+            else if (app->m_log_enabled.LoadFrom(Key, Value)) {}
+            else if (app->m_replace_hbmenu.LoadFrom(Key, Value)) {}
+            else if (app->m_theme_path.LoadFrom(Key, Value)) {}
+            else if (app->m_theme_music.LoadFrom(Key, Value)) {}
+            else if (app->m_12hour_time.LoadFrom(Key, Value)) {}
+            else if (app->m_language.LoadFrom(Key, Value)) {}
+            else if (app->m_right_side_menu.LoadFrom(Key, Value)) {}
+            else if (app->m_install_sysmmc.LoadFrom(Key, Value)) {}
+            else if (app->m_install_emummc.LoadFrom(Key, Value)) {}
+            else if (app->m_install_sd.LoadFrom(Key, Value)) {}
+            else if (app->m_install_prompt.LoadFrom(Key, Value)) {}
+            else if (app->m_progress_boost_mode.LoadFrom(Key, Value)) {}
+            else if (app->m_allow_downgrade.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_if_already_installed.LoadFrom(Key, Value)) {}
+            else if (app->m_ticket_only.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_base.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_patch.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_addon.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_data_patch.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_ticket.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_nca_hash_verify.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_rsa_header_fixed_key_verify.LoadFrom(Key, Value)) {}
+            else if (app->m_skip_rsa_npdm_fixed_key_verify.LoadFrom(Key, Value)) {}
+            else if (app->m_ignore_distribution_bit.LoadFrom(Key, Value)) {}
+            else if (app->m_convert_to_standard_crypto.LoadFrom(Key, Value)) {}
+            else if (app->m_lower_master_key.LoadFrom(Key, Value)) {}
+            else if (app->m_lower_system_version.LoadFrom(Key, Value)) {}
+        }
+
+        return 1;
+    };
+
+    // load all configs ahead of time, as this is actually faster than
+    // loading each config one by one as it avoids re-opening the file multiple times.
+    ini_browse(cb, this, CONFIG_PATH);
 
     if (App::GetLogEnable()) {
         log_file_init();
@@ -1409,17 +1441,14 @@ App::App(const char* argv0) {
 
     ScanThemeEntries();
 
-    fs::FsPath theme_path{};
-    constexpr fs::FsPath default_theme_path{"romfs:/themes/abyss_theme.ini"};
-    ini_gets("config", "theme", default_theme_path, theme_path, sizeof(theme_path), CONFIG_PATH);
-
     // try and load previous theme, default to previous version otherwise.
+    fs::FsPath theme_path = m_theme_path.Get();
     ThemeMeta theme_meta;
     if (R_SUCCEEDED(romfsInit())) {
         ON_SCOPE_EXIT(romfsExit());
         if (!LoadThemeMeta(theme_path, theme_meta)) {
             log_write("failed to load meta using default\n");
-            theme_path = default_theme_path;
+            theme_path = DEFAULT_THEME_PATH;
             LoadThemeMeta(theme_path, theme_meta);
         }
     }
@@ -1456,20 +1485,12 @@ App::App(const char* argv0) {
     }
 
     ini_putl(GetExePath(), "timestamp", m_start_timestamp, App::PLAYLOG_PATH);
-    const long old_launch_count = ini_getl(GetExePath(), "launch_count", 0, App::PLAYLOG_PATH);
-    ini_putl(GetExePath(), "launch_count", old_launch_count + 1, App::PLAYLOG_PATH);
 
     // load default image
-    if (R_SUCCEEDED(romfsInit())) {
-        ON_SCOPE_EXIT(romfsExit());
-        const auto image = ImageLoadFromFile("romfs:/default.png");
-        if (!image.data.empty()) {
-            m_default_image = nvgCreateImageRGBA(vg, image.w, image.h, 0, image.data.data());
-        }
-    }
+    m_default_image = nvgCreateImageMem(vg, 0, DEFAULT_IMAGE_DATA, std::size(DEFAULT_IMAGE_DATA));
 
     App::Push(std::make_shared<ui::menu::main::MainMenu>());
-    log_write("finished app constructor, time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+    log_write("\n\tfinished app constructor, time taken: %.2fs %zums\n\n", ts.GetSecondsD(), ts.GetMs());
 }
 
 void App::PlaySoundEffect(SoundEffect effect) {
@@ -1588,6 +1609,10 @@ void App::DisplayAdvancedOptions(bool left_side) {
         App::SetReplaceHbmenuEnable(enable);
     }));
 
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Boost CPU during transfer"_i18n, App::GetApp()->m_progress_boost_mode.Get(), [](bool& enable){
+        App::GetApp()->m_progress_boost_mode.Set(enable);
+    }));
+
     options->Add(std::make_shared<ui::SidebarEntryArray>("Text scroll speed"_i18n, text_scroll_speed_items, [](s64& index_out){
         App::SetTextScrollSpeed(index_out);
     }, App::GetTextScrollSpeed()));
@@ -1636,10 +1661,6 @@ void App::DisplayInstallOptions(bool left_side) {
     options->Add(std::make_shared<ui::SidebarEntryArray>("Install location"_i18n, install_items, [](s64& index_out){
         App::SetInstallSdEnable(index_out);
     }, (s64)App::GetInstallSdEnable()));
-
-    options->Add(std::make_shared<ui::SidebarEntryBool>("Boost CPU clock"_i18n, App::GetApp()->m_boost_mode.Get(), [](bool& enable){
-        App::GetApp()->m_boost_mode.Set(enable);
-    }));
 
     options->Add(std::make_shared<ui::SidebarEntryBool>("Allow downgrade"_i18n, App::GetApp()->m_allow_downgrade.Get(), [](bool& enable){
         App::GetApp()->m_allow_downgrade.Set(enable);
@@ -1724,6 +1745,9 @@ void App::DisplayDumpOptions(bool left_side) {
 }
 
 App::~App() {
+    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+
     log_write("starting to exit\n");
 
     i18n::exit();

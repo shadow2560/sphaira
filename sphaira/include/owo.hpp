@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include "ui/progress_box.hpp"
-// #include <optional>
 
 namespace sphaira {
 
@@ -15,12 +14,9 @@ struct OwoConfig {
     std::string author{};
     NacpStruct nacp;
     std::vector<u8> icon;
-    std::vector<u8> main;
-    std::vector<u8> npdm;
     std::vector<u8> logo;
     std::vector<u8> gif;
 
-    // std::optional<u64> tid;
     std::vector<u8> program_nca{};
 };
 

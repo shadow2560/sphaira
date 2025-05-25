@@ -78,11 +78,13 @@ function(nx_create_npdm target config)
     dkp_set_target_file(${outtarget} "${NX_NPDM_OUTPUT}")
 endfunction()
 
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/exefs)
+
 nx_create_nso(hbl
-    OUTPUT main
+    OUTPUT exefs/main
 )
 
 nx_create_npdm(hbl
-    OUTPUT main.npdm
+    OUTPUT exefs/main.npdm
     CONFIG ${CMAKE_CURRENT_SOURCE_DIR}/hbl.json
 )

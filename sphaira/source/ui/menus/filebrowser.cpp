@@ -941,6 +941,9 @@ void FsView::InstallForwarder() {
                     log_write("parsing nro\n");
                     R_TRY(nro_parse(assoc.path, nro));
 
+                    NacpStruct nacp;
+                    R_TRY(nro_get_nacp(assoc.path, nacp));
+
                     log_write("got nro data\n");
                     auto file_name = assoc.use_base_name ? GetEntry().GetName() : GetEntry().GetInternalName();
 
@@ -955,9 +958,9 @@ void FsView::InstallForwarder() {
                     OwoConfig config{};
                     config.nro_path = assoc.path.toString();
                     config.args = nro_add_arg_file(GetNewPathCurrent());
-                    config.name = nro.nacp.lang[0].name + std::string{" | "} + file_name;
+                    config.name = nro.nacp.lang.name + std::string{" | "} + file_name;
                     // config.name = file_name;
-                    config.nacp = nro.nacp;
+                    config.nacp = nacp;
                     config.icon = GetRomIcon(m_fs.get(), pbox, file_name, db_indexs, nro);
                     pbox->SetImageDataConst(config.icon);
 
@@ -1017,7 +1020,7 @@ void FsView::UnzipFiles(fs::FsPath dir_path) {
                 R_THROW(0x1);
             }
 
-            for (int i = 0; i < pglobal_info.number_entry; i++) {
+            for (s64 i = 0; i < pglobal_info.number_entry; i++) {
                 if (i > 0) {
                     if (UNZ_OK != unzGoToNextFile(zfile)) {
                         log_write("failed to unzGoToNextFile\n");
@@ -1325,6 +1328,9 @@ void FsView::UploadFiles() {
 }
 
 auto FsView::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
+    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+
     log_write("new scan path: %s\n", new_path.s);
     if (!is_walk_up && !m_path.empty() && !m_entries_current.empty()) {
         const LastFile f(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
@@ -1781,7 +1787,7 @@ static Result DeleteAllCollections(ProgressBox* pbox, fs::Fs* fs, const Selected
 
                 const auto full_path = FsView::GetNewPath(c.path, p.name);
                 pbox->SetTitle(p.name);
-                pbox->NewTransfer("Deleting "_i18n + full_path);
+                pbox->NewTransfer("Deleting "_i18n + full_path.toString());
                 if ((mode & FsDirOpenMode_ReadDirs) && p.type == FsDirEntryType_Dir) {
                     log_write("deleting dir: %s\n", full_path.s);
                     R_TRY(fs->DeleteDirectory(full_path));
@@ -1804,7 +1810,7 @@ static Result DeleteAllCollections(ProgressBox* pbox, fs::Fs* fs, const Selected
 
         const auto full_path = FsView::GetNewPath(selected.m_path, p.name);
         pbox->SetTitle(p.name);
-        pbox->NewTransfer("Deleting "_i18n + full_path);
+        pbox->NewTransfer("Deleting "_i18n + full_path.toString());
 
         if ((mode & FsDirOpenMode_ReadDirs) && p.type == FsDirEntryType_Dir) {
             log_write("deleting dir: %s\n", full_path.s);

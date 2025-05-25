@@ -56,21 +56,21 @@ auto nro_parse_internal(fs::FsNative& fs, const fs::FsPath& path, NroEntry& entr
     // R_UNLESS(asset.magic == NROASSETHEADER_MAGIC, NroError_BadMagic);
 
     // some .nro (vgedit) have bad nacp, fake the nacp
-    if (asset.magic != NROASSETHEADER_MAGIC || asset.nacp.offset == 0 || asset.nacp.size != sizeof(entry.nacp)) {
+    auto& nacp = entry.nacp;
+    if (asset.magic != NROASSETHEADER_MAGIC || asset.nacp.offset == 0 || asset.nacp.size != sizeof(NacpStruct)) {
         std::memset(&asset, 0, sizeof(asset));
-        std::memset(&entry.nacp, 0, sizeof(entry.nacp));
+        std::memset(&nacp, 0, sizeof(nacp));
 
         // get the name without the .nro
         const auto file_name = std::strrchr(path, '/') + 1;
         const auto file_name_len = std::strlen(file_name);
-        for (auto& lang : entry.nacp.lang) {
-            std::strncpy(lang.name, file_name, file_name_len - 4);
-            std::strcpy(lang.author, "Unknown");
-        }
-        std::strcpy(entry.nacp.display_version, "Unknown");
+        std::strncpy(nacp.lang.name, file_name, file_name_len - 4);
+        std::strcpy(nacp.lang.author, "Unknown");
+        std::strcpy(nacp.display_version, "Unknown");
         entry.is_nacp_valid = false;
     } else {
-        R_TRY(fsFileRead(&f, data.header.size + asset.nacp.offset, &entry.nacp, sizeof(entry.nacp), FsReadOption_None, &bytes_read));
+        R_TRY(fsFileRead(&f, data.header.size + asset.nacp.offset, &nacp.lang, sizeof(nacp.lang), FsReadOption_None, &bytes_read));
+        R_TRY(fsFileRead(&f, data.header.size + asset.nacp.offset + offsetof(NacpStruct, display_version), nacp.display_version, sizeof(nacp.display_version), FsReadOption_None, &bytes_read));
         entry.is_nacp_valid = true;
     }
 

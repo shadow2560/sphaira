@@ -17,6 +17,11 @@ struct OptionBase {
     auto GetOr(const char* name) -> T;
     void Set(T value);
 
+    // returns true if loaded.
+    auto LoadFrom(const char* section, const char* name, const char* value) -> bool;
+    // same as above, but only checks the name.
+    auto LoadFrom(const char* name, const char* value) -> bool;
+
 private:
     auto GetInternal(const char* name) -> T;
 

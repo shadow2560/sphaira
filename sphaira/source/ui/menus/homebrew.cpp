@@ -233,7 +233,7 @@ void Menu::SetIndex(s64 index) {
 
 void Menu::InstallHomebrew() {
     const auto& nro = m_entries[m_index];
-    InstallHomebrew(nro.path, nro.nacp, nro_get_icon(nro.path, nro.icon_size, nro.icon_offset));
+    InstallHomebrew(nro.path, nro_get_icon(nro.path, nro.icon_size, nro.icon_offset));
 }
 
 void Menu::ScanHomebrew() {
@@ -266,8 +266,6 @@ void Menu::ScanHomebrew() {
         if (user->ini) {
             if (!strcmp(Key, "timestamp")) {
                 user->ini->timestamp = atoi(Value);
-            } else if (!strcmp(Key, "launch_count")) {
-                user->ini->launch_count = atoi(Value);
             }
         }
 
@@ -412,19 +410,16 @@ void Menu::OnLayoutChange() {
     grid::Menu::OnLayoutChange(m_list, m_layout.Get());
 }
 
-Result Menu::InstallHomebrew(const fs::FsPath& path, const NacpStruct& nacp, const std::vector<u8>& icon) {
+Result Menu::InstallHomebrew(const fs::FsPath& path, const std::vector<u8>& icon) {
     OwoConfig config{};
     config.nro_path = path.toString();
-    config.nacp = nacp;
+    R_TRY(nro_get_nacp(path, config.nacp));
     config.icon = icon;
     return App::Install(config);
 }
 
 Result Menu::InstallHomebrewFromPath(const fs::FsPath& path) {
-    NacpStruct nacp;
-    R_TRY(nro_get_nacp(path, nacp))
-    const auto icon = nro_get_icon(path);
-    return InstallHomebrew(path, nacp, icon);
+    return InstallHomebrew(path, nro_get_icon(path));
 }
 
 } // namespace sphaira::ui::menu::homebrew

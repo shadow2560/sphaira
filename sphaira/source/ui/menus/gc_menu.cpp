@@ -953,6 +953,9 @@ void Menu::OnChangeIndex(s64 new_index) {
 }
 
 Result Menu::DumpGames(u32 flags) {
+    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+
     R_TRY(GcMountStorage());
 
     u32 location_flags = dump::DumpLocationFlag_All;

@@ -22,6 +22,7 @@
 #include <yyjson.h>
 #include <stb_image.h>
 #include <minizip/unzip.h>
+#include <algorithm>
 #include <ranges>
 #include <utility>
 
@@ -34,6 +35,22 @@ constexpr auto URL_BASE = "https://switch.cdn.fortheusers.org";
 constexpr auto URL_JSON = "https://switch.cdn.fortheusers.org/repo.json";
 constexpr auto URL_POST_FEEDBACK = "http://switchbru.com/appstore/feedback";
 constexpr auto URL_GET_FEEDACK = "http://switchbru.com/appstore/feedback";
+
+constexpr const u8 UPDATE_IMAGE_DATA[]{
+    #embed <icons/UPDATE.png>
+};
+
+constexpr const u8 GET_IMAGE_DATA[]{
+    #embed <icons/GET.png>
+};
+
+constexpr const u8 LOCAL_IMAGE_DATA[]{
+    #embed <icons/LOCAL.png>
+};
+
+constexpr const u8 INSTALLED_IMAGE_DATA[]{
+    #embed <icons/INSTALLED.png>
+};
 
 constexpr const char* FILTER_STR[] = {
     "All",
@@ -172,7 +189,7 @@ auto LoadAndParseManifest(const Entry& e) -> ManifestEntries {
     return ParseManifest(std::span{(const char*)data.data(), data.size()});
 }
 
-auto EntryLoadImageFile(fs::Fs& fs, const fs::FsPath& path, LazyImage& image) -> bool {
+auto EntryLoadImageData(std::span<const u8> image_buf, LazyImage& image) -> bool {
     // already have the image
     if (image.image) {
         // log_write("warning, tried to load image: %s when already loaded\n", path);
@@ -180,17 +197,29 @@ auto EntryLoadImageFile(fs::Fs& fs, const fs::FsPath& path, LazyImage& image) ->
     }
     auto vg = App::GetVg();
 
+    int channels_in_file;
+    auto buf = stbi_load_from_memory(image_buf.data(), image_buf.size(), &image.w, &image.h, &channels_in_file, 4);
+    if (buf) {
+        ON_SCOPE_EXIT(stbi_image_free(buf));
+        std::memcpy(image.first_pixel, buf, sizeof(image.first_pixel));
+        image.image = nvgCreateImageRGBA(vg, image.w, image.h, 0, buf);
+    }
+
+    return image.image;
+}
+
+auto EntryLoadImageFile(fs::Fs& fs, const fs::FsPath& path, LazyImage& image) -> bool {
+    // already have the image
+    if (image.image) {
+        // log_write("warning, tried to load image: %s when already loaded\n", path);
+        return true;
+    }
+
     std::vector<u8> image_buf;
     if (R_FAILED(fs.read_entire_file(path, image_buf))) {
         log_write("failed to load image from file: %s\n", path.s);
     } else {
-        int channels_in_file;
-        auto buf = stbi_load_from_memory(image_buf.data(), image_buf.size(), &image.w, &image.h, &channels_in_file, 4);
-        if (buf) {
-            ON_SCOPE_EXIT(stbi_image_free(buf));
-            std::memcpy(image.first_pixel, buf, sizeof(image.first_pixel));
-            image.image = nvgCreateImageRGBA(vg, image.w, image.h, 0, buf);
-        }
+        EntryLoadImageData(image_buf, image);
     }
 
     if (!image.image) {
@@ -311,7 +340,7 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
 
     // remove directory, this will also delete manifest and info
     const auto dir = BuildPackageCachePath(entry);
-    pbox->NewTransfer("Removing "_i18n + dir);
+    pbox->NewTransfer("Removing "_i18n + dir.toString());
     if (R_FAILED(fs.DeleteDirectoryRecursively(dir))) {
         log_write("failed to delete folder: %s\n", dir.s);
     } else {
@@ -329,7 +358,7 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
 // 4. move everything from placeholder to normal location
 auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
     static const fs::FsPath zip_out{"/switch/sphaira/cache/appstore/temp.zip"};
-    constexpr auto chunk_size = 1024 * 512; // 512KiB
+    std::vector<u8> buf(1024 * 512); // 512KiB
 
     fs::FsNativeSd fs;
     R_TRY(fs.GetFsOpenResult());
@@ -405,26 +434,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
             }
         }
 
-        const auto unzip_to = [pbox, &fs, zfile](const fs::FsPath& inzip, fs::FsPath output) -> Result {
-            pbox->NewTransfer(inzip);
-
-            if (UNZ_END_OF_LIST_OF_FILE == unzLocateFile(zfile, inzip, 0)) {
-                log_write("failed to find %s\n", inzip.s);
-                R_THROW(0x1);
-            }
-
-            if (UNZ_OK != unzOpenCurrentFile(zfile)) {
-                log_write("failed to open current file\n");
-                R_THROW(0x1);
-            }
-            ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
-
-            unz_file_info64 info;
-            if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, 0, 0, 0, 0, 0, 0)) {
-                log_write("failed to get current info\n");
-                R_THROW(0x1);
-            }
-
+        const auto unzip_to_file = [&](const unz_file_info64& info, const fs::FsPath& inzip, fs::FsPath output) -> Result {
             if (output[0] != '/') {
                 output = fs::AppendPath("/", output);
             }
@@ -444,7 +454,6 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
 
             R_TRY(fsFileSetSize(&f, info.uncompressed_size));
 
-            std::vector<char> buf(chunk_size);
             u64 offset{};
             while (offset < info.uncompressed_size) {
                 R_TRY(pbox->ShouldExitResult());
@@ -464,37 +473,106 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
             R_SUCCEED();
         };
 
-        // unzip manifest and info
-        R_TRY(unzip_to("info.json", BuildInfoCachePath(entry)));
-        R_TRY(unzip_to("manifest.install", BuildManifestCachePath(entry)));
+        const auto unzip_to = [&](const fs::FsPath& inzip, const fs::FsPath& output) -> Result {
+            pbox->NewTransfer(inzip);
 
-        for (auto& new_entry : new_manifest) {
-            R_TRY(pbox->ShouldExitResult());
-
-            switch (new_entry.command) {
-                case 'E': // both are the same?
-                case 'U':
-                    break;
-
-                case 'G': { // checks if file exists, if not, extract
-                    if (fs.FileExists(fs::AppendPath("/", new_entry.path))) {
-                        continue;
-                    }
-                }   break;
-
-                default:
-                    log_write("bad command: %c\n", new_entry.command);
-                    continue;
+            if (UNZ_END_OF_LIST_OF_FILE == unzLocateFile(zfile, inzip, 0)) {
+                log_write("failed to find %s\n", inzip.s);
+                R_THROW(0x1);
             }
 
-            R_TRY(unzip_to(new_entry.path, new_entry.path));
-        }
+            if (UNZ_OK != unzOpenCurrentFile(zfile)) {
+                log_write("failed to open current file\n");
+                R_THROW(0x1);
+            }
+            ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
+
+            unz_file_info64 info;
+            if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, 0, 0, 0, 0, 0, 0)) {
+                log_write("failed to get current info\n");
+                R_THROW(0x1);
+            }
+
+            return unzip_to_file(info, inzip, output);
+        };
+
+        const auto unzip_all = [&](std::span<const ManifestEntry> entries) -> Result {
+            unz_global_info64 ginfo;
+            if (UNZ_OK != unzGetGlobalInfo64(zfile, &ginfo)) {
+                R_THROW(0x1);
+            }
+
+            if (UNZ_OK != unzGoToFirstFile(zfile)) {
+                R_THROW(0x1);
+            }
+
+            for (s64 i = 0; i < ginfo.number_entry; i++) {
+                R_TRY(pbox->ShouldExitResult());
+
+                if (i > 0) {
+                    if (UNZ_OK != unzGoToNextFile(zfile)) {
+                        log_write("failed to unzGoToNextFile\n");
+                        R_THROW(0x1);
+                    }
+                }
+
+                if (UNZ_OK != unzOpenCurrentFile(zfile)) {
+                    log_write("failed to open current file\n");
+                    R_THROW(0x1);
+                }
+                ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
+
+                unz_file_info64 info;
+                char name[512];
+                if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0)) {
+                    log_write("failed to get current info\n");
+                    R_THROW(0x1);
+                }
+
+                const auto it = std::ranges::find_if(entries, [&name](auto& e){
+                    return !strcasecmp(name, e.path);
+                });
+
+                if (it == entries.end()) [[unlikely]] {
+                    continue;
+                }
+
+                pbox->NewTransfer(it->path);
+
+                switch (it->command) {
+                    case 'E': // both are the same?
+                    case 'U':
+                        break;
+
+                    case 'G': { // checks if file exists, if not, extract
+                        if (fs.FileExists(fs::AppendPath("/", it->path))) {
+                            continue;
+                        }
+                    }   break;
+
+                    default:
+                        log_write("bad command: %c\n", it->command);
+                        continue;
+                }
+
+                R_TRY(unzip_to_file(info, it->path, it->path));
+            }
+
+            R_SUCCEED();
+        };
+
+        // unzip manifest, info and all entries.
+        TimeStamp ts;
+        R_TRY(unzip_to("info.json", BuildInfoCachePath(entry)));
+        R_TRY(unzip_to("manifest.install", BuildManifestCachePath(entry)));
+        R_TRY(unzip_all(new_manifest));
+        log_write("\n\t[APPSTORE] finished extract new, time taken: %.2fs %zums\n\n", ts.GetSecondsD(), ts.GetMs());
 
         // finally finally, remove files no longer in the manifest
         for (auto& old_entry : old_manifest) {
             bool found = false;
             for (auto& new_entry : new_manifest) {
-                if (!std::strcmp(old_entry.path, new_entry.path)) {
+                if (!strcasecmp(old_entry.path, new_entry.path)) {
                     found = true;
                     break;
                 }
@@ -1022,14 +1100,11 @@ void Menu::OnFocusGained() {
     // log_write("saying we got focus base: size: %zu count: %zu\n", repo_json.size(), m_entries.size());
 
     if (!m_default_image.image) {
-        if (R_SUCCEEDED(romfsInit())) {
-            ON_SCOPE_EXIT(romfsExit());
-            EntryLoadImageFile("romfs:/default.png", m_default_image);
-            EntryLoadImageFile("romfs:/UPDATE.png", m_update);
-            EntryLoadImageFile("romfs:/GET.png", m_get);
-            EntryLoadImageFile("romfs:/LOCAL.png", m_local);
-            EntryLoadImageFile("romfs:/INSTALLED.png", m_installed);
-        }
+        EntryLoadImageData(App::GetDefaultImageData(), m_default_image);
+        EntryLoadImageData(UPDATE_IMAGE_DATA, m_update);
+        EntryLoadImageData(GET_IMAGE_DATA, m_get);
+        EntryLoadImageData(LOCAL_IMAGE_DATA, m_local);
+        EntryLoadImageData(INSTALLED_IMAGE_DATA, m_installed);
     }
 
     if (m_entries.empty()) {
@@ -1074,6 +1149,9 @@ void Menu::SetIndex(s64 index) {
 }
 
 void Menu::ScanHomebrew() {
+    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+
     from_json(REPO_PATH, m_entries);
 
     fs::FsNativeSd fs;

@@ -19,6 +19,10 @@ void threadFunc(void* arg) {
 } // namespace
 
 ProgressBox::ProgressBox(int image, const std::string& action, const std::string& title, ProgressBoxCallback callback, ProgressBoxDoneCallback done, int cpuid, int prio, int stack_size) {
+    if (App::GetApp()->m_progress_boost_mode.Get()) {
+        appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+    }
+
     SetAction(Button::B, Action{"Back"_i18n, [this](){
         App::Push(std::make_shared<OptionBox>("Are you sure you wish to cancel?"_i18n, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
             if (op_index && *op_index) {
@@ -61,6 +65,8 @@ ProgressBox::~ProgressBox() {
 
     FreeImage();
     m_done(m_thread_data.result);
+
+    appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
 }
 
 auto ProgressBox::Update(Controller* controller, TouchInfo* touch) -> void {

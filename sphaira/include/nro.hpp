@@ -11,13 +11,17 @@ namespace sphaira {
 
 struct Hbini {
     u64 timestamp{}; // timestamp of last launch
-    u32 launch_count{}; //
+};
+
+struct MiniNacp {
+    NacpLanguageEntry lang;
+    char display_version[0x10];
 };
 
 struct NroEntry {
     fs::FsPath path{};
     s64 size{};
-    NacpStruct nacp{};
+    MiniNacp nacp{};
 
     u64 icon_size{};
     u64 icon_offset{};
@@ -31,11 +35,11 @@ struct NroEntry {
     std::optional<bool> has_star{std::nullopt};
 
     auto GetName() const -> const char* {
-        return nacp.lang[0].name;
+        return nacp.lang.name;
     }
 
     auto GetAuthor() const -> const char* {
-        return nacp.lang[0].author;
+        return nacp.lang.author;
     }
 
     auto GetDisplayVersion() const -> const char* {
