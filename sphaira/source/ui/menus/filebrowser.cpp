@@ -382,6 +382,11 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
         }}),
 
         std::make_pair(Button::B, Action{"Back"_i18n, [this](){
+            if (!m_menu->IsTab() && App::GetApp()->m_controller.GotHeld(Button::R2)) {
+                m_menu->PromptIfShouldExit();
+                return;
+            }
+
             std::string_view view{m_path};
             if (view != m_fs->Root()) {
                 const auto end = view.find_last_of('/');
@@ -391,6 +396,10 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
                     Scan(m_fs->Root(), true);
                 } else {
                     Scan(view.substr(0, end), true);
+                }
+            } else {
+                if (!m_menu->IsTab()) {
+                    m_menu->PromptIfShouldExit();
                 }
             }
         }}),
@@ -1390,7 +1399,7 @@ auto FsView::CheckIfUpdateFolder() -> Result {
     if (!m_daybreak_path.has_value()) {
         auto daybreak_path = DAYBREAK_PATH;
         if (!m_fs->FileExists(DAYBREAK_PATH)) {
-            if (auto e = nro_find(m_menu->m_nro_entries, "Daybreak", "Atmosphere-NX", {}); e.has_value()) {
+            if (auto e = nro_find(homebrew::GetNroEntries(), "Daybreak", "Atmosphere-NX", {}); e.has_value()) {
                 daybreak_path = e.value().path;
             } else {
                 log_write("failed to find daybreak\n");
@@ -1893,10 +1902,16 @@ void FsView::DisplayAdvancedOptions() {
     }));
 }
 
-Menu::Menu(const std::vector<NroEntry>& nro_entries) : MenuBase{"FileBrowser"_i18n}, m_nro_entries{nro_entries} {
+Menu::Menu(u32 flags) : MenuBase{"FileBrowser"_i18n, flags} {
     SetAction(Button::L3, Action{"Split"_i18n, [this](){
         SetSplitScreen(IsSplitScreen() ^ 1);
     }});
+
+    if (!IsTab()) {
+        SetAction(Button::SELECT, Action{"Close"_i18n, [this](){
+            PromptIfShouldExit();
+        }});
+    }
 
     view = view_left = std::make_shared<FsView>(this, ViewSide::Left);
 }
@@ -2063,7 +2078,7 @@ void Menu::LoadAssocEntriesPath(const fs::FsPath& path) {
             file_exists = view->m_fs->FileExists(assoc.path);
         } else {
             const auto nro_name = assoc.name + ".nro";
-            for (const auto& nro : m_nro_entries) {
+            for (const auto& nro : homebrew::GetNroEntries()) {
                 const auto len = std::strlen(nro.path);
                 if (len < nro_name.length()) {
                     continue;
@@ -2158,6 +2173,21 @@ void Menu::RefreshViews() {
     } else {
         view->Scan(view->m_path);
     }
+}
+
+void Menu::PromptIfShouldExit() {
+    if (IsTab()) {
+        return;
+    }
+
+    App::Push(std::make_shared<ui::OptionBox>(
+        "Close FileBrowser?"_i18n,
+        "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
+            if (op_index && *op_index) {
+                SetPop();
+            }
+        }
+    ));
 }
 
 } // namespace sphaira::ui::menu::filebrowser

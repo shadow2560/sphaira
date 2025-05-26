@@ -75,7 +75,7 @@ void irsConvertConfigNormalToEx(const IrsImageTransferProcessorConfig* nor, IrsI
 
 } // namespace
 
-Menu::Menu() : MenuBase{"Irs"_i18n} {
+Menu::Menu(u32 flags) : MenuBase{"Irs"_i18n, flags} {
     SetAction(Button::B, Action{"Back"_i18n, [this](){
         SetPop();
     }});

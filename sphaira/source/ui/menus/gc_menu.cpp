@@ -390,7 +390,7 @@ auto ApplicationEntry::GetSize() const -> s64 {
     return size;
 }
 
-Menu::Menu() : MenuBase{"GameCard"_i18n} {
+Menu::Menu(u32 flags) : MenuBase{"GameCard"_i18n, flags} {
     this->SetActions(
         std::make_pair(Button::B, Action{"Back"_i18n, [this](){
             SetPop();

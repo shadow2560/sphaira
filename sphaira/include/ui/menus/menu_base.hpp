@@ -6,6 +6,11 @@
 
 namespace sphaira::ui::menu {
 
+enum MenuFlag {
+    MenuFlag_None = 0,
+    MenuFlag_Tab = 1 << 1,
+};
+
 struct PolledData {
     struct tm tm{};
     u32 battery_percetange{};
@@ -17,7 +22,7 @@ struct PolledData {
 };
 
 struct MenuBase : Widget {
-    MenuBase(std::string title);
+    MenuBase(const std::string& title, u32 flags);
     virtual ~MenuBase();
 
     virtual auto GetShortTitle() const -> const char* = 0;
@@ -36,6 +41,10 @@ struct MenuBase : Widget {
         return m_title;
     }
 
+    auto IsTab() const -> bool {
+        return m_flags & MenuFlag_Tab;
+    }
+
     static auto GetPolledData(bool force_refresh = false) -> PolledData;
 
 private:
@@ -45,6 +54,8 @@ private:
 
     ScrollingText m_scroll_title_sub_heading{};
     ScrollingText m_scroll_sub_heading{};
+
+    u32 m_flags{};
 };
 
 } // namespace sphaira::ui::menu

@@ -40,7 +40,7 @@ auto MenuBase::GetPolledData(bool force_refresh) -> PolledData {
     return data;
 }
 
-MenuBase::MenuBase(std::string title) : m_title{title} {
+MenuBase::MenuBase(const std::string& title, u32 flags) : m_title{title}, m_flags{flags} {
     // this->SetParent(this);
     this->SetPos(30, 87, 1220 - 30, 646 - 87);
     SetAction(Button::START, Action{App::Exit});

@@ -1310,7 +1310,8 @@ App::App(const char* argv0) {
             else if (app->m_theme_music.LoadFrom(Key, Value)) {}
             else if (app->m_12hour_time.LoadFrom(Key, Value)) {}
             else if (app->m_language.LoadFrom(Key, Value)) {}
-            else if (app->m_right_side_menu.LoadFrom(Key, Value)) {}
+            else if (app->m_left_menu.LoadFrom(Key, Value)) {}
+            else if (app->m_right_menu.LoadFrom(Key, Value)) {}
             else if (app->m_install_sysmmc.LoadFrom(Key, Value)) {}
             else if (app->m_install_emummc.LoadFrom(Key, Value)) {}
             else if (app->m_install_sd.LoadFrom(Key, Value)) {}
@@ -1581,7 +1582,7 @@ void App::DisplayMiscOptions(bool left_side) {
     ON_SCOPE_EXIT(App::Push(options));
 
     for (auto& e : ui::menu::main::GetMiscMenuEntries()) {
-        if (e.name == g_app->m_right_side_menu.Get()) {
+        if (e.name == g_app->m_right_menu.Get()) {
             continue;
         }
 
@@ -1590,7 +1591,7 @@ void App::DisplayMiscOptions(bool left_side) {
         }
 
         options->Add(std::make_shared<ui::SidebarEntryCallback>(i18n::get(e.title), [e](){
-            App::Push(e.func());
+            App::Push(e.func(ui::menu::MenuFlag_None));
         }));
     }
 }
@@ -1617,14 +1618,14 @@ void App::DisplayAdvancedOptions(bool left_side) {
         menu_names.emplace_back(e.name);
     }
 
-    ui::SidebarEntryArray::Items right_side_menu_items;
+    ui::SidebarEntryArray::Items side_menu_items;
     for (auto& str : menu_names) {
-        right_side_menu_items.push_back(i18n::get(str));
+        side_menu_items.push_back(i18n::get(str));
     }
 
-    const auto it = std::find(menu_names.cbegin(), menu_names.cend(), g_app->m_right_side_menu.Get());
+    const auto it = std::find(menu_names.cbegin(), menu_names.cend(), g_app->m_right_menu.Get());
     if (it == menu_names.cend()) {
-        g_app->m_right_side_menu.Set(menu_names[0]);
+        g_app->m_right_menu.Set(menu_names[0]);
     }
 
     options->Add(std::make_shared<ui::SidebarEntryBool>("Logging"_i18n, App::GetLogEnable(), [](bool& enable){
@@ -1643,17 +1644,29 @@ void App::DisplayAdvancedOptions(bool left_side) {
         App::SetTextScrollSpeed(index_out);
     }, App::GetTextScrollSpeed()));
 
-    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, right_side_menu_items, [menu_names](s64& index_out){
+    options->Add(std::make_shared<ui::SidebarEntryArray>("Set left-side menu"_i18n, side_menu_items, [menu_names](s64& index_out){
         const auto e = menu_names[index_out];
-        if (g_app->m_right_side_menu.Get() != e) {
-            g_app->m_right_side_menu.Set(e);
+        if (g_app->m_left_menu.Get() != e) {
+            g_app->m_left_menu.Set(e);
             App::Push(std::make_shared<ui::OptionBox>(
                 "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
                     App::ExitRestart();
                 }
             ));
         }
-    }, i18n::get(g_app->m_right_side_menu.Get())));
+    }, i18n::get(g_app->m_left_menu.Get())));
+
+    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, side_menu_items, [menu_names](s64& index_out){
+        const auto e = menu_names[index_out];
+        if (g_app->m_right_menu.Get() != e) {
+            g_app->m_right_menu.Set(e);
+            App::Push(std::make_shared<ui::OptionBox>(
+                "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
+                    App::ExitRestart();
+                }
+            ));
+        }
+    }, i18n::get(g_app->m_right_menu.Get())));
 
     options->Add(std::make_shared<ui::SidebarEntryCallback>("Install options"_i18n, [left_side](){
         App::DisplayInstallOptions(left_side);

@@ -51,7 +51,7 @@ void thread_func(void* user) {
 
 } // namespace
 
-Menu::Menu() : MenuBase{"USB"_i18n} {
+Menu::Menu(u32 flags) : MenuBase{"USB"_i18n, flags} {
     SetAction(Button::B, Action{"Back"_i18n, [this](){
         SetPop();
     }});

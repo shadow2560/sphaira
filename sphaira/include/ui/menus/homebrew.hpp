@@ -24,6 +24,8 @@ enum OrderType {
 
 using LayoutType = grid::LayoutType;
 
+auto GetNroEntries() -> std::span<const NroEntry>;
+
 struct Menu final : grid::Menu {
     Menu();
     ~Menu();

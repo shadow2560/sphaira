@@ -142,7 +142,7 @@ void StreamFtp::Disable() {
     m_active = false;
 }
 
-Menu::Menu() : MenuBase{"FTP Install (EXPERIMENTAL)"_i18n} {
+Menu::Menu(u32 flags) : MenuBase{"FTP Install (EXPERIMENTAL)"_i18n, flags} {
     SetAction(Button::B, Action{"Back"_i18n, [this](){
         SetPop();
     }});

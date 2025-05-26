@@ -691,7 +691,7 @@ void ThreadData::Pop(std::vector<ThreadResultData>& out) {
     m_result.clear();
 }
 
-Menu::Menu() : grid::Menu{"Games"_i18n} {
+Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
     this->SetActions(
         std::make_pair(Button::L3, Action{[this](){
             if (m_entries.empty()) {

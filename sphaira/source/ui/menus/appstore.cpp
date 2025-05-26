@@ -603,7 +603,7 @@ auto FindCaseInsensitive(std::string_view base, std::string_view term) -> bool {
 } // namespace
 
 EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
-: MenuBase{entry.title}
+: MenuBase{entry.title, MenuFlag_None}
 , m_entry{entry}
 , m_default_icon{default_icon}
 , m_menu{menu} {
@@ -852,7 +852,7 @@ void EntryMenu::SetIndex(s64 index) {
     }
 }
 
-Menu::Menu() : grid::Menu{"AppStore"_i18n} {
+Menu::Menu(u32 flags) : grid::Menu{"AppStore"_i18n, flags} {
     fs::FsNativeSd fs;
     fs.CreateDirectoryRecursively("/switch/sphaira/cache/appstore/icons");
     fs.CreateDirectoryRecursively("/switch/sphaira/cache/appstore/banners");

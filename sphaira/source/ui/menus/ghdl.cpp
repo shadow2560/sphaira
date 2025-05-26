@@ -222,7 +222,7 @@ auto DownloadAssetJson(ProgressBox* pbox, const std::string& url, GhApiEntry& ou
 
 } // namespace
 
-Menu::Menu() : MenuBase{"GitHub"_i18n} {
+Menu::Menu(u32 flags) : MenuBase{"GitHub"_i18n, flags} {
     fs::FsNativeSd().CreateDirectoryRecursively(CACHE_PATH);
 
     this->SetActions(

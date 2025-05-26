@@ -139,7 +139,7 @@ enum OrderType {
 using LayoutType = grid::LayoutType;
 
 struct Menu final : grid::Menu {
-    Menu();
+    Menu(u32 flags);
     ~Menu();
 
     auto GetShortTitle() const -> const char* override { return "Store"; };

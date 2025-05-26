@@ -18,6 +18,8 @@
 namespace sphaira::ui::menu::homebrew {
 namespace {
 
+Menu* g_menu{};
+
 auto GenerateStarPath(const fs::FsPath& nro_path) -> fs::FsPath {
     fs::FsPath out{};
     const auto dilem = std::strrchr(nro_path.s, '/');
@@ -32,7 +34,17 @@ void FreeEntry(NVGcontext* vg, NroEntry& e) {
 
 } // namespace
 
-Menu::Menu() : grid::Menu{"Homebrew"_i18n} {
+auto GetNroEntries() -> std::span<const NroEntry> {
+    if (!g_menu) {
+        return {};
+    }
+
+    return g_menu->GetHomebrewList();
+}
+
+Menu::Menu() : grid::Menu{"Homebrew"_i18n, MenuFlag_Tab} {
+    g_menu = this;
+
     this->SetActions(
         std::make_pair(Button::A, Action{"Launch"_i18n, [this](){
             nro_launch(m_entries[m_index].path);
@@ -129,6 +141,7 @@ Menu::Menu() : grid::Menu{"Homebrew"_i18n} {
 }
 
 Menu::~Menu() {
+    g_menu = {};
     FreeEntries();
 }
 

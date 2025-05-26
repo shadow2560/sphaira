@@ -6,7 +6,7 @@ namespace {
 
 } // namespace
 
-Menu::Menu(const fs::FsPath& path) : MenuBase{path}, m_path{path} {
+Menu::Menu(const fs::FsPath& path) : MenuBase{path, MenuFlag_None}, m_path{path} {
     SetAction(Button::B, Action{"Back"_i18n, [this](){
         SetPop();
     }});

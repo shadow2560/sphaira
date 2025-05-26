@@ -35,7 +35,7 @@ struct StreamFtp final : yati::source::Stream {
 };
 
 struct Menu final : MenuBase {
-    Menu();
+    Menu(u32 flags);
     ~Menu();
 
     auto GetShortTitle() const -> const char* override { return "FTP"; };

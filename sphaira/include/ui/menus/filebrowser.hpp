@@ -3,7 +3,6 @@
 #include "ui/menus/menu_base.hpp"
 #include "ui/scrolling_text.hpp"
 #include "ui/list.hpp"
-#include "nro.hpp"
 #include "fs.hpp"
 #include "option.hpp"
 #include "hasher.hpp"
@@ -341,7 +340,7 @@ struct SelectedStash {
 struct Menu final : MenuBase {
     friend class FsView;
 
-    Menu(const std::vector<NroEntry>& nro_entries);
+    Menu(u32 flags);
     ~Menu();
 
     auto GetShortTitle() const -> const char* override { return "Files"; };
@@ -381,10 +380,11 @@ private:
 
     void UpdateSubheading();
 
+    void PromptIfShouldExit();
+
 private:
     static constexpr inline const char* INI_SECTION = "filebrowser";
 
-    const std::vector<NroEntry>& m_nro_entries;
     std::shared_ptr<FsView> view{};
     std::shared_ptr<FsView> view_left{};
     std::shared_ptr<FsView> view_right{};

@@ -21,7 +21,7 @@ enum class State {
 };
 
 struct Menu final : MenuBase {
-    Menu();
+    Menu(u32 flags);
     ~Menu();
 
     auto GetShortTitle() const -> const char* override { return "USB"; };

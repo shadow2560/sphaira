@@ -130,7 +130,7 @@ struct PageEntry {
 };
 
 struct Menu final : MenuBase {
-    Menu();
+    Menu(u32 flags);
     ~Menu();
 
     auto GetShortTitle() const -> const char* override { return "Themezer"; };

@@ -6,6 +6,8 @@
 #include "ui/progress_box.hpp"
 #include "ui/error_box.hpp"
 
+#include "ui/menus/homebrew.hpp"
+#include "ui/menus/filebrowser.hpp"
 #include "ui/menus/irs_menu.hpp"
 #include "ui/menus/themezer.hpp"
 #include "ui/menus/ghdl.hpp"
@@ -32,13 +34,14 @@ constexpr const char* GITHUB_URL{"https://api.github.com/repos/ITotalJustice/sph
 constexpr fs::FsPath CACHE_PATH{"/switch/sphaira/cache/sphaira_latest.json"};
 
 template<typename T>
-auto MiscMenuFuncGenerator() {
-    return std::make_shared<T>();
+auto MiscMenuFuncGenerator(u32 flags) {
+    return std::make_shared<T>(flags);
 }
 
 const MiscMenuEntry MISC_MENU_ENTRIES[] = {
     { .name = "Appstore", .title = "Appstore", .func = MiscMenuFuncGenerator<ui::menu::appstore::Menu>, .flag = MiscMenuFlag_Shortcut },
     { .name = "Games", .title = "Games", .func = MiscMenuFuncGenerator<ui::menu::game::Menu>, .flag = MiscMenuFlag_Shortcut },
+    { .name = "FileBrowser", .title = "FileBrowser", .func = MiscMenuFuncGenerator<ui::menu::filebrowser::Menu>, .flag = MiscMenuFlag_Shortcut },
     { .name = "Themezer", .title = "Themezer", .func = MiscMenuFuncGenerator<ui::menu::themezer::Menu>, .flag = MiscMenuFlag_Shortcut },
     { .name = "GitHub", .title = "GitHub", .func = MiscMenuFuncGenerator<ui::menu::gh::Menu>, .flag = MiscMenuFlag_Shortcut },
     { .name = "FTP", .title = "FTP Install", .func = MiscMenuFuncGenerator<ui::menu::ftp::Menu>, .flag = MiscMenuFlag_Install },
@@ -149,16 +152,41 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
     R_SUCCEED();
 }
 
-auto CreateRightSideMenu() -> std::shared_ptr<MenuBase> {
-    const auto name = App::GetApp()->m_right_side_menu.Get();
+auto CreateLeftSideMenu(std::string& name_out) -> std::shared_ptr<MenuBase> {
+    const auto name = App::GetApp()->m_left_menu.Get();
 
     for (auto& e : GetMiscMenuEntries()) {
         if (e.name == name) {
-            return e.func();
+            name_out = name;
+            return e.func(MenuFlag_Tab);
         }
     }
 
-    return std::make_shared<ui::menu::appstore::Menu>();
+    name_out = "FileBrowser";
+    return std::make_shared<ui::menu::filebrowser::Menu>(MenuFlag_Tab);
+}
+
+auto CreateRightSideMenu(std::string_view left_name) -> std::shared_ptr<MenuBase> {
+    const auto name = App::GetApp()->m_right_menu.Get();
+
+    // handle if the user tries to mount the same menu twice.
+    if (name == left_name) {
+        // check if we can mount the default.
+        if (left_name != "AppStore") {
+            return std::make_shared<ui::menu::appstore::Menu>(MenuFlag_Tab);
+        } else {
+            // otherwise, fallback to left side default.
+            return std::make_shared<ui::menu::filebrowser::Menu>(MenuFlag_Tab);
+        }
+    }
+
+    for (auto& e : GetMiscMenuEntries()) {
+        if (e.name == name) {
+            return e.func(MenuFlag_Tab);
+        }
+    }
+
+    return std::make_shared<ui::menu::appstore::Menu>(MenuFlag_Tab);
 }
 
 } // namespace
@@ -319,10 +347,13 @@ MainMenu::MainMenu() {
         }})
     );
 
-    m_homebrew_menu = std::make_shared<homebrew::Menu>();
-    m_filebrowser_menu = std::make_shared<filebrowser::Menu>(m_homebrew_menu->GetHomebrewList());
-    m_right_side_menu = CreateRightSideMenu();
-    m_current_menu = m_homebrew_menu;
+    m_centre_menu = std::make_shared<homebrew::Menu>();
+    m_current_menu = m_centre_menu;
+
+
+    std::string left_side_name;
+    m_left_menu = CreateLeftSideMenu(left_side_name);
+    m_right_menu = CreateRightSideMenu(left_side_name);
 
     AddOnLRPress();
 
@@ -355,11 +386,11 @@ void MainMenu::OnFocusLost() {
 
 void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
     m_current_menu->OnFocusLost();
-    if (m_current_menu == m_homebrew_menu) {
+    if (m_current_menu == m_centre_menu) {
         m_current_menu = menu;
         RemoveAction(b);
     } else {
-        m_current_menu = m_homebrew_menu;
+        m_current_menu = m_centre_menu;
     }
 
     AddOnLRPress();
@@ -371,17 +402,17 @@ void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
 }
 
 void MainMenu::AddOnLRPress() {
-    if (m_current_menu != m_filebrowser_menu) {
-        const auto label = m_current_menu == m_homebrew_menu ? m_filebrowser_menu->GetShortTitle() : m_homebrew_menu->GetShortTitle();
+    if (m_current_menu != m_left_menu) {
+        const auto label = m_current_menu == m_centre_menu ? m_left_menu->GetShortTitle() : m_centre_menu->GetShortTitle();
         SetAction(Button::L, Action{i18n::get(label), [this]{
-            OnLRPress(m_filebrowser_menu, Button::L);
+            OnLRPress(m_left_menu, Button::L);
         }});
     }
 
-    if (m_current_menu != m_right_side_menu) {
-        const auto label = m_current_menu == m_homebrew_menu ? m_right_side_menu->GetShortTitle() : m_homebrew_menu->GetShortTitle();
+    if (m_current_menu != m_right_menu) {
+        const auto label = m_current_menu == m_centre_menu ? m_right_menu->GetShortTitle() : m_centre_menu->GetShortTitle();
         SetAction(Button::R, Action{i18n::get(label), [this]{
-            OnLRPress(m_right_side_menu, Button::R);
+            OnLRPress(m_right_menu, Button::R);
         }});
     }
 }

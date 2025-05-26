@@ -1,8 +1,8 @@
 #pragma once
 
 #include "ui/widget.hpp"
-#include "ui/menus/homebrew.hpp"
-#include "ui/menus/filebrowser.hpp"
+#include "ui/menus/menu_base.hpp"
+#include <span>
 
 namespace sphaira::ui::menu::main {
 
@@ -17,7 +17,7 @@ enum class UpdateState {
     Error,
 };
 
-using MiscMenuFunction = std::function<std::shared_ptr<ui::menu::MenuBase>(void)>;
+using MiscMenuFunction = std::function<std::shared_ptr<ui::menu::MenuBase>(u32 flags)>;
 
 enum MiscMenuFlag : u8 {
     // can be set as the rightside menu.
@@ -62,9 +62,9 @@ private:
     void AddOnLRPress();
 
 private:
-    std::shared_ptr<homebrew::Menu> m_homebrew_menu{};
-    std::shared_ptr<filebrowser::Menu> m_filebrowser_menu{};
-    std::shared_ptr<MenuBase> m_right_side_menu{};
+    std::shared_ptr<MenuBase> m_centre_menu{};
+    std::shared_ptr<MenuBase> m_left_menu{};
+    std::shared_ptr<MenuBase> m_right_menu{};
     std::shared_ptr<MenuBase> m_current_menu{};
 
     std::string m_update_url{};
