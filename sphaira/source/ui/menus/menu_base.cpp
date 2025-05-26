@@ -74,7 +74,7 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
             start_x -= fixed; \
         } else { \
             gfx::textBounds(vg, 0, 0, bounds, __VA_ARGS__); \
-            start_x -= spacing - (bounds[2] - bounds[0]); \
+            start_x -= spacing + (bounds[2] - bounds[0]); \
         }
 
     draw(ThemeEntryID_TEXT, 83, "%u\uFE6A", pdata.battery_percetange);
