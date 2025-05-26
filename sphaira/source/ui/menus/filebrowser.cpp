@@ -2115,12 +2115,7 @@ void Menu::SetSplitScreen(bool enable) {
         m_split_screen = enable;
 
         if (m_split_screen) {
-            // load second screen as a copy of the left side.
-            view->SetSide(ViewSide::Left);
-            view_right = std::make_shared<FsView>(this, view->m_path, view->GetFsEntry(), ViewSide::Right);
-            view_right->OnFocusGained();
-
-            static const auto change_view = [this](auto& new_view){
+            const auto change_view = [this](auto& new_view){
                 if (view != new_view) {
                     view->OnFocusLost();
                     view = new_view;
@@ -2130,10 +2125,15 @@ void Menu::SetSplitScreen(bool enable) {
                 }
             };
 
-            SetAction(Button::LEFT, Action{[this](){
+            // load second screen as a copy of the left side.
+            view->SetSide(ViewSide::Left);
+            view_right = std::make_shared<FsView>(this, view->m_path, view->GetFsEntry(), ViewSide::Right);
+            change_view(view_right);
+
+            SetAction(Button::LEFT, Action{[&](){
                 change_view(view_left);
             }});
-            SetAction(Button::RIGHT, Action{[this](){
+            SetAction(Button::RIGHT, Action{[&](){
                 change_view(view_right);
             }});
         } else {
