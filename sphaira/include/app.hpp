@@ -236,7 +236,7 @@ public:
     option::OptionBool m_12hour_time{INI_SECTION, "12hour_time", false};
     option::OptionLong m_language{INI_SECTION, "language", 0}; // auto
     option::OptionString m_right_side_menu{INI_SECTION, "right_side_menu", "Appstore"};
-    option::OptionBool m_progress_boost_mode{INI_SECTION, "progress_boost_mode", false};
+    option::OptionBool m_progress_boost_mode{INI_SECTION, "progress_boost_mode", true};
 
     // install options
     option::OptionBool m_install_sysmmc{INI_SECTION, "install_sysmmc", false};
