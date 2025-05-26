@@ -125,8 +125,7 @@ struct ConfigOverride {
     std::optional<bool> lower_system_version{};
 };
 
-Result InstallFromFile(ui::ProgressBox* pbox, FsFileSystem* fs, const fs::FsPath& path, const ConfigOverride& override = {});
-Result InstallFromFile(ui::ProgressBox* pbox, const fs::FsPath& path, const ConfigOverride& override = {});
+Result InstallFromFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& path, const ConfigOverride& override = {});
 Result InstallFromSource(ui::ProgressBox* pbox, std::shared_ptr<source::Base> source, const fs::FsPath& path, const ConfigOverride& override = {});
 Result InstallFromContainer(ui::ProgressBox* pbox, std::shared_ptr<container::Base> container, const ConfigOverride& override = {});
 Result InstallFromCollections(ui::ProgressBox* pbox, std::shared_ptr<source::Base> source, const container::Collections& collections, const ConfigOverride& override = {});

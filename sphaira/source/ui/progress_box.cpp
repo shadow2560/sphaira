@@ -256,10 +256,9 @@ auto ProgressBox::ShouldExitResult() -> Result {
 auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
     fs::File src_file;
     R_TRY(fs_src->OpenFile(src_path, FsOpenMode_Read, &src_file));
-    ON_SCOPE_EXIT(fs_src->FileClose(&src_file));
 
     s64 src_size;
-    R_TRY(fs_src->FileGetSize(&src_file, &src_size));
+    R_TRY(src_file.GetSize(&src_size));
 
     // this can fail if it already exists so we ignore the result.
     // if the file actually failed to be created, the result is implicitly
@@ -268,9 +267,8 @@ auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src
 
     fs::File dst_file;
     R_TRY(fs_dst->OpenFile(dst_path, FsOpenMode_Write, &dst_file));
-    ON_SCOPE_EXIT(fs_dst->FileClose(&dst_file));
 
-    R_TRY(fs_dst->FileSetSize(&dst_file, src_size));
+    R_TRY(dst_file.SetSize(src_size));
 
     s64 offset{};
     std::vector<u8> buf(1024*1024*4); // 4MiB
@@ -279,10 +277,10 @@ auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src
         R_TRY(ShouldExitResult());
 
         u64 bytes_read;
-        R_TRY(fs_src->FileRead(&src_file, offset, buf.data(), buf.size(), 0, &bytes_read));
+        R_TRY(src_file.Read(offset, buf.data(), buf.size(), 0, &bytes_read));
         Yield();
 
-        R_TRY(fs_dst->FileWrite(&dst_file, offset, buf.data(), bytes_read, FsWriteOption_None));
+        R_TRY(dst_file.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
         Yield();
 
         UpdateTransfer(offset, src_size);

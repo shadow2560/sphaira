@@ -278,13 +278,12 @@ Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier* out) {
 
 struct GcSource final : yati::source::Base {
     GcSource(const ApplicationEntry& entry, fs::FsNativeGameCard* fs);
-    ~GcSource();
     Result Read(void* buf, s64 off, s64 size, u64* bytes_read);
 
     yati::container::Collections m_collections{};
     yati::ConfigOverride m_config{};
     fs::FsNativeGameCard* m_fs{};
-    FsFile m_file{};
+    fs::File m_file{};
     s64 m_offset{};
     s64 m_size{};
 
@@ -342,15 +341,10 @@ GcSource::GcSource(const ApplicationEntry& entry, fs::FsNativeGameCard* fs)
     m_config.skip_rsa_npdm_fixed_key_verify = true;
 }
 
-GcSource::~GcSource() {
-    fsFileClose(&m_file);
-}
-
 Result GcSource::Read(void* buf, s64 off, s64 size, u64* bytes_read) {
     // check is we need to open a new file.
     if (!InRange(off, m_offset, m_size)) {
-        fsFileClose(&m_file);
-        m_file = {};
+        m_file.Close();
 
         // find new file based on the offset.
         bool found = false;
@@ -368,7 +362,7 @@ Result GcSource::Read(void* buf, s64 off, s64 size, u64* bytes_read) {
         R_UNLESS(found, 0x1);
     }
 
-    return fsFileRead(&m_file, off - m_offset, buf, size, 0, bytes_read);
+    return m_file.Read(off - m_offset, buf, size, 0, bytes_read);
 }
 
 } // namespace
@@ -526,17 +520,11 @@ Result Menu::GcMount() {
 
     R_TRY(m_fs->GetFsOpenResult());
 
-    FsDir dir;
+    fs::Dir dir;
     R_TRY(m_fs->OpenDirectory("/", FsDirOpenMode_ReadFiles, std::addressof(dir)));
-    ON_SCOPE_EXIT(fsDirClose(std::addressof(dir)));
 
-    s64 count;
-    R_TRY(m_fs->DirGetEntryCount(std::addressof(dir), std::addressof(count)));
-
-    std::vector<FsDirectoryEntry> buf(count);
-    s64 total_entries;
-    R_TRY(m_fs->DirRead(std::addressof(dir), std::addressof(total_entries), buf.size(), buf.data()));
-    R_UNLESS(buf.size() == total_entries, 0x1);
+    std::vector<FsDirectoryEntry> buf;
+    R_TRY(dir.ReadAll(buf));
 
     yati::container::Collections ticket_collections;
     for (const auto& e : buf) {

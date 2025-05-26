@@ -10,14 +10,11 @@
 namespace sphaira::yati::source {
 
 struct StreamFile final : Stream {
-    StreamFile(FsFileSystem* fs, const fs::FsPath& path);
-    StreamFile(const fs::FsPath& path);
-    ~StreamFile();
-
+    StreamFile(fs::Fs* fs, const fs::FsPath& path);
     Result ReadChunk(void* buf, s64 size, u64* bytes_read) override;
 
 private:
-    std::unique_ptr<fs::Fs> m_fs{};
+    fs::Fs* m_fs{};
     fs::File m_file{};
     s64 m_offset{};
 };

@@ -13,16 +13,12 @@ struct FileSource final : BaseSource {
         m_open_result = m_fs->OpenFile(path, FsOpenMode_Read, std::addressof(m_file));
     }
 
-    ~FileSource() {
-        m_fs->FileClose(std::addressof(m_file));
-    }
-
     Result Size(s64* out) {
-        return m_fs->FileGetSize(std::addressof(m_file), out);
+        return m_file.GetSize(out);
     }
 
     Result Read(void* buf, s64 off, s64 size, u64* bytes_read) {
-        return m_fs->FileRead(std::addressof(m_file), off, buf, size, 0, bytes_read);
+        return m_file.Read(off, buf, size, 0, bytes_read);
     }
 
 private:

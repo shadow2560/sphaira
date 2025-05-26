@@ -124,14 +124,13 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
         {
             fs::File file;
             R_TRY(fs->OpenFile(temp_path, FsOpenMode_Write, &file));
-            ON_SCOPE_EXIT(fs->FileClose(&file));
 
             R_TRY(thread::Transfer(pbox, file_size,
                 [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
                     return source->Read(path, data, off, size, bytes_read);
                 },
                 [&](const void* data, s64 off, s64 size) -> Result {
-                    return fs->FileWrite(&file, off, data, size, FsWriteOption_None);
+                    return file.Write(off, data, size, FsWriteOption_None);
                 }
             ));
         }

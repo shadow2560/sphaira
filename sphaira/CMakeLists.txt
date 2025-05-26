@@ -197,7 +197,7 @@ FetchContent_Declare(zstd
 
 FetchContent_Declare(libusbhsfs
     GIT_REPOSITORY https://github.com/ITotalJustice/libusbhsfs.git
-    GIT_TAG d2395e9
+    GIT_TAG b963156
 )
 
 set(USE_NEW_ZSTD ON)

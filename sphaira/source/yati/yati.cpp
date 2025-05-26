@@ -1378,13 +1378,9 @@ Result InstallInternalStream(ui::ProgressBox* pbox, std::shared_ptr<source::Base
 
 } // namespace
 
-Result InstallFromFile(ui::ProgressBox* pbox, FsFileSystem* fs, const fs::FsPath& path, const ConfigOverride& override) {
+Result InstallFromFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& path, const ConfigOverride& override) {
     return InstallFromSource(pbox, std::make_shared<source::File>(fs, path), path, override);
     // return InstallFromSource(pbox, std::make_shared<source::StreamFile>(fs, path), path, override);
-}
-
-Result InstallFromFile(ui::ProgressBox* pbox, const fs::FsPath& path, const ConfigOverride& override) {
-    return InstallFromFile(pbox, nullptr, path, override);
 }
 
 Result InstallFromSource(ui::ProgressBox* pbox, std::shared_ptr<source::Base> source, const fs::FsPath& path, const ConfigOverride& override) {

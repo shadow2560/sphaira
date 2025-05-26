@@ -357,15 +357,14 @@ void loop(void* args) {
             ON_SCOPE_EXIT(fs.DeleteFile(temp_path));
 
             {
-                FsFile f;
+                fs::File f;
                 if (R_FAILED(rc = fs.OpenFile(temp_path, FsOpenMode_Write, &f))) {
                     sendall(connfd, &ERR_FILE, sizeof(ERR_FILE));
                     log_write("failed to open file %X\n", rc);
                     continue;
                 }
-                ON_SCOPE_EXIT(fsFileClose(&f));
 
-                if (R_FAILED(rc = fsFileSetSize(&f, file_data.size()))) {
+                if (R_FAILED(rc = f.SetSize(file_data.size()))) {
                     sendall(connfd, &ERR_FILE, sizeof(ERR_FILE));
                     log_write("failed to set file size: 0x%X\n", socketGetLastResult());
                     continue;
@@ -379,7 +378,7 @@ void loop(void* args) {
                     if (offset + chunk_size > file_data.size()) {
                         chunk_size = file_data.size() - offset;
                     }
-                    if (R_FAILED(rc = fsFileWrite(&f, offset, file_data.data() + offset, chunk_size, FsWriteOption_None))) {
+                    if (R_FAILED(rc = f.Write(offset, file_data.data() + offset, chunk_size, FsWriteOption_None))) {
                         break;
                     }
                     offset += chunk_size;

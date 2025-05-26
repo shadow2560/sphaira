@@ -8,14 +8,11 @@
 namespace sphaira::yati::source {
 
 struct File final : Base {
-    File(FsFileSystem* fs, const fs::FsPath& path);
-    File(const fs::FsPath& path);
-    ~File();
-
+    File(fs::Fs* fs, const fs::FsPath& path);
     Result Read(void* buf, s64 off, s64 size, u64* bytes_read) override;
 
 private:
-    std::unique_ptr<fs::Fs> m_fs{};
+    fs::Fs* m_fs{};
     fs::File m_file{};
 };
 

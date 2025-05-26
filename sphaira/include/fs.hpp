@@ -174,20 +174,34 @@ static_assert(FsPath::TestFrom(FsPath{"abc"}));
 struct Fs;
 
 struct File {
-    fs::Fs* m_fs;
-    FsFile m_native;
-    std::FILE* m_stdio;
-    s64 m_stdio_off;
+    ~File();
+
+    Result Read(s64 off, void* buf, u64 read_size, u32 option, u64* bytes_read);
+    Result Write(s64 off, const void* buf, u64 write_size, u32 option);
+    Result SetSize(s64 sz);
+    Result GetSize(s64* out);
+    void Close();
+
+    fs::Fs* m_fs{};
+    FsFile m_native{};
+    std::FILE* m_stdio{};
+    s64 m_stdio_off{};
     // sadly, fatfs doesn't support fstat, so we have to manually
     // stat the file to get it's size.
-    FsPath m_path;
+    FsPath m_path{};
 };
 
 struct Dir {
-    fs::Fs* m_fs;
-    FsDir m_native;
-    DIR* m_stdio;
-    u32 m_mode;
+    ~Dir();
+
+    Result GetEntryCount(s64* out);
+    Result ReadAll(std::vector<FsDirectoryEntry>& buf);
+    void Close();
+
+    fs::Fs* m_fs{};
+    FsDir m_native{};
+    DIR* m_stdio{};
+    u32 m_mode{};
 };
 
 FsPath AppendPath(const fs::FsPath& root_path, const fs::FsPath& file_path);
@@ -203,6 +217,7 @@ Result RenameFile(FsFileSystem* fs, const FsPath& src, const FsPath& dst, bool i
 Result RenameDirectory(FsFileSystem* fs, const FsPath& src, const FsPath& dst, bool ignore_read_only = true);
 Result GetEntryType(FsFileSystem* fs, const FsPath& path, FsDirEntryType* out);
 Result GetFileTimeStampRaw(FsFileSystem* fs, const FsPath& path, FsTimeStampRaw *out);
+Result SetTimestamp(FsFileSystem* fs, const FsPath& path, const FsTimeStampRaw* ts);
 bool FileExists(FsFileSystem* fs, const FsPath& path);
 bool DirExists(FsFileSystem* fs, const FsPath& path);
 Result read_entire_file(FsFileSystem* fs, const FsPath& path, std::vector<u8>& out);
@@ -220,6 +235,7 @@ Result RenameFile(const FsPath& src, const FsPath& dst, bool ignore_read_only = 
 Result RenameDirectory(const FsPath& src, const FsPath& dst, bool ignore_read_only = true);
 Result GetEntryType(const FsPath& path, FsDirEntryType* out);
 Result GetFileTimeStampRaw(const FsPath& path, FsTimeStampRaw *out);
+Result SetTimestamp(const FsPath& path, const FsTimeStampRaw* ts);
 bool FileExists(const FsPath& path);
 bool DirExists(const FsPath& path);
 Result read_entire_file(const FsPath& path, std::vector<u8>& out);
@@ -227,15 +243,15 @@ Result write_entire_file(const FsPath& path, const std::vector<u8>& in, bool ign
 Result copy_entire_file(const FsPath& dst, const FsPath& src, bool ignore_read_only = true);
 
 Result OpenFile(fs::Fs* fs, const fs::FsPath& path, u32 mode, File* f);
-Result FileRead(File* f, s64 off, void* buf, u64 read_size, u32 option, u64* bytes_read);
-Result FileWrite(File* f, s64 off, const void* buf, u64 write_size, u32 option);
-Result FileSetSize(File* f, s64 sz);
-Result FileGetSize(File* f, s64* out);
-void FileClose(File* f);
-
 Result OpenDirectory(fs::Fs* fs, const fs::FsPath& path, u32 mode, Dir* d);
-Result DirReadAll(Dir* d, std::vector<FsDirectoryEntry>& buf);
-void DirClose(Dir* d);
+
+// opens dir, fetches count for all entries.
+// NOTE: this function will be slow on non-native fs, due to multiple
+// readdir() functions being needed!
+Result DirGetEntryCount(fs::Fs* fs, const fs::FsPath& path, s64* count, u32 mode);
+// same as the above, but fetches file and folder count in a single pass
+// this is faster when using native, and *much* faster for stdio.
+Result DirGetEntryCount(fs::Fs* fs, const fs::FsPath& path, s64* file_count, s64* dir_count, u32 mode = FsDirOpenMode_ReadDirs|FsDirOpenMode_ReadFiles);
 
 // optimised for stdio calls as stat returns size and timestamp in a single call.
 // whereas for native, this is 2 function calls.
@@ -275,6 +291,7 @@ struct Fs {
     virtual Result RenameDirectory(const FsPath& src, const FsPath& dst) = 0;
     virtual Result GetEntryType(const FsPath& path, FsDirEntryType* out) = 0;
     virtual Result GetFileTimeStampRaw(const FsPath& path, FsTimeStampRaw *out) = 0;
+    virtual Result SetTimestamp(const FsPath& path, const FsTimeStampRaw* ts) = 0;
     virtual bool FileExists(const FsPath& path) = 0;
     virtual bool DirExists(const FsPath& path) = 0;
     virtual bool IsNative() const = 0;
@@ -286,32 +303,15 @@ struct Fs {
     Result OpenFile(const fs::FsPath& path, u32 mode, File* f) {
         return fs::OpenFile(this, path, mode, f);
     }
-    Result FileRead(File* f, s64 off, void* buf, u64 read_size, u32 option, u64* bytes_read) {
-        return fs::FileRead(f, off, buf, read_size, option, bytes_read);
-    }
-    Result FileWrite(File* f, s64 off, const void* buf, u64 write_size, u32 option) {
-        return fs::FileWrite(f, off, buf, write_size, option);
-    }
-    Result FileSetSize(File* f, s64 sz) {
-        return fs::FileSetSize(f, sz);
-    }
-    Result FileGetSize(File* f, s64* out) {
-        return fs::FileGetSize(f, out);
-    }
-    void FileClose(File* f) {
-        fs::FileClose(f);
-    }
-
     Result OpenDirectory(const fs::FsPath& path, u32 mode, Dir* d) {
         return fs::OpenDirectory(this, path, mode, d);
     }
-    Result DirReadAll(Dir* d, std::vector<FsDirectoryEntry>& buf) {
-        return fs::DirReadAll(d, buf);
+    Result DirGetEntryCount(const fs::FsPath& path, s64* count, u32 mode) {
+        return fs::DirGetEntryCount(this, path, count, mode);
     }
-    void DirClose(Dir* d) {
-        fs::DirClose(d);
+    Result DirGetEntryCount(const fs::FsPath& path, s64* file_count, s64* dir_count, u32 mode = FsDirOpenMode_ReadDirs|FsDirOpenMode_ReadFiles) {
+        return fs::DirGetEntryCount(this, path, file_count, dir_count, mode);
     }
-
     Result FileGetSizeAndTimestamp(const FsPath& path, FsTimeStampRaw* ts, s64* size) {
         return fs::FileGetSizeAndTimestamp(this, path, ts, size);
     }
@@ -364,6 +364,9 @@ struct FsStdio : Fs {
     Result GetFileTimeStampRaw(const FsPath& path, FsTimeStampRaw *out) override {
         return fs::GetFileTimeStampRaw(path, out);
     }
+    Result SetTimestamp(const FsPath& path, const FsTimeStampRaw *ts) override {
+        return fs::SetTimestamp(path, ts);
+    }
     bool FileExists(const FsPath& path) override {
         return fs::FileExists(path);
     }
@@ -411,39 +414,35 @@ struct FsNative : Fs {
         return fsFsGetTotalSpace(&m_fs, path, out);
     }
 
-    Result OpenFile(const FsPath& path, u32 mode, FsFile *out) {
-        return fsFsOpenFile(&m_fs, path, mode, out);
-    }
+    // Result OpenDirectory(const FsPath& path, u32 mode, FsDir *out) {
+    //     return fsFsOpenDirectory(&m_fs, path, mode, out);
+    // }
 
-    Result OpenDirectory(const FsPath& path, u32 mode, FsDir *out) {
-        return fsFsOpenDirectory(&m_fs, path, mode, out);
-    }
+    // void DirClose(FsDir *d) {
+    //     fsDirClose(d);
+    // }
 
-    void DirClose(FsDir *d) {
-        fsDirClose(d);
-    }
+    // Result DirGetEntryCount(FsDir *d, s64* out) {
+    //     return fsDirGetEntryCount(d, out);
+    // }
 
-    Result DirGetEntryCount(FsDir *d, s64* out) {
-        return fsDirGetEntryCount(d, out);
-    }
+    // Result DirGetEntryCount(const FsPath& path, u32 mode, s64* out) {
+    //     FsDir d;
+    //     R_TRY(OpenDirectory(path, mode, &d));
+    //     ON_SCOPE_EXIT(DirClose(&d));
+    //     return DirGetEntryCount(&d, out);
+    // }
 
-    Result DirGetEntryCount(const FsPath& path, u32 mode, s64* out) {
-        FsDir d;
-        R_TRY(OpenDirectory(path, mode, &d));
-        ON_SCOPE_EXIT(DirClose(&d));
-        return DirGetEntryCount(&d, out);
-    }
+    // Result DirRead(FsDir *d, s64 *total_entries, size_t max_entries, FsDirectoryEntry *buf) {
+    //     return fsDirRead(d, total_entries, max_entries, buf);
+    // }
 
-    Result DirRead(FsDir *d, s64 *total_entries, size_t max_entries, FsDirectoryEntry *buf) {
-        return fsDirRead(d, total_entries, max_entries, buf);
-    }
-
-    Result DirRead(const FsPath& path, u32 mode, s64 *total_entries, size_t max_entries, FsDirectoryEntry *buf) {
-        FsDir d;
-        R_TRY(OpenDirectory(path, mode, &d));
-        ON_SCOPE_EXIT(DirClose(&d));
-        return DirRead(&d, total_entries, max_entries, buf);
-    }
+    // Result DirRead(const FsPath& path, u32 mode, s64 *total_entries, size_t max_entries, FsDirectoryEntry *buf) {
+    //     FsDir d;
+    //     R_TRY(OpenDirectory(path, mode, &d));
+    //     ON_SCOPE_EXIT(DirClose(&d));
+    //     return DirRead(&d, total_entries, max_entries, buf);
+    // }
 
     virtual bool IsFsActive() {
         return serviceIsActive(&m_fs.s);
@@ -485,6 +484,9 @@ struct FsNative : Fs {
     }
     Result GetFileTimeStampRaw(const FsPath& path, FsTimeStampRaw *out) override {
         return fs::GetFileTimeStampRaw(&m_fs, path, out);
+    }
+    Result SetTimestamp(const FsPath& path, const FsTimeStampRaw *ts) override {
+        return fs::SetTimestamp(&m_fs, path, ts);
     }
     bool FileExists(const FsPath& path) override {
         return fs::FileExists(&m_fs, path);

@@ -46,13 +46,13 @@ struct UploadStruct {
     std::span<const u8> data;
     s64 offset{};
     s64 size{};
-    FsFile f{};
+    fs::File f{};
 };
 
 struct DataStruct {
     std::vector<u8> data;
     s64 offset{};
-    FsFile f{};
+    fs::File f{};
     s64 file_offset{};
 };
 
@@ -439,7 +439,7 @@ auto ReadFileCallback(char *ptr, size_t size, size_t nmemb, void *userp) -> size
     const auto realsize = size * nmemb;
 
     u64 bytes_read;
-    if (R_FAILED(fsFileRead(&data_struct->f, data_struct->offset, ptr, realsize, FsReadOption_None, &bytes_read))) {
+    if (R_FAILED(data_struct->f.Read(data_struct->offset, ptr, realsize, FsReadOption_None, &bytes_read))) {
         log_write("reading file error\n");
         return 0;
     }
@@ -509,7 +509,7 @@ auto WriteFileCallback(void *contents, size_t size, size_t num_files, void *user
 
     // flush data if incomming data would overflow the buffer
     if (data_struct->offset && data_struct->data.size() < data_struct->offset + realsize) {
-        if (R_FAILED(fsFileWrite(&data_struct->f, data_struct->file_offset, data_struct->data.data(), data_struct->offset, FsWriteOption_None))) {
+        if (R_FAILED(data_struct->f.Write(data_struct->file_offset, data_struct->data.data(), data_struct->offset, FsWriteOption_None))) {
             return 0;
         }
 
@@ -519,7 +519,7 @@ auto WriteFileCallback(void *contents, size_t size, size_t num_files, void *user
 
     // we have a huge chunk! write it directly to file
     if (data_struct->data.size() < realsize) {
-        if (R_FAILED(fsFileWrite(&data_struct->f, data_struct->file_offset, contents, realsize, FsWriteOption_None))) {
+        if (R_FAILED(data_struct->f.Write(data_struct->file_offset, contents, realsize, FsWriteOption_None))) {
             return 0;
         }
 
@@ -762,10 +762,10 @@ auto DownloadInternal(CURL* curl, const Api& e) -> ApiResult {
     if (has_file) {
         ON_SCOPE_EXIT( fs.DeleteFile(tmp_buf) );
         if (res == CURLE_OK && chunk.offset) {
-            fsFileWrite(&chunk.f, chunk.file_offset, chunk.data.data(), chunk.offset, FsWriteOption_None);
+            chunk.f.Write(chunk.file_offset, chunk.data.data(), chunk.offset, FsWriteOption_None);
         }
 
-        fsFileClose(&chunk.f);
+        chunk.f.Close();
 
         if (res == CURLE_OK) {
             if (http_code == 304) {
@@ -835,7 +835,7 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
             return {};
         }
 
-        fsFileGetSize(&chunk.f, &chunk.size);
+        chunk.f.GetSize(&chunk.size);
         log_write("got chunk size: %zd\n", chunk.size);
     } else {
         if (info.m_callback) {
@@ -929,7 +929,7 @@ auto UploadInternal(CURL* curl, const Api& e) -> ApiResult {
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     if (has_file) {
-        fsFileClose(&chunk.f);
+        chunk.f.Close();
     }
 
     log_write("Uploaded %s code: %ld %s\n", url.c_str(), http_code, curl_easy_strerror(res));

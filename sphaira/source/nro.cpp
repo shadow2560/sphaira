@@ -27,33 +27,34 @@ struct NroData {
     NroHeader header;
 };
 
-auto nro_parse_internal(fs::FsNative& fs, const fs::FsPath& path, NroEntry& entry) -> Result {
+auto nro_parse_internal(fs::Fs* fs, const fs::FsPath& path, NroEntry& entry) -> Result {
     entry.path = path;
 
     // todo: special sorting for fw 2.0.0 to make it not look like shit
     if (hosversionAtLeast(3,0,0)) {
         // it doesn't matter if we fail
         entry.timestamp.is_valid = false;
-        fs.GetFileTimeStampRaw(entry.path, &entry.timestamp);
+        fs->GetFileTimeStampRaw(entry.path, &entry.timestamp);
         // if (R_FAILED(fsFsGetFileTimeStampRaw(fs, entry.path, &entry.timestamp))) {
         //     // log_write("failed to get timestamp for: %s\n", path);
         // }
     }
 
-    FsFile f;
-    R_TRY(fs.OpenFile(entry.path, FsOpenMode_Read, &f));
-    ON_SCOPE_EXIT(fsFileClose(&f));
+    fs::File f;
+    R_TRY(fs->OpenFile(entry.path, FsOpenMode_Read, &f));
 
-    R_TRY(fsFileGetSize(&f, &entry.size));
-
+    // todo: buffer reads to 16k to avoid 2 fs read calls per entry.
     NroData data;
     u64 bytes_read;
-    R_TRY(fsFileRead(&f, 0, &data, sizeof(data), FsReadOption_None, &bytes_read));
+    R_TRY(f.Read(0, &data, sizeof(data), FsReadOption_None, &bytes_read));
     R_UNLESS(data.header.magic == NROHEADER_MAGIC, NroError_BadMagic);
 
     NroAssetHeader asset;
-    R_TRY(fsFileRead(&f, data.header.size, &asset, sizeof(asset), FsReadOption_None, &bytes_read));
+    R_TRY(f.Read(data.header.size, &asset, sizeof(asset), FsReadOption_None, &bytes_read));
     // R_UNLESS(asset.magic == NROASSETHEADER_MAGIC, NroError_BadMagic);
+
+    // we can avoid a GetSize() call by calculating the size manually.
+    entry.size = data.header.size;
 
     // some .nro (vgedit) have bad nacp, fake the nacp
     auto& nacp = entry.nacp;
@@ -69,8 +70,9 @@ auto nro_parse_internal(fs::FsNative& fs, const fs::FsPath& path, NroEntry& entr
         std::strcpy(nacp.display_version, "Unknown");
         entry.is_nacp_valid = false;
     } else {
-        R_TRY(fsFileRead(&f, data.header.size + asset.nacp.offset, &nacp.lang, sizeof(nacp.lang), FsReadOption_None, &bytes_read));
-        R_TRY(fsFileRead(&f, data.header.size + asset.nacp.offset + offsetof(NacpStruct, display_version), nacp.display_version, sizeof(nacp.display_version), FsReadOption_None, &bytes_read));
+        entry.size += sizeof(asset) + asset.icon.size + asset.nacp.size + asset.romfs.size;
+        R_TRY(f.Read(data.header.size + asset.nacp.offset, &nacp.lang, sizeof(nacp.lang), FsReadOption_None, &bytes_read));
+        R_TRY(f.Read(data.header.size + asset.nacp.offset + offsetof(NacpStruct, display_version), nacp.display_version, sizeof(nacp.display_version), FsReadOption_None, &bytes_read));
         entry.is_nacp_valid = true;
     }
 
@@ -84,32 +86,19 @@ auto nro_parse_internal(fs::FsNative& fs, const fs::FsPath& path, NroEntry& entr
 // this function is recursive by 1 level deep
 // if the nro is in switch/folder/folder2/app.nro it will NOT be found
 // switch/folder/app.nro for example will work fine.
-auto nro_scan_internal(const fs::FsPath& path, std::vector<NroEntry>& nros, bool hide_sphaira, bool nested, bool scan_all_dir, bool root) -> Result {
-    fs::FsNativeSd fs;
-    R_TRY(fs.GetFsOpenResult());
-
+auto nro_scan_internal(fs::Fs* fs, const fs::FsPath& path, std::vector<NroEntry>& nros, bool hide_sphaira, bool nested, bool scan_all_dir, bool root) -> Result {
     // we don't need to scan for folders if we are not root
     u32 dir_open_type = FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize;
     if (root) {
         dir_open_type |= FsDirOpenMode_ReadDirs;
     }
 
-    FsDir d;
-    R_TRY(fs.OpenDirectory(path, dir_open_type, &d));
-    ON_SCOPE_EXIT(fs.DirClose(&d));
-
-    s64 count;
-    R_TRY(fs.DirGetEntryCount(&d, &count));
-    // return early if empty
-    R_UNLESS(count > 0, 0x0);
+    fs::Dir d;
+    R_TRY(fs->OpenDirectory(path, dir_open_type, &d));
 
     // we won't run out of memory here
-    std::vector<FsDirectoryEntry> entries(count);
-
-    R_TRY(fs.DirRead(&d, &count, entries.size(), entries.data()));
-
-    // size may of changed
-    entries.resize(count);
+    std::vector<FsDirectoryEntry> entries;
+    R_TRY(d.ReadAll(entries));
 
     for (const auto& e : entries) {
         // skip hidden files / folders
@@ -135,7 +124,7 @@ auto nro_scan_internal(const fs::FsPath& path, std::vector<NroEntry>& nros, bool
             } else {
                 // slow path...
                 std::snprintf(fullpath, sizeof(fullpath), "%s/%s", path.s, e.name);
-                nro_scan_internal(fullpath, nros, hide_sphaira, nested, scan_all_dir, false);
+                nro_scan_internal(fs, fullpath, nros, hide_sphaira, nested, scan_all_dir, false);
             }
         } else if (e.type == FsDirEntryType_File && std::string_view{e.name}.ends_with(".nro")) {
             fs::FsPath fullpath;
@@ -157,7 +146,12 @@ auto nro_scan_internal(const fs::FsPath& path, std::vector<NroEntry>& nros, bool
     R_SUCCEED();
 }
 
-auto nro_get_icon_internal(FsFile* f, u64 size, u64 offset) -> std::vector<u8> {
+auto nro_scan_internal(const fs::FsPath& path, std::vector<NroEntry>& nros, bool hide_sphaira, bool nested, bool scan_all_dir, bool root) -> Result {
+    fs::FsNativeSd fs;
+    return nro_scan_internal(&fs, path, nros, hide_sphaira, nested, scan_all_dir, root);
+}
+
+auto nro_get_icon_internal(fs::File* f, u64 size, u64 offset) -> std::vector<u8> {
     // protect again really messed up sizes.
     if (size > 1024 * 1024) {
         return {};
@@ -167,7 +161,7 @@ auto nro_get_icon_internal(FsFile* f, u64 size, u64 offset) -> std::vector<u8> {
     u64 bytes_read{};
     icon.resize(size);
 
-    R_TRY_RESULT(fsFileRead(f, offset, icon.data(), icon.size(), FsReadOption_None, &bytes_read), {});
+    R_TRY_RESULT(f->Read(offset, icon.data(), icon.size(), FsReadOption_None, &bytes_read), {});
     R_UNLESS(bytes_read == icon.size(), {});
 
     return icon;
@@ -208,9 +202,7 @@ auto nro_verify(std::span<const u8> data) -> Result {
 
 auto nro_parse(const fs::FsPath& path, NroEntry& entry) -> Result {
     fs::FsNativeSd fs;
-    R_TRY(fs.GetFsOpenResult());
-
-    return nro_parse_internal(fs, path, entry);
+    return nro_parse_internal(&fs, path, entry);
 }
 
 auto nro_scan(const fs::FsPath& path, std::vector<NroEntry>& nros, bool hide_sphaira, bool nested, bool scan_all_dir) -> Result {
@@ -219,31 +211,23 @@ auto nro_scan(const fs::FsPath& path, std::vector<NroEntry>& nros, bool hide_sph
 
 auto nro_get_icon(const fs::FsPath& path, u64 size, u64 offset) -> std::vector<u8> {
     fs::FsNativeSd fs;
-    FsFile f;
-
-    R_TRY_RESULT(fs.GetFsOpenResult(), {});
-
+    fs::File f;
     R_TRY_RESULT(fs.OpenFile(path, FsOpenMode_Read, &f), {});
-    ON_SCOPE_EXIT(fsFileClose(&f));
-
     return nro_get_icon_internal(&f, size, offset);
 }
 
 auto nro_get_icon(const fs::FsPath& path) -> std::vector<u8> {
     fs::FsNativeSd fs;
-    FsFile f;
     NroData data;
     NroAssetHeader asset;
     u64 bytes_read;
 
-    R_TRY_RESULT(fs.GetFsOpenResult(), {});
-
+    fs::File f;
     R_TRY_RESULT(fs.OpenFile(path, FsOpenMode_Read, &f), {});
-    ON_SCOPE_EXIT(fsFileClose(&f));
 
-    R_TRY_RESULT(fsFileRead(&f, 0, &data, sizeof(data), FsReadOption_None, &bytes_read), {});
+    R_TRY_RESULT(f.Read(0, &data, sizeof(data), FsReadOption_None, &bytes_read), {});
     R_UNLESS(data.header.magic == NROHEADER_MAGIC, {});
-    R_TRY_RESULT(fsFileRead(&f, data.header.size, &asset, sizeof(asset), FsReadOption_None, &bytes_read), {});
+    R_TRY_RESULT(f.Read(data.header.size, &asset, sizeof(asset), FsReadOption_None, &bytes_read), {});
     R_UNLESS(asset.magic == NROASSETHEADER_MAGIC, {});
 
     return nro_get_icon_internal(&f, asset.icon.size, data.header.size + asset.icon.offset);
@@ -251,21 +235,18 @@ auto nro_get_icon(const fs::FsPath& path) -> std::vector<u8> {
 
 auto nro_get_nacp(const fs::FsPath& path, NacpStruct& nacp) -> Result {
     fs::FsNativeSd fs;
-    FsFile f;
     NroData data;
     NroAssetHeader asset;
     u64 bytes_read;
 
-    R_TRY_RESULT(fs.GetFsOpenResult(), {});
-
+    fs::File f;
     R_TRY(fs.OpenFile(path, FsOpenMode_Read, &f));
-    ON_SCOPE_EXIT(fsFileClose(&f));
 
-    R_TRY(fsFileRead(&f, 0, &data, sizeof(data), FsReadOption_None, &bytes_read));
+    R_TRY(f.Read(0, &data, sizeof(data), FsReadOption_None, &bytes_read));
     R_UNLESS(data.header.magic == NROHEADER_MAGIC, NroError_BadMagic);
-    R_TRY(fsFileRead(&f, data.header.size, &asset, sizeof(asset), FsReadOption_None, &bytes_read));
+    R_TRY(f.Read(data.header.size, &asset, sizeof(asset), FsReadOption_None, &bytes_read));
     R_UNLESS(asset.magic == NROASSETHEADER_MAGIC, NroError_BadMagic);
-    R_TRY(fsFileRead(&f, data.header.size + asset.nacp.offset, &nacp, sizeof(nacp), FsReadOption_None, &bytes_read));
+    R_TRY(f.Read(data.header.size + asset.nacp.offset, &nacp, sizeof(nacp), FsReadOption_None, &bytes_read));
 
     R_SUCCEED();
 }

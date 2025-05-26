@@ -448,11 +448,9 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
                 R_THROW(rc);
             }
 
-            FsFile f;
+            fs::File f;
             R_TRY(fs.OpenFile(output, FsOpenMode_Write, &f));
-            ON_SCOPE_EXIT(fsFileClose(&f));
-
-            R_TRY(fsFileSetSize(&f, info.uncompressed_size));
+            R_TRY(f.SetSize(info.uncompressed_size));
 
             u64 offset{};
             while (offset < info.uncompressed_size) {
@@ -464,7 +462,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
                     R_THROW(0x1);
                 }
 
-                R_TRY(fsFileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None));
+                R_TRY(f.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
 
                 pbox->UpdateTransfer(offset, info.uncompressed_size);
                 offset += bytes_read;

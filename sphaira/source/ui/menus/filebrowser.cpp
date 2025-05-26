@@ -675,7 +675,7 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
                     }));
                 }
 
-                if (IsSd() && m_entries_current.size() && !m_selected_count && GetEntry().IsFile()) {
+                if (m_entries_current.size() && !m_selected_count && GetEntry().IsFile()) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Hash"_i18n, [this](){
                         auto options = std::make_shared<Sidebar>("Hash Options"_i18n, Sidebar::Side::RIGHT);
                         ON_SCOPE_EXIT(App::Push(options));
@@ -751,10 +751,10 @@ void FsView::Draw(NVGcontext* vg, Theme* theme) {
         auto& e = GetEntry(i);
 
         if (e.IsDir()) {
-            if (m_fs->IsNative() && e.file_count == -1 && e.dir_count == -1) {
-                const auto full_path = GetNewPath(e);
-                GetNative()->DirGetEntryCount(full_path, FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize, &e.file_count);
-                GetNative()->DirGetEntryCount(full_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_NoFileSize, &e.dir_count);
+            // NOTE: make this native only if hdd dir scan is too slow.
+            // if (m_fs->IsNative() && e.file_count == -1 && e.dir_count == -1) {
+            if (e.file_count == -1 && e.dir_count == -1) {
+                m_fs->DirGetEntryCount(GetNewPath(e), &e.file_count, &e.dir_count);
             }
         } else if (!e.checked_extension) {
             e.checked_extension = true;
@@ -803,7 +803,8 @@ void FsView::Draw(NVGcontext* vg, Theme* theme) {
 
         m_scroll_name.Draw(vg, selected, x + text_xoffset+65, y + (h / 2.f), w-(75+text_xoffset+65+50), 20, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, theme->GetColour(text_id), e.name);
 
-        if (m_fs->IsNative() && e.IsDir()) {
+        // NOTE: make this native only if i disable dir scan from above.
+        if (e.IsDir()) {
             gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) - 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_BOTTOM, theme->GetColour(text_id), "%zd files"_i18n.c_str(), e.file_count);
             gfx::drawTextArgs(vg, x + w - text_xoffset, y + (h / 2.f) + 3, 16.f, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP, theme->GetColour(text_id), "%zd dirs"_i18n.c_str(), e.dir_count);
         } else if (e.IsFile()) {
@@ -881,23 +882,21 @@ void FsView::SetIndex(s64 index) {
         m_list->SetYoff();
     }
 
-    if (!m_entries_current.empty() && !GetEntry().checked_internal_extension && GetEntry().extension == "zip") {
+    if (IsSd() && !m_entries_current.empty() && !GetEntry().checked_internal_extension && GetEntry().extension == "zip") {
         GetEntry().checked_internal_extension = true;
 
         if (auto zfile = unzOpen64(GetNewPathCurrent())) {
             ON_SCOPE_EXIT(unzClose(zfile));
-            unz_global_info gi{};
+
             // only check first entry (i think RA does the same)
-            if (UNZ_OK == unzGetGlobalInfo(zfile, &gi) && gi.number_entry >= 1) {
-                fs::FsPath filename_inzip{};
-                unz_file_info64 file_info{};
-                if (UNZ_OK == unzOpenCurrentFile(zfile)) {
-                    ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
-                    if (UNZ_OK == unzGetCurrentFileInfo64(zfile, &file_info, filename_inzip, sizeof(filename_inzip), NULL, 0, NULL, 0)) {
-                        if (auto ext = std::strrchr(filename_inzip, '.')) {
-                            GetEntry().internal_name = filename_inzip.toString();
-                            GetEntry().internal_extension = ext+1;
-                        }
+            fs::FsPath filename_inzip{};
+            unz_file_info64 file_info{};
+            if (UNZ_OK == unzOpenCurrentFile(zfile)) {
+                ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
+                if (UNZ_OK == unzGetCurrentFileInfo64(zfile, &file_info, filename_inzip, sizeof(filename_inzip), NULL, 0, NULL, 0)) {
+                    if (auto ext = std::strrchr(filename_inzip, '.')) {
+                        GetEntry().internal_name = filename_inzip.toString();
+                        GetEntry().internal_extension = ext+1;
                     }
                 }
             }
@@ -980,11 +979,7 @@ void FsView::InstallFiles() {
 
             App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this, targets](auto pbox) -> Result {
                 for (auto& e : targets) {
-                    if (m_fs->IsNative()) {
-                        R_TRY(yati::InstallFromFile(pbox, &GetNative()->m_fs, GetNewPath(e)));
-                    } else {
-                        R_TRY(yati::InstallFromFile(pbox, GetNewPath(e)));
-                    }
+                    R_TRY(yati::InstallFromFile(pbox, m_fs.get(), GetNewPath(e)));
                     App::Notify("Installed "_i18n + e.GetName());
                 }
 
@@ -1053,9 +1048,7 @@ void FsView::UnzipFiles(fs::FsPath dir_path) {
 
                 fs::File f;
                 R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Write, &f));
-                ON_SCOPE_EXIT(m_fs->FileClose(&f));
-
-                R_TRY(m_fs->FileSetSize(&f, info.uncompressed_size));
+                R_TRY(f.SetSize(info.uncompressed_size));
 
                 std::vector<char> buf(chunk_size);
                 s64 offset{};
@@ -1068,7 +1061,7 @@ void FsView::UnzipFiles(fs::FsPath dir_path) {
                         R_THROW(0x1);
                     }
 
-                    R_TRY(m_fs->FileWrite(&f, offset, buf.data(), bytes_read, FsWriteOption_None));
+                    R_TRY(f.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
 
                     pbox->UpdateTransfer(offset, info.uncompressed_size);
                     offset += bytes_read;
@@ -1165,10 +1158,9 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
 
             fs::File f;
             R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Read, &f));
-            ON_SCOPE_EXIT(m_fs->FileClose(&f));
 
             s64 file_size;
-            R_TRY(m_fs->FileGetSize(&f, &file_size));
+            R_TRY(f.GetSize(&file_size));
 
             std::vector<char> buf(chunk_size);
             s64 offset{};
@@ -1176,7 +1168,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
                 R_TRY(pbox->ShouldExitResult());
 
                 u64 bytes_read;
-                R_TRY(m_fs->FileRead(&f, offset, buf.data(), buf.size(), FsReadOption_None, &bytes_read));
+                R_TRY(f.Read(offset, buf.data(), buf.size(), FsReadOption_None, &bytes_read));
 
                 if (ZIP_OK != zipWriteInFileInZip(zfile, buf.data(), bytes_read)) {
                     log_write("failed to write zip file: %s\n", file_path.s);
@@ -1253,11 +1245,10 @@ void FsView::UploadFiles() {
 
                     fs::File f;
                     R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Read, &f));
-                    ON_SCOPE_EXIT(m_fs->FileClose(&f));
 
                     return thread::TransferPull(pbox, file_size,
                         [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                            return m_fs->FileRead(&f, off, data, size, FsReadOption_None, bytes_read);
+                            return f.Read(off, data, size, FsReadOption_None, bytes_read);
                         },
                         [&](thread::PullCallback pull) -> Result {
                             s64 offset{};
@@ -1340,21 +1331,14 @@ auto FsView::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
     m_index = 0;
     m_list->SetYoff(0);
     m_menu->SetTitleSubHeading(m_path);
-
-    // todo: verify this works as expected.
     m_selected_count = 0;
-    // if (m_selected_type == SelectedType::None) {
-    //     ResetSelection();
-    // }
 
     fs::Dir d;
     R_TRY(m_fs->OpenDirectory(new_path, FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles, &d));
-    ON_SCOPE_EXIT(m_fs->DirClose(&d));
 
     // we won't run out of memory here (tm)
     std::vector<FsDirectoryEntry> dir_entries;
-
-    R_TRY(m_fs->DirReadAll(&d, dir_entries));
+    R_TRY(d.ReadAll(dir_entries));
 
     const auto count = dir_entries.size();
     m_entries.reserve(count);
@@ -1585,6 +1569,23 @@ void FsView::OnPasteCallback() {
             } else {
                 FsDirCollections collections;
 
+                const auto on_paste_file = [&](auto& src_path, auto& dst_path) -> Result {
+                    if (selected.m_type == SelectedType::Cut) {
+                        // update timestamp if possible.
+                        if (!m_fs->IsNative()) {
+                            FsTimeStampRaw ts;
+                            if (R_SUCCEEDED(src_fs->GetFileTimeStampRaw(src_path, &ts))) {
+                                m_fs->SetTimestamp(dst_path, &ts);
+                            }
+                        }
+
+                        // delete src file. folders are removed after.
+                        R_TRY(src_fs->DeleteFile(src_path));
+                    }
+
+                    R_SUCCEED();
+                };
+
                 // build list of dirs / files
                 for (const auto&p : selected.m_files) {
                     pbox->Yield();
@@ -1612,11 +1613,7 @@ void FsView::OnPasteCallback() {
                         pbox->SetTitle(p.name);
                         pbox->NewTransfer("Copying "_i18n + src_path);
                         R_TRY(pbox->CopyFile(src_fs, m_fs.get(), src_path, dst_path));
-
-                        // delete src file. folders are removed after.
-                        if (selected.m_type == SelectedType::Cut) {
-                            R_TRY(src_fs->DeleteFile(src_path));
-                        }
+                        R_TRY(on_paste_file(src_path, dst_path));
                     }
                 }
 
@@ -1646,11 +1643,7 @@ void FsView::OnPasteCallback() {
                         pbox->SetTitle(p.name);
                         pbox->NewTransfer("Copying "_i18n + src_path);
                         R_TRY(pbox->CopyFile(src_fs, m_fs.get(), src_path, dst_path));
-
-                        // delete src file. folders are removed after.
-                        if (selected.m_type == SelectedType::Cut) {
-                            R_TRY(src_fs->DeleteFile(src_path));
-                        }
+                        R_TRY(on_paste_file(src_path, dst_path));
                     }
                 }
 
@@ -1704,17 +1697,15 @@ auto FsView::CheckIfUpdateFolder() -> Result {
         log_write("found daybreak in: %s\n", m_daybreak_path.value().s);
     }
 
-    s64 count;
-    R_TRY(GetNative()->DirGetEntryCount(m_path, FsDirOpenMode_ReadDirs, &count));
-
-    // check that we are at the bottom level
-    R_UNLESS(count == 0, 0x1);
     // check that we have enough ncas and not too many
     R_UNLESS(m_entries.size() > 150 && m_entries.size() < 300, 0x1);
 
     // check that all entries end in .nca
     const auto nca_ext = std::string_view{".nca"};
     for (auto& e : m_entries) {
+        // check that we are at the bottom level
+        R_UNLESS(e.type == FsDirEntryType_File, 0x1);
+
         const auto ext = std::strrchr(e.name, '.');
         R_UNLESS(ext && ext == nca_ext, 0x1);
     }
@@ -1729,8 +1720,7 @@ auto FsView::get_collection(fs::Fs* fs, const fs::FsPath& path, const fs::FsPath
     const auto fetch = [fs, &path](std::vector<FsDirectoryEntry>& out, u32 flags) -> Result {
         fs::Dir d;
         R_TRY(fs->OpenDirectory(path, flags, &d));
-        ON_SCOPE_EXIT(fs->DirClose(&d));
-        return fs->DirReadAll(&d, out);
+        return d.ReadAll(out);
     };
 
     if (inc_file) {
@@ -1870,7 +1860,9 @@ void FsView::DisplayHash(hash::Type type) {
     hash_out.clear();
 
     App::Push(std::make_shared<ProgressBox>(0, "Hashing"_i18n, GetEntry().name, [this, type](auto pbox) -> Result {
-        R_TRY(hash::Hash(pbox, type, m_fs.get(), GetNewPathCurrent(), hash_out));
+        const auto full_path = GetNewPathCurrent();
+        pbox->NewTransfer(full_path);
+        R_TRY(hash::Hash(pbox, type, m_fs.get(), full_path, hash_out));
 
         R_SUCCEED();
     }, [this, type](Result rc){
