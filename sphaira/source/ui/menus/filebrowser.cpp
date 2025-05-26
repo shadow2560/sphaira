@@ -396,310 +396,11 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
         }}),
 
         std::make_pair(Button::X, Action{"Options"_i18n, [this](){
-            auto options = std::make_shared<Sidebar>("File Options"_i18n, Sidebar::Side::RIGHT);
-            ON_SCOPE_EXIT(App::Push(options));
-
-            options->Add(std::make_shared<SidebarEntryCallback>("Sort By"_i18n, [this](){
-                auto options = std::make_shared<Sidebar>("Sort Options"_i18n, Sidebar::Side::RIGHT);
-                ON_SCOPE_EXIT(App::Push(options));
-
-                SidebarEntryArray::Items sort_items;
-                sort_items.push_back("Size"_i18n);
-                sort_items.push_back("Alphabetical"_i18n);
-
-                SidebarEntryArray::Items order_items;
-                order_items.push_back("Descending"_i18n);
-                order_items.push_back("Ascending"_i18n);
-
-                options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
-                    m_menu->m_sort.Set(index_out);
-                    SortAndFindLastFile();
-                }, m_menu->m_sort.Get()));
-
-                options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
-                    m_menu->m_order.Set(index_out);
-                    SortAndFindLastFile();
-                }, m_menu->m_order.Get()));
-
-                options->Add(std::make_shared<SidebarEntryBool>("Show Hidden"_i18n, m_menu->m_show_hidden.Get(), [this](bool& v_out){
-                    m_menu->m_show_hidden.Set(v_out);
-                    SortAndFindLastFile();
-                }));
-
-                options->Add(std::make_shared<SidebarEntryBool>("Folders First"_i18n, m_menu->m_folders_first.Get(), [this](bool& v_out){
-                    m_menu->m_folders_first.Set(v_out);
-                    SortAndFindLastFile();
-                }));
-
-                options->Add(std::make_shared<SidebarEntryBool>("Hidden Last"_i18n, m_menu->m_hidden_last.Get(), [this](bool& v_out){
-                    m_menu->m_hidden_last.Set(v_out);
-                    SortAndFindLastFile();
-                }));
-            }));
-
-            if (m_entries_current.size()) {
-                options->Add(std::make_shared<SidebarEntryCallback>("Cut"_i18n, [this](){
-                    m_menu->AddSelectedEntries(SelectedType::Cut);
-                }, true));
-
-                options->Add(std::make_shared<SidebarEntryCallback>("Copy"_i18n, [this](){
-                    m_menu->AddSelectedEntries(SelectedType::Copy);
-                }, true));
+            if (App::GetApp()->m_controller.GotHeld(Button::R2)) {
+                DisplayAdvancedOptions();
+            } else {
+                DisplayOptions();
             }
-
-            if (!m_menu->m_selected.Empty() && (m_menu->m_selected.Type() == SelectedType::Cut || m_menu->m_selected.Type() == SelectedType::Copy)) {
-                options->Add(std::make_shared<SidebarEntryCallback>("Paste"_i18n, [this](){
-                    const std::string buf = "Paste file(s)?"_i18n;
-                    App::Push(std::make_shared<OptionBox>(
-                        buf, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
-                        if (op_index && *op_index) {
-                            App::PopToMenu();
-                            OnPasteCallback();
-                        }
-                    }));
-                }));
-            }
-
-            // can't rename more than 1 file
-            if (m_entries_current.size() && !m_selected_count) {
-                options->Add(std::make_shared<SidebarEntryCallback>("Rename"_i18n, [this](){
-                    std::string out;
-                    const auto& entry = GetEntry();
-                    const auto name = entry.GetName();
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Set New File Name"_i18n.c_str(), name.c_str())) && !out.empty() && out != name) {
-                        App::PopToMenu();
-
-                        const auto src_path = GetNewPath(entry);
-                        const auto dst_path = GetNewPath(m_path, out);
-
-                        Result rc;
-                        if (entry.IsFile()) {
-                            rc = m_fs->RenameFile(src_path, dst_path);
-                        } else {
-                            rc = m_fs->RenameDirectory(src_path, dst_path);
-                        }
-
-                        if (R_SUCCEEDED(rc)) {
-                            Scan(m_path);
-                        } else {
-                            const auto msg = std::string("Failed to rename file: ") + entry.name;
-                            App::PushErrorBox(rc, msg);
-                        }
-                    }
-                }));
-            }
-
-            if (m_entries_current.size()) {
-                options->Add(std::make_shared<SidebarEntryCallback>("Delete"_i18n, [this](){
-                    m_menu->AddSelectedEntries(SelectedType::Delete);
-
-                    log_write("clicked on delete\n");
-                    App::Push(std::make_shared<OptionBox>(
-                        "Delete Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
-                            if (op_index && *op_index) {
-                                App::PopToMenu();
-                                OnDeleteCallback();
-                            }
-                        }
-                    ));
-                    log_write("pushed delete\n");
-                }));
-            }
-
-            // returns true if all entries match the ext array.
-            const auto check_all_ext = [this](auto& exts){
-                const auto entries = GetSelectedEntries();
-                for (auto&e : entries) {
-                    if (!IsExtension(e.GetExtension(), exts)) {
-                        return false;
-                    }
-                }
-                return true;
-            };
-
-            // if install is enabled, check if all currently selected files are installable.
-            if (m_entries_current.size() && App::GetInstallEnable()) {
-                if (check_all_ext(INSTALL_EXTENSIONS)) {
-                    options->Add(std::make_shared<SidebarEntryCallback>("Install"_i18n, [this](){
-                        InstallFiles();
-                    }));
-                }
-            }
-
-            if (IsSd() && m_entries_current.size() && !m_selected_count) {
-                if (App::GetInstallEnable() && GetEntry().IsFile() && (GetEntry().GetExtension() == "nro" || !m_menu->FindFileAssocFor().empty())) {
-                    options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
-                        if (App::GetInstallPrompt()) {
-                            App::Push(std::make_shared<OptionBox>(
-                                "WARNING: Installing forwarders will lead to a ban!"_i18n,
-                                "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
-                                    if (op_index && *op_index) {
-                                        InstallForwarder();
-                                    }
-                                }
-                            ));
-                        } else {
-                            InstallForwarder();
-                        }
-                    }));
-                }
-            }
-
-            if (m_entries_current.size()) {
-                if (check_all_ext(ZIP_EXTENSIONS)) {
-                    options->Add(std::make_shared<SidebarEntryCallback>("Extract zip"_i18n, [this](){
-                        auto options = std::make_shared<Sidebar>("Extract Options"_i18n, Sidebar::Side::RIGHT);
-                        ON_SCOPE_EXIT(App::Push(options));
-
-                        options->Add(std::make_shared<SidebarEntryCallback>("Extract here"_i18n, [this](){
-                            UnzipFiles("");
-                        }));
-
-                        options->Add(std::make_shared<SidebarEntryCallback>("Extract to root"_i18n, [this](){
-                            App::Push(std::make_shared<OptionBox>("Are you sure you want to extract to root?"_i18n,
-                                "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
-                                if (op_index && *op_index) {
-                                    UnzipFiles(m_fs->Root());
-                                }
-                            }));
-                        }));
-
-                        options->Add(std::make_shared<SidebarEntryCallback>("Extract to..."_i18n, [this](){
-                            std::string out;
-                            if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into", fs::AppendPath(m_path, ""))) && !out.empty()) {
-                                UnzipFiles(out);
-                            }
-                        }));
-                    }));
-                }
-
-                if (!check_all_ext(ZIP_EXTENSIONS) || m_selected_count) {
-                    options->Add(std::make_shared<SidebarEntryCallback>("Compress to zip"_i18n, [this](){
-                        auto options = std::make_shared<Sidebar>("Compress Options"_i18n, Sidebar::Side::RIGHT);
-                        ON_SCOPE_EXIT(App::Push(options));
-
-                        options->Add(std::make_shared<SidebarEntryCallback>("Compress"_i18n, [this](){
-                            ZipFiles("");
-                        }));
-
-                        options->Add(std::make_shared<SidebarEntryCallback>("Compress to..."_i18n, [this](){
-                            std::string out;
-                            if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into", m_path)) && !out.empty()) {
-                                ZipFiles(out);
-                            }
-                        }));
-                    }));
-                }
-            }
-
-            options->Add(std::make_shared<SidebarEntryCallback>("Advanced"_i18n, [this](){
-                auto options = std::make_shared<Sidebar>("Advanced Options"_i18n, Sidebar::Side::RIGHT);
-                ON_SCOPE_EXIT(App::Push(options));
-
-                SidebarEntryArray::Items mount_items;
-                std::vector<FsEntry> fs_entries;
-
-                const auto stdio_locations = location::GetStdio(false);
-                for (const auto& e: stdio_locations) {
-                    u32 flags{};
-                    if (e.write_protect) {
-                        flags |= FsEntryFlag_ReadOnly;
-                    }
-
-                    fs_entries.emplace_back(e.name, e.mount, FsType::Stdio, flags);
-                    mount_items.push_back(e.name);
-                }
-
-                for (const auto& e: FS_ENTRIES) {
-                    fs_entries.emplace_back(e);
-                    mount_items.push_back(i18n::get(e.name));
-                }
-
-                options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
-                    App::PopToMenu();
-                    SetFs(fs_entries[index_out].root, fs_entries[index_out]);
-                }, m_fs_entry.name));
-
-                options->Add(std::make_shared<SidebarEntryCallback>("Create File"_i18n, [this](){
-                    std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Set File Name"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
-                        App::PopToMenu();
-
-                        fs::FsPath full_path;
-                        if (out.starts_with(m_fs_entry.root.s)) {
-                            full_path = out;
-                        } else {
-                            full_path = fs::AppendPath(m_path, out);
-                        }
-
-                        m_fs->CreateDirectoryRecursivelyWithPath(full_path);
-                        if (R_SUCCEEDED(m_fs->CreateFile(full_path, 0, 0))) {
-                            log_write("created file: %s\n", full_path.s);
-                            Scan(m_path);
-                        } else {
-                            log_write("failed to create file: %s\n", full_path.s);
-                        }
-                    }
-                }));
-
-                options->Add(std::make_shared<SidebarEntryCallback>("Create Folder"_i18n, [this](){
-                    std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Set Folder Name"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
-                        App::PopToMenu();
-
-                        fs::FsPath full_path;
-                        if (out.starts_with(m_fs_entry.root.s)) {
-                            full_path = out;
-                        } else {
-                            full_path = fs::AppendPath(m_path, out);
-                        }
-
-                        if (R_SUCCEEDED(m_fs->CreateDirectoryRecursively(full_path))) {
-                            log_write("created dir: %s\n", full_path.s);
-                            Scan(m_path);
-                        } else {
-                            log_write("failed to create dir: %s\n", full_path.s);
-                        }
-                    }
-                }));
-
-                if (IsSd() && m_entries_current.size() && !m_selected_count && GetEntry().IsFile() && GetEntry().file_size < 1024*64) {
-                    options->Add(std::make_shared<SidebarEntryCallback>("View as text (unfinished)"_i18n, [this](){
-                        App::Push(std::make_shared<fileview::Menu>(GetNewPathCurrent()));
-                    }));
-                }
-
-                if (m_entries_current.size()) {
-                    options->Add(std::make_shared<SidebarEntryCallback>("Upload"_i18n, [this](){
-                        UploadFiles();
-                    }));
-                }
-
-                if (m_entries_current.size() && !m_selected_count && GetEntry().IsFile()) {
-                    options->Add(std::make_shared<SidebarEntryCallback>("Hash"_i18n, [this](){
-                        auto options = std::make_shared<Sidebar>("Hash Options"_i18n, Sidebar::Side::RIGHT);
-                        ON_SCOPE_EXIT(App::Push(options));
-
-                        options->Add(std::make_shared<SidebarEntryCallback>("CRC32"_i18n, [this](){
-                            DisplayHash(hash::Type::Crc32);
-                        }));
-                        options->Add(std::make_shared<SidebarEntryCallback>("MD5"_i18n, [this](){
-                            DisplayHash(hash::Type::Md5);
-                        }));
-                        options->Add(std::make_shared<SidebarEntryCallback>("SHA1"_i18n, [this](){
-                            DisplayHash(hash::Type::Sha1);
-                        }));
-                        options->Add(std::make_shared<SidebarEntryCallback>("SHA256"_i18n, [this](){
-                            DisplayHash(hash::Type::Sha256);
-                        }));
-                    }));
-                }
-
-                options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_menu->m_ignore_read_only.Get(), [this](bool& v_out){
-                    m_menu->m_ignore_read_only.Set(v_out);
-                    m_fs->SetIgnoreReadOnly(v_out);
-                }));
-            }));
         }})
     );
 
@@ -1874,6 +1575,317 @@ void FsView::DisplayHash(hash::Type type) {
             std::snprintf(buf, sizeof(buf), "%s\n%s", hash::GetTypeStr(type), hash_out.c_str());
             App::Push(std::make_shared<OptionBox>(buf, "OK"_i18n));
         }
+    }));
+}
+
+void FsView::DisplayOptions() {
+    auto options = std::make_shared<Sidebar>("File Options"_i18n, Sidebar::Side::RIGHT);
+    ON_SCOPE_EXIT(App::Push(options));
+
+    options->Add(std::make_shared<SidebarEntryCallback>("Sort By"_i18n, [this](){
+        auto options = std::make_shared<Sidebar>("Sort Options"_i18n, Sidebar::Side::RIGHT);
+        ON_SCOPE_EXIT(App::Push(options));
+
+        SidebarEntryArray::Items sort_items;
+        sort_items.push_back("Size"_i18n);
+        sort_items.push_back("Alphabetical"_i18n);
+
+        SidebarEntryArray::Items order_items;
+        order_items.push_back("Descending"_i18n);
+        order_items.push_back("Ascending"_i18n);
+
+        options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
+            m_menu->m_sort.Set(index_out);
+            SortAndFindLastFile();
+        }, m_menu->m_sort.Get()));
+
+        options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
+            m_menu->m_order.Set(index_out);
+            SortAndFindLastFile();
+        }, m_menu->m_order.Get()));
+
+        options->Add(std::make_shared<SidebarEntryBool>("Show Hidden"_i18n, m_menu->m_show_hidden.Get(), [this](bool& v_out){
+            m_menu->m_show_hidden.Set(v_out);
+            SortAndFindLastFile();
+        }));
+
+        options->Add(std::make_shared<SidebarEntryBool>("Folders First"_i18n, m_menu->m_folders_first.Get(), [this](bool& v_out){
+            m_menu->m_folders_first.Set(v_out);
+            SortAndFindLastFile();
+        }));
+
+        options->Add(std::make_shared<SidebarEntryBool>("Hidden Last"_i18n, m_menu->m_hidden_last.Get(), [this](bool& v_out){
+            m_menu->m_hidden_last.Set(v_out);
+            SortAndFindLastFile();
+        }));
+    }));
+
+    if (m_entries_current.size()) {
+        options->Add(std::make_shared<SidebarEntryCallback>("Cut"_i18n, [this](){
+            m_menu->AddSelectedEntries(SelectedType::Cut);
+        }, true));
+
+        options->Add(std::make_shared<SidebarEntryCallback>("Copy"_i18n, [this](){
+            m_menu->AddSelectedEntries(SelectedType::Copy);
+        }, true));
+    }
+
+    if (!m_menu->m_selected.Empty() && (m_menu->m_selected.Type() == SelectedType::Cut || m_menu->m_selected.Type() == SelectedType::Copy)) {
+        options->Add(std::make_shared<SidebarEntryCallback>("Paste"_i18n, [this](){
+            const std::string buf = "Paste file(s)?"_i18n;
+            App::Push(std::make_shared<OptionBox>(
+                buf, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
+                if (op_index && *op_index) {
+                    App::PopToMenu();
+                    OnPasteCallback();
+                }
+            }));
+        }));
+    }
+
+    // can't rename more than 1 file
+    if (m_entries_current.size() && !m_selected_count) {
+        options->Add(std::make_shared<SidebarEntryCallback>("Rename"_i18n, [this](){
+            std::string out;
+            const auto& entry = GetEntry();
+            const auto name = entry.GetName();
+            if (R_SUCCEEDED(swkbd::ShowText(out, "Set New File Name"_i18n.c_str(), name.c_str())) && !out.empty() && out != name) {
+                App::PopToMenu();
+
+                const auto src_path = GetNewPath(entry);
+                const auto dst_path = GetNewPath(m_path, out);
+
+                Result rc;
+                if (entry.IsFile()) {
+                    rc = m_fs->RenameFile(src_path, dst_path);
+                } else {
+                    rc = m_fs->RenameDirectory(src_path, dst_path);
+                }
+
+                if (R_SUCCEEDED(rc)) {
+                    Scan(m_path);
+                } else {
+                    const auto msg = std::string("Failed to rename file: ") + entry.name;
+                    App::PushErrorBox(rc, msg);
+                }
+            }
+        }));
+    }
+
+    if (m_entries_current.size()) {
+        options->Add(std::make_shared<SidebarEntryCallback>("Delete"_i18n, [this](){
+            m_menu->AddSelectedEntries(SelectedType::Delete);
+
+            log_write("clicked on delete\n");
+            App::Push(std::make_shared<OptionBox>(
+                "Delete Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
+                    if (op_index && *op_index) {
+                        App::PopToMenu();
+                        OnDeleteCallback();
+                    }
+                }
+            ));
+            log_write("pushed delete\n");
+        }));
+    }
+
+    // returns true if all entries match the ext array.
+    const auto check_all_ext = [this](auto& exts){
+        const auto entries = GetSelectedEntries();
+        for (auto&e : entries) {
+            if (!IsExtension(e.GetExtension(), exts)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // if install is enabled, check if all currently selected files are installable.
+    if (m_entries_current.size() && App::GetInstallEnable()) {
+        if (check_all_ext(INSTALL_EXTENSIONS)) {
+            options->Add(std::make_shared<SidebarEntryCallback>("Install"_i18n, [this](){
+                InstallFiles();
+            }));
+        }
+    }
+
+    if (IsSd() && m_entries_current.size() && !m_selected_count) {
+        if (App::GetInstallEnable() && GetEntry().IsFile() && (GetEntry().GetExtension() == "nro" || !m_menu->FindFileAssocFor().empty())) {
+            options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
+                if (App::GetInstallPrompt()) {
+                    App::Push(std::make_shared<OptionBox>(
+                        "WARNING: Installing forwarders will lead to a ban!"_i18n,
+                        "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
+                            if (op_index && *op_index) {
+                                InstallForwarder();
+                            }
+                        }
+                    ));
+                } else {
+                    InstallForwarder();
+                }
+            }));
+        }
+    }
+
+    if (m_entries_current.size()) {
+        if (check_all_ext(ZIP_EXTENSIONS)) {
+            options->Add(std::make_shared<SidebarEntryCallback>("Extract zip"_i18n, [this](){
+                auto options = std::make_shared<Sidebar>("Extract Options"_i18n, Sidebar::Side::RIGHT);
+                ON_SCOPE_EXIT(App::Push(options));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Extract here"_i18n, [this](){
+                    UnzipFiles("");
+                }));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Extract to root"_i18n, [this](){
+                    App::Push(std::make_shared<OptionBox>("Are you sure you want to extract to root?"_i18n,
+                        "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
+                        if (op_index && *op_index) {
+                            UnzipFiles(m_fs->Root());
+                        }
+                    }));
+                }));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Extract to..."_i18n, [this](){
+                    std::string out;
+                    if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into", fs::AppendPath(m_path, ""))) && !out.empty()) {
+                        UnzipFiles(out);
+                    }
+                }));
+            }));
+        }
+
+        if (!check_all_ext(ZIP_EXTENSIONS) || m_selected_count) {
+            options->Add(std::make_shared<SidebarEntryCallback>("Compress to zip"_i18n, [this](){
+                auto options = std::make_shared<Sidebar>("Compress Options"_i18n, Sidebar::Side::RIGHT);
+                ON_SCOPE_EXIT(App::Push(options));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Compress"_i18n, [this](){
+                    ZipFiles("");
+                }));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Compress to..."_i18n, [this](){
+                    std::string out;
+                    if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into", m_path)) && !out.empty()) {
+                        ZipFiles(out);
+                    }
+                }));
+            }));
+        }
+    }
+
+    options->Add(std::make_shared<SidebarEntryCallback>("Advanced"_i18n, [this](){
+        DisplayAdvancedOptions();
+    }));
+}
+
+void FsView::DisplayAdvancedOptions() {
+    auto options = std::make_shared<Sidebar>("Advanced Options"_i18n, Sidebar::Side::RIGHT);
+    ON_SCOPE_EXIT(App::Push(options));
+
+    SidebarEntryArray::Items mount_items;
+    std::vector<FsEntry> fs_entries;
+
+    const auto stdio_locations = location::GetStdio(false);
+    for (const auto& e: stdio_locations) {
+        u32 flags{};
+        if (e.write_protect) {
+            flags |= FsEntryFlag_ReadOnly;
+        }
+
+        fs_entries.emplace_back(e.name, e.mount, FsType::Stdio, flags);
+        mount_items.push_back(e.name);
+    }
+
+    for (const auto& e: FS_ENTRIES) {
+        fs_entries.emplace_back(e);
+        mount_items.push_back(i18n::get(e.name));
+    }
+
+    options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
+        App::PopToMenu();
+        SetFs(fs_entries[index_out].root, fs_entries[index_out]);
+    }, m_fs_entry.name));
+
+    options->Add(std::make_shared<SidebarEntryCallback>("Create File"_i18n, [this](){
+        std::string out;
+        if (R_SUCCEEDED(swkbd::ShowText(out, "Set File Name"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+            App::PopToMenu();
+
+            fs::FsPath full_path;
+            if (out.starts_with(m_fs_entry.root.s)) {
+                full_path = out;
+            } else {
+                full_path = fs::AppendPath(m_path, out);
+            }
+
+            m_fs->CreateDirectoryRecursivelyWithPath(full_path);
+            if (R_SUCCEEDED(m_fs->CreateFile(full_path, 0, 0))) {
+                log_write("created file: %s\n", full_path.s);
+                Scan(m_path);
+            } else {
+                log_write("failed to create file: %s\n", full_path.s);
+            }
+        }
+    }));
+
+    options->Add(std::make_shared<SidebarEntryCallback>("Create Folder"_i18n, [this](){
+        std::string out;
+        if (R_SUCCEEDED(swkbd::ShowText(out, "Set Folder Name"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+            App::PopToMenu();
+
+            fs::FsPath full_path;
+            if (out.starts_with(m_fs_entry.root.s)) {
+                full_path = out;
+            } else {
+                full_path = fs::AppendPath(m_path, out);
+            }
+
+            if (R_SUCCEEDED(m_fs->CreateDirectoryRecursively(full_path))) {
+                log_write("created dir: %s\n", full_path.s);
+                Scan(m_path);
+            } else {
+                log_write("failed to create dir: %s\n", full_path.s);
+            }
+        }
+    }));
+
+    if (IsSd() && m_entries_current.size() && !m_selected_count && GetEntry().IsFile() && GetEntry().file_size < 1024*64) {
+        options->Add(std::make_shared<SidebarEntryCallback>("View as text (unfinished)"_i18n, [this](){
+            App::Push(std::make_shared<fileview::Menu>(GetNewPathCurrent()));
+        }));
+    }
+
+    if (m_entries_current.size()) {
+        options->Add(std::make_shared<SidebarEntryCallback>("Upload"_i18n, [this](){
+            UploadFiles();
+        }));
+    }
+
+    if (m_entries_current.size() && !m_selected_count && GetEntry().IsFile()) {
+        options->Add(std::make_shared<SidebarEntryCallback>("Hash"_i18n, [this](){
+            auto options = std::make_shared<Sidebar>("Hash Options"_i18n, Sidebar::Side::RIGHT);
+            ON_SCOPE_EXIT(App::Push(options));
+
+            options->Add(std::make_shared<SidebarEntryCallback>("CRC32"_i18n, [this](){
+                DisplayHash(hash::Type::Crc32);
+            }));
+            options->Add(std::make_shared<SidebarEntryCallback>("MD5"_i18n, [this](){
+                DisplayHash(hash::Type::Md5);
+            }));
+            options->Add(std::make_shared<SidebarEntryCallback>("SHA1"_i18n, [this](){
+                DisplayHash(hash::Type::Sha1);
+            }));
+            options->Add(std::make_shared<SidebarEntryCallback>("SHA256"_i18n, [this](){
+                DisplayHash(hash::Type::Sha256);
+            }));
+        }));
+    }
+
+    options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_menu->m_ignore_read_only.Get(), [this](bool& v_out){
+        m_menu->m_ignore_read_only.Set(v_out);
+        m_fs->SetIgnoreReadOnly(v_out);
     }));
 }
 

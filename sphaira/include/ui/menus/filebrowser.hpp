@@ -264,6 +264,9 @@ private:
 
     void DisplayHash(hash::Type type);
 
+    void DisplayOptions();
+    void DisplayAdvancedOptions();
+
 private:
     Menu* m_menu{};
     ViewSide m_side{};
