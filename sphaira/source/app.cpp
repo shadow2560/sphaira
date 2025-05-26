@@ -1739,6 +1739,10 @@ void App::DisplayDumpOptions(bool left_side) {
         App::GetApp()->m_dump_trim_xci.Set(enable);
     }));
 
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Label trimmed XCI"_i18n, App::GetApp()->m_dump_label_trim_xci.Get(), [](bool& enable){
+        App::GetApp()->m_dump_label_trim_xci.Set(enable);
+    }));
+
     options->Add(std::make_shared<ui::SidebarEntryBool>("Multi-threaded USB transfer"_i18n, App::GetApp()->m_dump_usb_transfer_stream.Get(), [](bool& enable){
         App::GetApp()->m_dump_usb_transfer_stream.Set(enable);
     }));

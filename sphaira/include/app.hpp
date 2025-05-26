@@ -263,6 +263,7 @@ public:
     option::OptionBool m_dump_app_folder{"dump", "app_folder", true};
     option::OptionBool m_dump_append_folder_with_xci{"dump", "append_folder_with_xci", true};
     option::OptionBool m_dump_trim_xci{"dump", "trim_xci", false};
+    option::OptionBool m_dump_label_trim_xci{"dump", "label_trim_xci", false};
     option::OptionBool m_dump_usb_transfer_stream{"dump", "usb_transfer_stream", true};
 
     // todo: move this into it's own menu

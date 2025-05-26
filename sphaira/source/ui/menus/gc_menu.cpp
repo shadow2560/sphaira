@@ -102,8 +102,12 @@ struct DebugEventInfo {
 
 auto GetDumpTypeStr(u8 type) -> const char* {
     switch (type) {
+        case DumpFileType_TrimmedXCI:
+            if (App::GetApp()->m_dump_label_trim_xci.Get()) {
+                return " (trimmed).xci";
+            } [[fallthrough]];
+
         case DumpFileType_XCI: return ".xci";
-        case DumpFileType_TrimmedXCI: return " (trimmed).xci";
         case DumpFileType_Set: return " (Card ID Set).bin";
         case DumpFileType_UID: return " (Card UID).bin";
         case DumpFileType_Cert: return " (Certificate).bin";
@@ -664,9 +668,9 @@ Result Menu::GcMount() {
                     }, true));
                 };
 
-                add("Dump XCI"_i18n, DumpFileFlag_XCI);
                 add("Dump All"_i18n, DumpFileFlag_All);
                 add("Dump All Bins"_i18n, DumpFileFlag_AllBin);
+                add("Dump XCI"_i18n, DumpFileFlag_XCI);
                 add("Dump Card ID Set"_i18n, DumpFileFlag_Set);
                 add("Dump Card UID"_i18n, DumpFileFlag_UID);
                 add("Dump Certificate"_i18n, DumpFileFlag_Cert);
