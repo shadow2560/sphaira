@@ -280,6 +280,10 @@ MainMenu::MainMenu() {
                     App::SetHddEnable(enable);
                 }));
 
+                options->Add(std::make_shared<SidebarEntryBool>("Hdd write protect"_i18n, App::GetWriteProtect(), [](bool& enable){
+                    App::SetWriteProtect(enable);
+                }));
+
                 if (m_update_state == UpdateState::Update) {
                     options->Add(std::make_shared<SidebarEntryCallback>("Download update: "_i18n + m_update_version, [this](){
                         App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, "Sphaira v" + m_update_version, [this](auto pbox) -> Result {

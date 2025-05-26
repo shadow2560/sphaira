@@ -86,10 +86,12 @@ auto GetStdio(bool write) -> StdioEntries {
     log_write("[USBHSFS] got count: %u\n", count);
 
     StdioEntries out{};
+    const auto write_protect = App::GetWriteProtect();
+
     for (s32 i = 0; i < count; i++) {
         const auto& e = devices[i];
 
-        if (write && e.write_protect) {
+        if (write && (write_protect || e.write_protect)) {
             log_write("[USBHSFS] skipping write protect\n");
             continue;
         }

@@ -617,6 +617,10 @@ auto App::GetHddEnable() -> bool {
     return g_app->m_hdd_enabled.Get();
 }
 
+auto App::GetWriteProtect() -> bool {
+    return g_app->m_hdd_write_protect.Get();
+}
+
 auto App::GetLogEnable() -> bool {
     return g_app->m_log_enabled.Get();
 }
@@ -688,9 +692,24 @@ void App::SetHddEnable(bool enable) {
     if (App::GetHddEnable() != enable) {
         g_app->m_hdd_enabled.Set(enable);
         if (enable) {
+            if (App::GetWriteProtect()) {
+                usbHsFsSetFileSystemMountFlags(UsbHsFsMountFlags_ReadOnly);
+            }
             usbHsFsInitialize(1);
         } else {
             usbHsFsExit();
+        }
+    }
+}
+
+void App::SetWriteProtect(bool enable) {
+    if (App::GetWriteProtect() != enable) {
+        g_app->m_hdd_write_protect.Set(enable);
+
+        if (enable) {
+            usbHsFsSetFileSystemMountFlags(UsbHsFsMountFlags_ReadOnly);
+        } else {
+            usbHsFsSetFileSystemMountFlags(0);
         }
     }
 }
@@ -1284,6 +1303,7 @@ App::App(const char* argv0) {
             else if (app->m_mtp_enabled.LoadFrom(Key, Value)) {}
             else if (app->m_ftp_enabled.LoadFrom(Key, Value)) {}
             else if (app->m_hdd_enabled.LoadFrom(Key, Value)) {}
+            else if (app->m_hdd_write_protect.LoadFrom(Key, Value)) {}
             else if (app->m_log_enabled.LoadFrom(Key, Value)) {}
             else if (app->m_replace_hbmenu.LoadFrom(Key, Value)) {}
             else if (app->m_theme_path.LoadFrom(Key, Value)) {}
@@ -1311,6 +1331,8 @@ App::App(const char* argv0) {
             else if (app->m_convert_to_standard_crypto.LoadFrom(Key, Value)) {}
             else if (app->m_lower_master_key.LoadFrom(Key, Value)) {}
             else if (app->m_lower_system_version.LoadFrom(Key, Value)) {}
+        } else if (!std::strcmp(Section, "accessibility")) {
+            if (app->m_text_scroll_speed.LoadFrom(Key, Value)) {}
         }
 
         return 1;
@@ -1336,6 +1358,10 @@ App::App(const char* argv0) {
 
     if (App::GetNxlinkEnable()) {
         nxlinkInitialize(nxlink_callback);
+    }
+
+    if (App::GetWriteProtect()) {
+        usbHsFsSetFileSystemMountFlags(UsbHsFsMountFlags_ReadOnly);
     }
 
     if (App::GetHddEnable()) {

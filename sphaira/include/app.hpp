@@ -80,6 +80,7 @@ public:
     static auto GetFtpEnable() -> bool;
     static auto GetNxlinkEnable() -> bool;
     static auto GetHddEnable() -> bool;
+    static auto GetWriteProtect() -> bool;
     static auto GetLogEnable() -> bool;
     static auto GetReplaceHbmenuEnable() -> bool;
     static auto GetInstallEnable() -> bool;
@@ -96,6 +97,7 @@ public:
     static void SetFtpEnable(bool enable);
     static void SetNxlinkEnable(bool enable);
     static void SetHddEnable(bool enable);
+    static void SetWriteProtect(bool enable);
     static void SetLogEnable(bool enable);
     static void SetReplaceHbmenuEnable(bool enable);
     static void SetInstallSysmmcEnable(bool enable);
@@ -225,10 +227,13 @@ public:
 
     bool m_quit{};
 
+    // network
     option::OptionBool m_nxlink_enabled{INI_SECTION, "nxlink_enabled", true};
     option::OptionBool m_mtp_enabled{INI_SECTION, "mtp_enabled", false};
     option::OptionBool m_ftp_enabled{INI_SECTION, "ftp_enabled", false};
-    option::OptionBool m_hdd_enabled{INI_SECTION, "hdd_enabled", false};
+    option::OptionBool m_hdd_enabled{INI_SECTION, "hdd_enabled", true};
+    option::OptionBool m_hdd_write_protect{INI_SECTION, "hdd_write_protect", false};
+
     option::OptionBool m_log_enabled{INI_SECTION, "log_enabled", false};
     option::OptionBool m_replace_hbmenu{INI_SECTION, "replace_hbmenu", false};
     option::OptionString m_theme_path{INI_SECTION, "theme", DEFAULT_THEME_PATH};

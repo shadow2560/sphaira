@@ -1192,11 +1192,15 @@ void FsView::OnDeleteCallback() {
             bool empty{};
             m_fs->IsDirEmpty(full_path, &empty);
             if (empty) {
-                m_fs->DeleteDirectory(full_path);
+                if (auto rc = m_fs->DeleteDirectory(full_path); R_FAILED(rc)) {
+                    App::PushErrorBox(rc, "Failed to delete directory"_i18n);
+                }
                 use_progress_box = false;
             }
         } else {
-            m_fs->DeleteFile(full_path);
+            if (auto rc = m_fs->DeleteFile(full_path); R_FAILED(rc)) {
+                App::PushErrorBox(rc, "Failed to delete file"_i18n);
+            }
             use_progress_box = false;
         }
     }
