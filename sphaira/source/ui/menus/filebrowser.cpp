@@ -2011,30 +2011,24 @@ void Menu::LoadAssocEntriesPath(const fs::FsPath& path) {
 
         ini_browse([](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) {
             auto assoc = static_cast<FileAssocEntry*>(UserData);
-            if (!strcmp(Key, "path")) {
+            if (!std::strcmp(Key, "path")) {
                 assoc->path = Value;
-            } else if (!strcmp(Key, "supported_extensions")) {
-                for (int i = 0; Value[i]; i++) {
-                    for (int j = i; ; j++) {
-                        if (Value[j] == '|' || Value[j] == '\0') {
-                            assoc->ext.emplace_back(Value + i, j - i);
-                            i += j - i;
-                            break;
-                        }
+            } else if (!std::strcmp(Key, "supported_extensions")) {
+                for (const auto& p : std::views::split(std::string_view{Value}, '|')) {
+                    if (p.empty()) {
+                        continue;
                     }
+                    assoc->ext.emplace_back(p.data(), p.size());
                 }
-            } else if (!strcmp(Key, "database")) {
-                for (int i = 0; Value[i]; i++) {
-                    for (int j = i; ; j++) {
-                        if (Value[j] == '|' || Value[j] == '\0') {
-                            assoc->database.emplace_back(Value + i, j - i);
-                            i += j - i;
-                            break;
-                        }
+            } else if (!std::strcmp(Key, "database")) {
+                for (const auto& p : std::views::split(std::string_view{Value}, '|')) {
+                    if (p.empty()) {
+                        continue;
                     }
+                    assoc->database.emplace_back(p.data(), p.size());
                 }
-            } else if (!strcmp(Key, "use_base_name")) {
-                if (!strcmp(Value, "true") || !strcmp(Value, "1")) {
+            } else if (!std::strcmp(Key, "use_base_name")) {
+                if (!std::strcmp(Value, "true") || !std::strcmp(Value, "1")) {
                     assoc->use_base_name = true;
                 }
             }
