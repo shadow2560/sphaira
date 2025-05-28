@@ -275,6 +275,8 @@ FtpVfs g_vfs_install = {
 };
 
 void loop(void* arg) {
+    log_write("[FTP] loop entered\n");
+
     while (!g_should_exit) {
         ftpsrv_init(&g_ftpsrv_config);
         while (!g_should_exit) {
@@ -285,6 +287,8 @@ void loop(void* arg) {
         }
         ftpsrv_exit();
     }
+
+    log_write("[FTP] loop exitied\n");
 }
 
 } // namespace
@@ -292,10 +296,12 @@ void loop(void* arg) {
 bool Init() {
     std::scoped_lock lock{g_mutex};
     if (g_is_running) {
+        log_write("[FTP] already enabled, cannot open\n");
         return false;
     }
 
     if (R_FAILED(fsdev_wrapMountSdmc())) {
+        log_write("[FTP] cannot mount sdmc\n");
         return false;
     }
 
@@ -327,15 +333,18 @@ bool Init() {
     mount_bis = ini_getbool("Nx-App", "mount_bis", mount_bis, INI_PATH);
     save_writable = ini_getbool("Nx-App", "save_writable", save_writable, INI_PATH);
 
+    g_should_exit = false;
     mount_devices = true;
     g_ftpsrv_config.timeout = 0;
 
     if (!g_ftpsrv_config.port) {
+        log_write("[FTP] no port config\n");
         return false;
     }
 
     // keep compat with older sphaira
     if (!user_len && !pass_len) {
+        log_write("[FTP] no user pass\n");
         g_ftpsrv_config.anon = true;
     }
 
@@ -349,30 +358,37 @@ bool Init() {
 
     Result rc;
     if (R_FAILED(rc = threadCreate(&g_thread, loop, nullptr, nullptr, 1024*16, 0x2C, 2))) {
-        log_write("failed to create nxlink thread: 0x%X\n", rc);
+        log_write("[FTP] failed to create nxlink thread: 0x%X\n", rc);
         return false;
     }
 
     if (R_FAILED(rc = threadStart(&g_thread))) {
-        log_write("failed to start nxlink thread: 0x%X\n", rc);
+        log_write("[FTP] failed to start nxlink thread: 0x%X\n", rc);
         threadClose(&g_thread);
         return false;
     }
 
+    log_write("[FTP] started\n");
     return g_is_running = true;
 }
 
 void Exit() {
     std::scoped_lock lock{g_mutex};
-    if (g_is_running) {
-        g_is_running = false;
+    if (!g_is_running) {
+        return;
     }
+
+    g_is_running = false;
     g_should_exit = true;
+
     threadWaitForExit(&g_thread);
     threadClose(&g_thread);
 
     vfs_nx_exit();
     fsdev_wrapUnmountAll();
+    memset(&g_ftpsrv_config, 0, sizeof(g_ftpsrv_config));
+
+    log_write("[FTP] exitied\n");
 }
 
 void InitInstallMode(void* user, OnInstallStart on_start, OnInstallWrite on_write, OnInstallClose on_close) {

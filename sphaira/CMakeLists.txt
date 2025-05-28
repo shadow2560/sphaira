@@ -155,7 +155,7 @@ set(FETCHCONTENT_QUIET FALSE)
 FetchContent_Declare(ftpsrv
     GIT_REPOSITORY https://github.com/ITotalJustice/ftpsrv.git
     # GIT_TAG 1.2.2
-    GIT_TAG e4b4548
+    GIT_TAG 8c18431
     SOURCE_SUBDIR NONE
 )
 
