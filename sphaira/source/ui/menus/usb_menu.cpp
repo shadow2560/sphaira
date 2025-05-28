@@ -77,7 +77,7 @@ Menu::Menu(u32 flags) : MenuBase{"USB"_i18n, flags} {
     mutexInit(&m_mutex);
 
     if (m_state != State::Failed) {
-        threadCreate(&m_thread, thread_func, this, nullptr, 1024*32, 0x2C, 1);
+        threadCreate(&m_thread, thread_func, this, nullptr, 1024*32, PRIO_PREEMPTIVE, 1);
         threadStart(&m_thread);
     }
 }

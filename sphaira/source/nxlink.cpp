@@ -458,7 +458,7 @@ bool nxlinkInitialize(NxlinkCallback callback) {
     g_quit = false;
 
     Result rc;
-    if (R_FAILED(rc = threadCreate(&g_thread, loop, nullptr, nullptr, 1024*64, 0x2C, 2))) {
+    if (R_FAILED(rc = threadCreate(&g_thread, loop, nullptr, nullptr, 1024*64, PRIO_PREEMPTIVE, 2))) {
         log_write("failed to create nxlink thread: 0x%X\n", rc);
         return false;
     }

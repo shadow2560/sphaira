@@ -145,8 +145,14 @@ ThreadData::ThreadData(ui::ProgressBox* _pbox, s64 size, ReadCallback _rfunc, Wr
     condvarInit(std::addressof(can_pull_write));
 
     write_size = size;
-    read_buffer_size = READ_BUFFER_MAX;
-    max_buffer_size = READ_BUFFER_MAX;
+
+    if (App::IsFileBaseEmummc()) {
+        read_buffer_size = 1024 * 512;
+        max_buffer_size = 1024 * 512;
+    } else {
+        read_buffer_size = READ_BUFFER_MAX;
+        max_buffer_size = READ_BUFFER_MAX;
+    }
 }
 
 auto ThreadData::GetResults() -> Result {
@@ -312,11 +318,11 @@ Result TransferInternal(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, Wri
     ThreadData t_data{pbox, size, rfunc, wfunc};
 
     Thread t_read{};
-    R_TRY(threadCreate(&t_read, readFunc, std::addressof(t_data), nullptr, 1024*64, 0x20, READ_THREAD_CORE));
+    R_TRY(threadCreate(&t_read, readFunc, std::addressof(t_data), nullptr, 1024*64, PRIO_PREEMPTIVE, READ_THREAD_CORE));
     ON_SCOPE_EXIT(threadClose(&t_read));
 
     Thread t_write{};
-    R_TRY(threadCreate(&t_write, writeFunc, std::addressof(t_data), nullptr, 1024*64, 0x20, WRITE_THREAD_CORE));
+    R_TRY(threadCreate(&t_write, writeFunc, std::addressof(t_data), nullptr, 1024*64, PRIO_PREEMPTIVE, WRITE_THREAD_CORE));
     ON_SCOPE_EXIT(threadClose(&t_write));
 
     const auto start_threads = [&]() -> Result {

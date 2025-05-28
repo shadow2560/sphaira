@@ -32,7 +32,7 @@ namespace {
 constexpr auto API_AGENT = "TotalJustice";
 constexpr u64 CHUNK_SIZE = 1024*1024;
 constexpr auto MAX_THREADS = 4;
-constexpr int THREAD_PRIO = 0x2C;
+constexpr int THREAD_PRIO = PRIO_PREEMPTIVE;
 constexpr int THREAD_CORE = 1;
 
 std::atomic_bool g_running{};
@@ -69,6 +69,10 @@ auto WebdavCreateFolder(CURL* curl, const Api& e) -> bool;
 auto generate_key_from_path(const fs::FsPath& path) -> std::string {
     const auto key = crc32Calculate(path.s, path.size());
     return std::to_string(key);
+}
+
+void Yield() {
+    svcSleepThread(YieldType_WithoutCoreMigration);
 }
 
 struct Cache {
@@ -259,6 +263,7 @@ struct ThreadEntry {
 
         ueventCreate(&m_uevent, true);
         R_TRY(threadCreate(&m_thread, ThreadFunc, this, nullptr, 1024*32, THREAD_PRIO, THREAD_CORE));
+        R_TRY(svcSetThreadCoreMask(m_thread.handle, THREAD_CORE, THREAD_AFFINITY_DEFAULT(THREAD_CORE)));
         R_TRY(threadStart(&m_thread));
         R_SUCCEED();
     }
@@ -371,7 +376,7 @@ auto ProgressCallbackFunc1(void *clientp, curl_off_t dltotal, curl_off_t dlnow, 
         return 1;
     }
 
-    svcSleepThread(YieldType_WithoutCoreMigration);
+    Yield();
     return 0;
 }
 
@@ -386,7 +391,7 @@ auto ProgressCallbackFunc2(void *clientp, curl_off_t dltotal, curl_off_t dlnow, 
         return 1;
     }
 
-    svcSleepThread(YieldType_WithoutCoreMigration);
+    Yield();
     return 0;
 }
 
@@ -445,7 +450,7 @@ auto ReadFileCallback(char *ptr, size_t size, size_t nmemb, void *userp) -> size
     }
 
     data_struct->offset += bytes_read;
-    svcSleepThread(YieldType_WithoutCoreMigration);
+    Yield();
     return bytes_read;
 }
 
@@ -461,7 +466,7 @@ auto ReadMemoryCallback(char *ptr, size_t size, size_t nmemb, void *userp) -> si
     std::memcpy(ptr, data_struct->data.data(), realsize);
     data_struct->offset += realsize;
 
-    svcSleepThread(YieldType_WithoutCoreMigration);
+    Yield();
     return realsize;
 }
 
@@ -474,7 +479,7 @@ auto ReadCustomCallback(char *ptr, size_t size, size_t nmemb, void *userp) -> si
     auto realsize = size * nmemb;
     const auto result = data_struct->m_callback(ptr, realsize);
 
-    svcSleepThread(YieldType_WithoutCoreMigration);
+    Yield();
     return result;
 }
 
@@ -495,7 +500,7 @@ auto WriteMemoryCallback(void *contents, size_t size, size_t num_files, void *us
     std::memcpy(data_struct->data.data() + data_struct->offset, contents, realsize);
     data_struct->offset += realsize;
 
-    svcSleepThread(YieldType_WithoutCoreMigration);
+    Yield();
     return realsize;
 }
 
@@ -530,7 +535,7 @@ auto WriteFileCallback(void *contents, size_t size, size_t num_files, void *user
         data_struct->offset += realsize;
     }
 
-    svcSleepThread(YieldType_WithoutCoreMigration);
+    Yield();
     return realsize;
 }
 

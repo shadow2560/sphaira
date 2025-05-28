@@ -30,6 +30,8 @@ struct InstallSharedData {
 };
 
 const char* INI_PATH = "/config/ftpsrv/config.ini";
+constexpr int THREAD_PRIO = PRIO_PREEMPTIVE;
+constexpr int THREAD_CORE = 2;
 FtpSrvConfig g_ftpsrv_config = {0};
 volatile bool g_should_exit = false;
 bool g_is_running{false};
@@ -357,8 +359,13 @@ bool Init() {
     vfs_nx_init(&custom, mount_devices, save_writable, mount_bis);
 
     Result rc;
-    if (R_FAILED(rc = threadCreate(&g_thread, loop, nullptr, nullptr, 1024*16, 0x2C, 2))) {
+    if (R_FAILED(rc = threadCreate(&g_thread, loop, nullptr, nullptr, 1024*16, THREAD_PRIO, THREAD_CORE))) {
         log_write("[FTP] failed to create nxlink thread: 0x%X\n", rc);
+        return false;
+    }
+
+    if (R_FAILED(rc = svcSetThreadCoreMask(g_thread.handle, THREAD_CORE, THREAD_AFFINITY_DEFAULT(THREAD_CORE)))) {
+        log_write("[FTP] failed to set core mask: 0x%X\n", rc);
         return false;
     }
 

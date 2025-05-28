@@ -646,6 +646,7 @@ Result Menu::GcMount() {
         if (m_option_index == 2) {
             SetPop();
         } else {
+            log_write("[GC] pressed A\n");
             if (!m_mounted) {
                 return;
             }
@@ -658,6 +659,7 @@ Result Menu::GcMount() {
                         "OK"_i18n
                     ));
                 } else {
+                    log_write("[GC] doing install A\n");
                     App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) -> Result {
                         auto source = std::make_shared<GcSource>(m_entries[m_entry_index], m_fs.get());
                         return yati::InstallFromCollections(pbox, source, source->m_collections, source->m_config);

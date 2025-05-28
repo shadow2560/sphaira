@@ -524,27 +524,15 @@ enum NcmError {
 #define ON_SCOPE_FAIL(_f) std::experimental::scope_exit ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE_){[&] { if (R_FAILED(rc)) { _f; } }};
 #define ON_SCOPE_SUCCESS(_f) std::experimental::scope_exit ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE_){[&] { if (R_SUCCEEDED(rc)) { _f; } }};
 
-#if 0
-constexpr auto cexprHash(const char *str, std::size_t v = 0) noexcept -> std::size_t {
-    return (*str == 0) ? v : 31 * cexprHash(str + 1) + *str;
-}
+// threading helpers.
+#define PRIO_PREEMPTIVE 0x3B
 
-constexpr auto cexprStrlen(const char *str) noexcept -> std::size_t {
-    return (*str != 0) ? 1 + cexprStrlen(str + 1) : 0;
-}
+// threading affinity, use with svcSetThreadCoreMask().
+#define THREAD_AFFINITY_CORE0 BIT(0)
+#define THREAD_AFFINITY_CORE1 BIT(1)
+#define THREAD_AFFINITY_CORE2 BIT(2)
+#define THREAD_AFFINITY_DEFAULT(core) (BIT(core)|THREAD_AFFINITY_CORE1|THREAD_AFFINITY_CORE2)
+#define THREAD_AFFINITY_ALL (THREAD_AFFINITY_CORE0|THREAD_AFFINITY_CORE1|THREAD_AFFINITY_CORE2)
 
-inline void showError(const char* title, const char* desc, Result rc) {
-    const auto type = appletGetAppletType();
-    if (type == AppletType_Application || type == AppletType_SystemApplication) {
-        ErrorApplicationConfig cfg;
-        errorApplicationCreate(&cfg, title, desc);
-        errorApplicationSetNumber(&cfg, rc);
-        errorApplicationShow(&cfg);
-    } else {
-        ErrorSystemConfig cfg;
-        errorSystemCreate(&cfg, title, desc);
-        errorSystemSetResult(&cfg, rc);
-        errorSystemShow(&cfg);
-    }
-}
-#endif
+// mutex helpers.
+#define SCOPED_MUTEX(mutex) mutexLock(mutex); ON_SCOPE_EXIT(mutexUnlock(mutex))

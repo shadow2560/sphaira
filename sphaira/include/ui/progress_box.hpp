@@ -18,7 +18,7 @@ struct ProgressBox final : Widget {
         const std::string& action,
         const std::string& title,
         ProgressBoxCallback callback, ProgressBoxDoneCallback done = [](Result rc){},
-        int cpuid = 1, int prio = 0x2C, int stack_size = 1024*128
+        int cpuid = 1, int prio = PRIO_PREEMPTIVE, int stack_size = 1024*128
     );
     ~ProgressBox();
 

@@ -140,7 +140,13 @@ struct ThreadData {
         // this will be updated with the actual size from nca header.
         write_size = nca->size;
 
-        read_buffer_size = 1024*1024*4;
+        // reduce buffer size to preve
+        if (App::IsFileBaseEmummc()) {
+            read_buffer_size = 1024 * 512;
+        } else {
+            read_buffer_size = 1024*1024*4;
+        }
+
         max_buffer_size = std::max(read_buffer_size, INFLATE_BUFFER_MAX);
     }
 
@@ -689,12 +695,27 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
 Result Yati::writeFuncInternal(ThreadData* t) {
     std::vector<u8> buf;
     buf.reserve(t->max_buffer_size);
+    const auto is_file_based_emummc = App::IsFileBaseEmummc();
 
     while (t->write_offset < t->write_size && R_SUCCEEDED(t->GetResults())) {
         s64 dummy_off;
         R_TRY(t->GetWriteBuf(buf, dummy_off));
-        R_TRY(ncmContentStorageWritePlaceHolder(std::addressof(cs), std::addressof(t->nca->placeholder_id), t->write_offset, buf.data(), buf.size()));
-        t->write_offset += buf.size();
+
+        s64 off{};
+        while (off < buf.size() && t->write_offset < t->write_size && R_SUCCEEDED(t->GetResults())) {
+            const auto wsize = std::min<s64>(t->read_buffer_size, buf.size() - off);
+            R_TRY(ncmContentStorageWritePlaceHolder(std::addressof(cs), std::addressof(t->nca->placeholder_id), t->write_offset + off, buf.data() + off, wsize));
+
+            off += wsize;
+            t->write_offset += wsize;
+
+            // todo: check how much time elapsed and sleep the diff
+            // rather than always sleeping a fixed amount.
+            // ie, writing a small buffer (nca header) should not sleep the full 2 ms.
+            if (is_file_based_emummc) {
+                svcSleepThread(2e+6); // 2ms
+            }
+        }
     }
 
     log_write("finished write thread!\n");
@@ -834,15 +855,15 @@ Result Yati::InstallNcaInternal(std::span<TikCollection> tickets, NcaCollection&
     // #define WRITE_THREAD_CORE 2
 
     Thread t_read{};
-    R_TRY(threadCreate(&t_read, readFunc, std::addressof(t_data), nullptr, 1024*64, 0x20, READ_THREAD_CORE));
+    R_TRY(threadCreate(&t_read, readFunc, std::addressof(t_data), nullptr, 1024*64, PRIO_PREEMPTIVE, READ_THREAD_CORE));
     ON_SCOPE_EXIT(threadClose(&t_read));
 
     Thread t_decompress{};
-    R_TRY(threadCreate(&t_decompress, decompressFunc, std::addressof(t_data), nullptr, 1024*64, 0x20, DECOMPRESS_THREAD_CORE));
+    R_TRY(threadCreate(&t_decompress, decompressFunc, std::addressof(t_data), nullptr, 1024*64, PRIO_PREEMPTIVE, DECOMPRESS_THREAD_CORE));
     ON_SCOPE_EXIT(threadClose(&t_decompress));
 
     Thread t_write{};
-    R_TRY(threadCreate(&t_write, writeFunc, std::addressof(t_data), nullptr, 1024*64, 0x20, WRITE_THREAD_CORE));
+    R_TRY(threadCreate(&t_write, writeFunc, std::addressof(t_data), nullptr, 1024*64, PRIO_PREEMPTIVE, WRITE_THREAD_CORE));
     ON_SCOPE_EXIT(threadClose(&t_write));
 
     log_write("starting threads\n");

@@ -254,6 +254,9 @@ auto ProgressBox::ShouldExitResult() -> Result {
 }
 
 auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
+    const auto is_file_based_emummc = App::IsFileBaseEmummc();
+    const auto is_both_native = fs_src->IsNative() && fs_dst->IsNative();
+
     fs::File src_file;
     R_TRY(fs_src->OpenFile(src_path, FsOpenMode_Read, &src_file));
 
@@ -271,7 +274,13 @@ auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src
     R_TRY(dst_file.SetSize(src_size));
 
     s64 offset{};
-    std::vector<u8> buf(1024*1024*4); // 4MiB
+    std::vector<u8> buf;
+
+    if (is_file_based_emummc) {
+        buf.resize(1024*512); // 512KiB
+    } else {
+        buf.resize(1024*1024*4); // 4MiB
+    }
 
     while (offset < src_size) {
         R_TRY(ShouldExitResult());
@@ -280,11 +289,19 @@ auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src
         R_TRY(src_file.Read(offset, buf.data(), buf.size(), 0, &bytes_read));
         Yield();
 
+        if (is_both_native && is_file_based_emummc) {
+            svcSleepThread(2e+6); // 2ms
+        }
+
         R_TRY(dst_file.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
         Yield();
 
         UpdateTransfer(offset, src_size);
         offset += bytes_read;
+
+        if (is_both_native && is_file_based_emummc) {
+            svcSleepThread(2e+6); // 2ms
+        }
     }
 
     R_SUCCEED();

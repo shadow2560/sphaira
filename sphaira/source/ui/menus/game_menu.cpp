@@ -27,6 +27,9 @@
 namespace sphaira::ui::menu::game {
 namespace {
 
+constexpr int THREAD_PRIO = PRIO_PREEMPTIVE;
+constexpr int THREAD_CORE = 1;
+
 constexpr u32 ContentMetaTypeToContentFlag(u8 meta_type) {
     if (meta_type & 0x80) {
         return 1 << (meta_type - 0x80);
@@ -649,9 +652,7 @@ void ThreadData::Run() {
             }
 
             // sleep after every other entry loaded.
-            if (i) {
-                svcSleepThread(1e+6*2); // 2ms
-            }
+            svcSleepThread(2e+6); // 2ms
 
             const auto result = LoadControlEntry(ids[i]);
             mutexLock(&m_mutex_result);
@@ -875,7 +876,8 @@ Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
         e.Open();
     }
 
-    threadCreate(&m_thread, ThreadFunc, &m_thread_data, nullptr, 1024*32, 0x30, 1);
+    threadCreate(&m_thread, ThreadFunc, &m_thread_data, nullptr, 1024*32, THREAD_PRIO, THREAD_CORE);
+    svcSetThreadCoreMask(m_thread.handle, THREAD_CORE, THREAD_AFFINITY_DEFAULT(THREAD_CORE));
     threadStart(&m_thread);
 }
 

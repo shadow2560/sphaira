@@ -35,6 +35,11 @@ enum class LaunchType {
     Forwader_Sphaira,
 };
 
+struct AmsEmummcPaths {
+    char file_based_path[0x80];
+    char nintendo[0x80];
+};
+
 // todo: why is this global???
 void DrawElement(float x, float y, float w, float h, ThemeEntryID id);
 void DrawElement(const Vec4&, ThemeEntryID id);
@@ -159,20 +164,9 @@ public:
         return R_SUCCEEDED(pmdmntGetApplicationProcessId(&pid));
     }
 
-    static auto IsEmunand() -> bool {
-        alignas(0x1000) struct EmummcPaths {
-            char unk[0x80];
-            char nintendo[0x80];
-        } paths{};
-
-        SecmonArgs args{};
-        args.X[0] = 0xF0000404; /* smcAmsGetEmunandConfig */
-        args.X[1] = 0; /* EXO_EMUMMC_MMC_NAND*/
-        args.X[2] = (u64)&paths; /* out path */
-        svcCallSecureMonitor(&args);
-
-        return (paths.unk[0] != '\0') || (paths.nintendo[0] != '\0');
-    }
+    static auto IsEmummc() -> bool;
+    static auto IsParitionBaseEmummc() -> bool;
+    static auto IsFileBaseEmummc() -> bool;
 
     static void SetAutoSleepDisabled(bool enable) {
         static Mutex mutex{};
@@ -225,6 +219,7 @@ public:
     fs::FsPath theme_path{};
     s64 m_theme_index{};
 
+    AmsEmummcPaths m_emummc_paths{};
     bool m_quit{};
 
     // network
