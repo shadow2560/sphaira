@@ -74,6 +74,7 @@ add_executable(sphaira
     source/nxlink.cpp
     source/owo.cpp
     source/swkbd.cpp
+    source/web.cpp
     source/hasher.cpp
     source/i18n.cpp
     source/ftpsrv_helper.cpp
