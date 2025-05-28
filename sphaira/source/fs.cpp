@@ -510,6 +510,9 @@ File::~File() {
 }
 
 Result File::Read( s64 off, void* buf, u64 read_size, u32 option, u64* bytes_read) {
+    *bytes_read = 0;
+    R_UNLESS(m_fs, 0x1);
+
     if (m_fs->IsNative()) {
         R_TRY(fsFileRead(&m_native, off, buf, read_size, option, bytes_read));
     } else {
@@ -534,6 +537,8 @@ Result File::Read( s64 off, void* buf, u64 read_size, u32 option, u64* bytes_rea
 }
 
 Result File::Write(s64 off, const void* buf, u64 write_size, u32 option) {
+    R_UNLESS(m_fs, 0x1);
+
     if (m_fs->IsNative()) {
         R_TRY(fsFileWrite(&m_native, off, buf, write_size, option));
     } else {
@@ -554,6 +559,8 @@ Result File::Write(s64 off, const void* buf, u64 write_size, u32 option) {
 }
 
 Result File::SetSize(s64 sz) {
+    R_UNLESS(m_fs, 0x1);
+
     if (m_fs->IsNative()) {
         R_TRY(fsFileSetSize(&m_native, sz));
     } else {
@@ -566,6 +573,8 @@ Result File::SetSize(s64 sz) {
 }
 
 Result File::GetSize(s64* out) {
+    R_UNLESS(m_fs, 0x1);
+
     if (m_fs->IsNative()) {
         R_TRY(fsFileGetSize(&m_native, out));
     } else {
@@ -588,6 +597,10 @@ Result File::GetSize(s64* out) {
 }
 
 void File::Close() {
+    if (!m_fs) {
+        return;
+    }
+
     if (m_fs->IsNative()) {
         if (serviceIsActive(&m_native.s)) {
             fsFileClose(&m_native);
@@ -669,6 +682,7 @@ Dir::~Dir() {
 
 Result Dir::GetEntryCount(s64* out) {
     *out = 0;
+    R_UNLESS(m_fs, 0x1);
 
     if (m_fs->IsNative()) {
         R_TRY(fsDirGetEntryCount(&m_native, out));
@@ -689,6 +703,7 @@ Result Dir::GetEntryCount(s64* out) {
 
 Result Dir::ReadAll(std::vector<FsDirectoryEntry>& buf) {
     buf.clear();
+    R_UNLESS(m_fs, 0x1);
 
     if (m_fs->IsNative()) {
         s64 count;
@@ -731,6 +746,10 @@ Result Dir::ReadAll(std::vector<FsDirectoryEntry>& buf) {
 }
 
 void Dir::Close() {
+    if (!m_fs) {
+        return;
+    }
+
     if (m_fs->IsNative()) {
         if (serviceIsActive(&m_native.s)) {
             fsDirClose(&m_native);

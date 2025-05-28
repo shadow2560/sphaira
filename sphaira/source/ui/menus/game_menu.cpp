@@ -186,7 +186,9 @@ private:
 };
 
 struct NspSource final : dump::BaseSource {
-    NspSource(const std::vector<NspEntry>& entries) : m_entries{entries} { }
+    NspSource(const std::vector<NspEntry>& entries) : m_entries{entries} {
+        m_is_file_based_emummc = App::IsFileBaseEmummc();
+    }
 
     Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
@@ -194,7 +196,11 @@ struct NspSource final : dump::BaseSource {
         });
         R_UNLESS(it != m_entries.end(), 0x1);
 
-        return it->Read(buf, off, size, bytes_read);
+        const auto rc = it->Read(buf, off, size, bytes_read);
+        if (m_is_file_based_emummc) {
+            svcSleepThread(2e+6); // 2ms
+        }
+        return rc;
     }
 
     auto GetName(const std::string& path) const -> std::string {
@@ -235,6 +241,7 @@ struct NspSource final : dump::BaseSource {
 
 private:
     std::vector<NspEntry> m_entries{};
+    bool m_is_file_based_emummc{};
 };
 
 Result Notify(Result rc, const std::string& error_message) {

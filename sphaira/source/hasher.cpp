@@ -1,4 +1,5 @@
 #include "hasher.hpp"
+#include "app.hpp"
 #include <mbedtls/md5.h>
 
 namespace sphaira::hash {
@@ -11,6 +12,7 @@ consteval auto CalculateHashStrLen(s64 buf_size) {
 struct FileSource final : BaseSource {
     FileSource(fs::Fs* fs, const fs::FsPath& path) : m_fs{fs} {
         m_open_result = m_fs->OpenFile(path, FsOpenMode_Read, std::addressof(m_file));
+        m_is_file_based_emummc = App::IsFileBaseEmummc();
     }
 
     Result Size(s64* out) {
@@ -18,13 +20,18 @@ struct FileSource final : BaseSource {
     }
 
     Result Read(void* buf, s64 off, s64 size, u64* bytes_read) {
-        return m_file.Read(off, buf, size, 0, bytes_read);
+        const auto rc = m_file.Read(off, buf, size, 0, bytes_read);
+        if (m_fs->IsNative() && m_is_file_based_emummc) {
+            svcSleepThread(2e+6); // 2ms
+        }
+        return rc;
     }
 
 private:
     fs::Fs* m_fs{};
     fs::File m_file{};
     Result m_open_result{};
+    bool m_is_file_based_emummc{};
 };
 
 struct HashSource {

@@ -105,6 +105,7 @@ private:
 
 Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, BaseSource* source, std::span<const fs::FsPath> paths) {
     constexpr s64 BIG_FILE_SIZE = 1024ULL*1024ULL*1024ULL*4ULL;
+    const auto is_file_based_emummc = App::IsFileBaseEmummc();
 
     for (const auto& path : paths) {
         const auto base_path = fs::AppendPath(root, path);
@@ -130,7 +131,11 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
                     return source->Read(path, data, off, size, bytes_read);
                 },
                 [&](const void* data, s64 off, s64 size) -> Result {
-                    return file.Write(off, data, size, FsWriteOption_None);
+                    const auto rc = file.Write(off, data, size, FsWriteOption_None);
+                    if (is_file_based_emummc) {
+                        svcSleepThread(2e+6); // 2ms
+                    }
+                    return rc;
                 }
             ));
         }

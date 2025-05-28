@@ -946,6 +946,7 @@ void FsView::UploadFiles() {
             const auto loc = network_locations[*op_index];
             App::Push(std::make_shared<ProgressBox>(0, "Uploading"_i18n, "", [this, loc](auto pbox) -> Result {
                 auto targets = GetSelectedEntries();
+                const auto is_file_based_emummc = App::IsFileBaseEmummc();
 
                 const auto file_add = [&](s64 file_size, const fs::FsPath& file_path, const char* name) -> Result {
                     // the file name needs to be relative to the current directory.
@@ -958,7 +959,11 @@ void FsView::UploadFiles() {
 
                     return thread::TransferPull(pbox, file_size,
                         [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-                            return f.Read(off, data, size, FsReadOption_None, bytes_read);
+                            const auto rc = f.Read(off, data, size, FsReadOption_None, bytes_read);
+                            if (m_fs->IsNative() && is_file_based_emummc) {
+                                svcSleepThread(2e+6); // 2ms
+                            }
+                            return rc;
                         },
                         [&](thread::PullCallback pull) -> Result {
                             s64 offset{};
