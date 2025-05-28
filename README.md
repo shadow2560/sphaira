@@ -40,7 +40,6 @@ MTP can be enabled via the Network menu.
 Sphaira has file association support. Let's say your app supports loading .png files, then you could write an association file, then when using the file browser, clicking on a .png file will launch your app along with the .png file as argv[1]. This was primarly added for rom loading support for emulators / frontends such as RetroArch, MelonDS, mGBA etc.
 
 ```ini
-[config]
 path=/switch/your_app.nro
 supported_extensions=jpg|png|mp4|mp3
 ```
