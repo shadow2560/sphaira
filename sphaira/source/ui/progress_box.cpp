@@ -4,6 +4,7 @@
 #include "app.hpp"
 #include "defines.hpp"
 #include "log.hpp"
+#include "threaded_file_transfer.hpp"
 #include "i18n.hpp"
 #include <cstring>
 
@@ -270,39 +271,28 @@ auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src
 
     fs::File dst_file;
     R_TRY(fs_dst->OpenFile(dst_path, FsOpenMode_Write, &dst_file));
-
     R_TRY(dst_file.SetSize(src_size));
 
-    s64 offset{};
-    std::vector<u8> buf;
+    R_TRY(thread::Transfer(this, src_size,
+        [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
+            const auto rc = src_file.Read(off, data, size, 0, bytes_read);
 
-    if (is_file_based_emummc) {
-        buf.resize(1024*512); // 512KiB
-    } else {
-        buf.resize(1024*1024*4); // 4MiB
-    }
+            if (is_both_native && is_file_based_emummc) {
+                svcSleepThread(2e+6); // 2ms
+            }
 
-    while (offset < src_size) {
-        R_TRY(ShouldExitResult());
+            return rc;
+        },
+        [&](const void* data, s64 off, s64 size) -> Result {
+            const auto rc = dst_file.Write(off, data, size, 0);
 
-        u64 bytes_read;
-        R_TRY(src_file.Read(offset, buf.data(), buf.size(), 0, &bytes_read));
-        Yield();
+            if (is_both_native && is_file_based_emummc) {
+                svcSleepThread(2e+6); // 2ms
+            }
 
-        if (is_both_native && is_file_based_emummc) {
-            svcSleepThread(2e+6); // 2ms
+            return rc;
         }
-
-        R_TRY(dst_file.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
-        Yield();
-
-        UpdateTransfer(offset, src_size);
-        offset += bytes_read;
-
-        if (is_both_native && is_file_based_emummc) {
-            svcSleepThread(2e+6); // 2ms
-        }
-    }
+    ));
 
     R_SUCCEED();
 }
