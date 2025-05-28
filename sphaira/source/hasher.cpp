@@ -1,5 +1,6 @@
 #include "hasher.hpp"
 #include "app.hpp"
+#include "threaded_file_transfer.hpp"
 #include <mbedtls/md5.h>
 
 namespace sphaira::hash {
@@ -136,22 +137,18 @@ private:
 };
 
 Result Hash(ui::ProgressBox* pbox, std::unique_ptr<HashSource> hash, std::shared_ptr<BaseSource> source, std::string& out) {
-    s64 size;
-    R_TRY(source->Size(&size));
+    s64 file_size;
+    R_TRY(source->Size(&file_size));
 
-    s64 offset{};
-    std::vector<u8> chunk(1024 * 512);
-    while (offset < size) {
-        R_TRY(pbox->ShouldExitResult());
-        const auto rsize = std::min<s64>(chunk.size(), size - offset);
-
-        u64 bytes_read;
-        R_TRY(source->Read(chunk.data(), offset, rsize, &bytes_read));
-        hash->Update(chunk.data(), bytes_read);
-
-        offset += bytes_read;
-        pbox->UpdateTransfer(offset, size);
-    }
+    R_TRY(thread::Transfer(pbox, file_size,
+        [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
+            return source->Read(data, off, size, bytes_read);
+        },
+        [&](const void* data, s64 off, s64 size) -> Result {
+            hash->Update(data, size);
+            R_SUCCEED();
+        }
+    ));
 
     hash->Get(out);
     R_SUCCEED();
