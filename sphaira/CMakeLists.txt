@@ -30,11 +30,7 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
-if (GIT_DIRTY)
-    set(sphaira_VERSION_HASH "${sphaira_VERSION} ${GIT_COMMIT}")
-else()
-    set(sphaira_VERSION_HASH "${sphaira_VERSION}")
-endif()
+set(sphaira_VERSION_HASH "${sphaira_VERSION} [${GIT_COMMIT}]")
 
 add_executable(sphaira
     source/ui/menus/appstore.cpp

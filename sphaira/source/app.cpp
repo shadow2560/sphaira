@@ -1375,7 +1375,7 @@ App::App(const char* argv0) {
 
     if (App::GetLogEnable()) {
         log_file_init();
-        log_write("hello world\n");
+        log_write("hello world v%s\n", APP_VERSION_HASH);
         App::Notify("Warning! Logs are enabled, Sphaira will run slowly!"_i18n);
     }
 
