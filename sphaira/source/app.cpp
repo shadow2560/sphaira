@@ -20,6 +20,7 @@
 #include "i18n.hpp"
 #include "ftpsrv_helper.hpp"
 #include "web.hpp"
+#include "swkbd.hpp"
 
 #include <nanovg_dk.h>
 #include <minIni.h>
@@ -1628,7 +1629,29 @@ void App::DisplayMiscOptions(bool left_side) {
 
     if (App::IsApplication()) {
         options->Add(std::make_shared<ui::SidebarEntryCallback>("Web"_i18n, [](){
-            WebShow("https://lite.duckduckgo.com/lite");
+            // add some default entries, will use a config file soon so users can set their own.
+            ui::PopupList::Items items;
+            items.emplace_back("https://lite.duckduckgo.com/lite");
+            items.emplace_back("https://dns.switchbru.com");
+            items.emplace_back("https://gbatemp.net");
+            items.emplace_back("https://github.com/ITotalJustice/sphaira/wiki");
+            items.emplace_back("Enter custom URL"_i18n);
+
+            App::Push(std::make_shared<ui::PopupList>(
+                "Select URL"_i18n, items, [items](auto op_index){
+                    if (op_index) {
+                        const auto index = *op_index;
+                        if (index == items.size() - 1) {
+                            std::string out;
+                            if (R_SUCCEEDED(swkbd::ShowText(out, "Enter URL", "https://")) && !out.empty()) {
+                                WebShow(out);
+                            }
+                        } else {
+                            WebShow(items[index]);
+                        }
+                    }
+                }
+            ));
         }));
     }
 }
