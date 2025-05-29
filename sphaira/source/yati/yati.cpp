@@ -704,7 +704,7 @@ Result Yati::writeFuncInternal(ThreadData* t) {
         s64 off{};
         while (off < buf.size() && t->write_offset < t->write_size && R_SUCCEEDED(t->GetResults())) {
             const auto wsize = std::min<s64>(t->read_buffer_size, buf.size() - off);
-            R_TRY(ncmContentStorageWritePlaceHolder(std::addressof(cs), std::addressof(t->nca->placeholder_id), t->write_offset + off, buf.data() + off, wsize));
+            R_TRY(ncmContentStorageWritePlaceHolder(std::addressof(cs), std::addressof(t->nca->placeholder_id), t->write_offset, buf.data() + off, wsize));
 
             off += wsize;
             t->write_offset += wsize;

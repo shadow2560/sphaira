@@ -293,7 +293,7 @@ Result UsbDs::WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) {
 }
 
 Result UsbDs::TransferAsync(UsbSessionEndpoint ep, void *buffer, u32 remaining, u32 size, u32 *out_urb_id) {
-    if (remaining == size && size == m_max_packet_size) {
+    if (remaining == size && !(size % (u32)m_max_packet_size)) {
         log_write("[USBDS] SetZlt(true)\n");
         R_TRY(usbDsEndpoint_SetZlt(m_endpoints[ep], true));
     } else {
