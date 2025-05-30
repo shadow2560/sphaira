@@ -14,6 +14,7 @@
 #include "swkbd.hpp"
 #include "i18n.hpp"
 #include "hasher.hpp"
+#include "threaded_file_transfer.hpp"
 #include "nro.hpp"
 
 #include <minIni.h>
@@ -73,6 +74,62 @@ constexpr const char* SORT_STR[] = {
 constexpr const char* ORDER_STR[] = {
     "Desc",
     "Asc",
+};
+
+struct MzMem {
+    const void* buf;
+    size_t size;
+    size_t offset;
+};
+
+ZPOS64_T minizip_tell_file_func(voidpf opaque, voidpf stream) {
+    auto mem = static_cast<const MzMem*>(opaque);
+    return mem->offset;
+}
+
+long minizip_seek_file_func(voidpf opaque, voidpf stream, ZPOS64_T offset, int origin) {
+    auto mem = static_cast<MzMem*>(opaque);
+    size_t new_offset = 0;
+
+    switch (origin) {
+        case ZLIB_FILEFUNC_SEEK_SET: new_offset = offset; break;
+        case ZLIB_FILEFUNC_SEEK_CUR: new_offset = mem->offset + offset; break;
+        case ZLIB_FILEFUNC_SEEK_END: new_offset = (mem->size - 1) + offset; break;
+        default: return -1;
+    }
+
+    if (new_offset > mem->size) {
+        return -1;
+    }
+
+    mem->offset = new_offset;
+    return 0;
+}
+
+voidpf minizip_open_file_func(voidpf opaque, const void* filename, int mode) {
+    return opaque;
+}
+
+uLong minizip_read_file_func(voidpf opaque, voidpf stream, void* buf, uLong size) {
+    auto mem = static_cast<MzMem*>(opaque);
+
+    size = std::min(size, mem->size - mem->offset);
+    std::memcpy(buf, (const u8*)mem->buf + mem->offset, size);
+    mem->offset += size;
+
+    return size;
+}
+
+int minizip_close_file_func(voidpf opaque, voidpf stream) {
+    return 0;
+}
+
+constexpr zlib_filefunc64_def zlib_filefunc = {
+    .zopen64_file = minizip_open_file_func,
+    .zread_file = minizip_read_file_func,
+    .ztell64_file = minizip_tell_file_func,
+    .zseek64_file = minizip_seek_file_func,
+    .zclose_file = minizip_close_file_func,
 };
 
 auto BuildIconUrl(const Entry& e) -> std::string {
@@ -363,19 +420,30 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
     fs::FsNativeSd fs;
     R_TRY(fs.GetFsOpenResult());
 
+    // check if we can download the entire zip to mem for faster download / extract times.
+    // current limit is 300MiB, or disabled for applet mode.
+    const auto file_download = App::IsApplet() || entry.filesize >= 1024 * 1024 * 300;
+    curl::ApiResult api_result{};
+
     // 1. download the zip
     if (!pbox->ShouldExit()) {
         pbox->NewTransfer("Downloading "_i18n + entry.title);
         log_write("starting download\n");
 
         const auto url = BuildZipUrl(entry);
-        const auto result = curl::Api().ToFile(
+        curl::Api api{
             curl::Url{url},
-            curl::Path{zip_out},
             curl::OnProgress{pbox->OnDownloadProgressCallback()}
-        );
+        };
 
-        R_UNLESS(result.success, 0x1);
+        if (file_download) {
+            api.SetOption(curl::Path{zip_out});
+            api_result = curl::ToFile(api);
+        } else {
+            api_result = curl::ToMemory(api);
+        }
+
+        R_UNLESS(api_result.success, 0x1);
     }
 
     ON_SCOPE_EXIT(fs.DeleteFile(zip_out));
@@ -386,7 +454,11 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
         log_write("starting md5 check\n");
 
         std::string hash_out;
-        R_TRY(hash::Hash(pbox, hash::Type::Md5, &fs, zip_out, hash_out));
+        if (file_download) {
+            R_TRY(hash::Hash(pbox, hash::Type::Md5, &fs, zip_out, hash_out));
+        } else {
+            R_TRY(hash::Hash(pbox, hash::Type::Md5, api_result.data, hash_out));
+        }
 
         if (strncasecmp(hash_out.data(), entry.md5.data(), entry.md5.length())) {
             log_write("bad md5: %.*s vs %.*s\n", 32, hash_out.data(), 32, entry.md5.c_str());
@@ -394,9 +466,20 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
         }
     }
 
+    struct MzMem mem{};
+    mem.buf = api_result.data.data();
+    mem.size = api_result.data.size();
+    auto file_func = zlib_filefunc;
+    file_func.opaque = &mem;
+
+    zlib_filefunc64_def* file_func_ptr{};
+    if (!file_download) {
+        file_func_ptr = &file_func;
+    }
+
     // 3. extract the zip
     if (!pbox->ShouldExit()) {
-        auto zfile = unzOpen64(zip_out);
+        auto zfile = unzOpen2_64(zip_out, file_func_ptr);
         R_UNLESS(zfile, 0x1);
         ON_SCOPE_EXIT(unzClose(zfile));
 
@@ -434,43 +517,6 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
             }
         }
 
-        const auto unzip_to_file = [&](const unz_file_info64& info, const fs::FsPath& inzip, fs::FsPath output) -> Result {
-            if (output[0] != '/') {
-                output = fs::AppendPath("/", output);
-            }
-
-            // create directories
-            fs.CreateDirectoryRecursivelyWithPath(output);
-
-            Result rc;
-            if (R_FAILED(rc = fs.CreateFile(output, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                log_write("failed to create file: %s 0x%04X\n", output.s, rc);
-                R_THROW(rc);
-            }
-
-            fs::File f;
-            R_TRY(fs.OpenFile(output, FsOpenMode_Write, &f));
-            R_TRY(f.SetSize(info.uncompressed_size));
-
-            u64 offset{};
-            while (offset < info.uncompressed_size) {
-                R_TRY(pbox->ShouldExitResult());
-
-                const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
-                if (bytes_read <= 0) {
-                    log_write("failed to read zip file: %s\n", inzip.s);
-                    R_THROW(0x1);
-                }
-
-                R_TRY(f.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
-
-                pbox->UpdateTransfer(offset, info.uncompressed_size);
-                offset += bytes_read;
-            }
-
-            R_SUCCEED();
-        };
-
         const auto unzip_to = [&](const fs::FsPath& inzip, const fs::FsPath& output) -> Result {
             pbox->NewTransfer(inzip);
 
@@ -491,79 +537,46 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
                 R_THROW(0x1);
             }
 
-            return unzip_to_file(info, inzip, output);
-        };
-
-        const auto unzip_all = [&](std::span<const ManifestEntry> entries) -> Result {
-            unz_global_info64 ginfo;
-            if (UNZ_OK != unzGetGlobalInfo64(zfile, &ginfo)) {
-                R_THROW(0x1);
+            auto path = output;
+            if (path[0] != '/') {
+                path = fs::AppendPath("/", path);
             }
 
-            if (UNZ_OK != unzGoToFirstFile(zfile)) {
-                R_THROW(0x1);
-            }
-
-            for (s64 i = 0; i < ginfo.number_entry; i++) {
-                R_TRY(pbox->ShouldExitResult());
-
-                if (i > 0) {
-                    if (UNZ_OK != unzGoToNextFile(zfile)) {
-                        log_write("failed to unzGoToNextFile\n");
-                        R_THROW(0x1);
-                    }
-                }
-
-                if (UNZ_OK != unzOpenCurrentFile(zfile)) {
-                    log_write("failed to open current file\n");
-                    R_THROW(0x1);
-                }
-                ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
-
-                unz_file_info64 info;
-                char name[512];
-                if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0)) {
-                    log_write("failed to get current info\n");
-                    R_THROW(0x1);
-                }
-
-                const auto it = std::ranges::find_if(entries, [&name](auto& e){
-                    return !strcasecmp(name, e.path);
-                });
-
-                if (it == entries.end()) [[unlikely]] {
-                    continue;
-                }
-
-                pbox->NewTransfer(it->path);
-
-                switch (it->command) {
-                    case 'E': // both are the same?
-                    case 'U':
-                        break;
-
-                    case 'G': { // checks if file exists, if not, extract
-                        if (fs.FileExists(fs::AppendPath("/", it->path))) {
-                            continue;
-                        }
-                    }   break;
-
-                    default:
-                        log_write("bad command: %c\n", it->command);
-                        continue;
-                }
-
-                R_TRY(unzip_to_file(info, it->path, it->path));
-            }
-
-            R_SUCCEED();
+            return thread::TransferUnzip(pbox, zfile, &fs, path, info.uncompressed_size, info.crc);
         };
 
         // unzip manifest, info and all entries.
         TimeStamp ts;
+        #if 1
         R_TRY(unzip_to("info.json", BuildInfoCachePath(entry)));
         R_TRY(unzip_to("manifest.install", BuildManifestCachePath(entry)));
-        R_TRY(unzip_all(new_manifest));
+        #endif
+
+        R_TRY(thread::TransferUnzipAll(pbox, zfile, &fs, "/", [&](const fs::FsPath& name, fs::FsPath& path) -> bool {
+            const auto it = std::ranges::find_if(new_manifest, [&name](auto& e){
+                return !strcasecmp(name, e.path);
+            });
+
+            if (it == new_manifest.end()) [[unlikely]] {
+                return false;
+            }
+
+            pbox->NewTransfer(it->path);
+
+            switch (it->command) {
+                case 'E': // both are the same?
+                case 'U':
+                    return true;
+
+                case 'G': // checks if file exists, if not, extract
+                    return !fs.FileExists(fs::AppendPath("/", it->path));
+
+                default:
+                    log_write("bad command: %c\n", it->command);
+                    return false;
+            }
+        }));
+
         log_write("\n\t[APPSTORE] finished extract new, time taken: %.2fs %zums\n\n", ts.GetSecondsD(), ts.GetMs());
 
         // finally finally, remove files no longer in the manifest

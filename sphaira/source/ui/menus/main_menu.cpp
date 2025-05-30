@@ -22,9 +22,9 @@
 #include "download.hpp"
 #include "defines.hpp"
 #include "i18n.hpp"
+#include "threaded_file_transfer.hpp"
 
 #include <cstring>
-#include <minizip/unzip.h>
 #include <yyjson.h>
 
 namespace sphaira::ui::menu::main {
@@ -59,7 +59,6 @@ const MiscMenuEntry MISC_MENU_ENTRIES[] = {
 
 auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string version) -> Result {
     static fs::FsPath zip_out{"/switch/sphaira/cache/update.zip"};
-    constexpr auto chunk_size = 1024 * 512; // 512KiB
 
     fs::FsNativeSd fs;
     R_TRY(fs.GetFsOpenResult());
@@ -82,95 +81,34 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
 
     // 2. extract the zip
     if (!pbox->ShouldExit()) {
-        auto zfile = unzOpen64(zip_out);
-        R_UNLESS(zfile, 0x1);
-        ON_SCOPE_EXIT(unzClose(zfile));
+        const auto exe_path = App::GetExePath();
+        bool found_exe{};
 
-        unz_global_info64 pglobal_info;
-        if (UNZ_OK != unzGetGlobalInfo64(zfile, &pglobal_info)) {
-            R_THROW(0x1);
-        }
-
-        for (s64 i = 0; i < pglobal_info.number_entry; i++) {
-            if (i > 0) {
-                if (UNZ_OK != unzGoToNextFile(zfile)) {
-                    log_write("failed to unzGoToNextFile\n");
-                    R_THROW(0x1);
-                }
+        R_TRY(thread::TransferUnzipAll(pbox, zip_out, &fs, "/", [&](const fs::FsPath& name, fs::FsPath& path) -> bool {
+            if (std::strstr(path, "sphaira.nro")) {
+                path = exe_path;
+                found_exe = true;
             }
+            return true;
+        }));
 
-            if (UNZ_OK != unzOpenCurrentFile(zfile)) {
-                log_write("failed to open current file\n");
-                R_THROW(0x1);
-            }
-            ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
-
-            unz_file_info64 info;
-            fs::FsPath file_path;
-            if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, file_path, sizeof(file_path), 0, 0, 0, 0)) {
-                log_write("failed to get current info\n");
-                R_THROW(0x1);
-            }
-
-            if (file_path[0] != '/') {
-                file_path = fs::AppendPath("/", file_path);
-            }
-
-            if (std::strstr(file_path, "sphaira.nro")) {
-                file_path = App::GetExePath();
-            }
-
-            Result rc;
-            if (file_path[std::strlen(file_path) -1] == '/') {
-                if (R_FAILED(rc = fs.CreateDirectoryRecursively(file_path)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create folder: %s 0x%04X\n", file_path.s, rc);
-                    R_THROW(rc);
-                }
-            } else {
-                Result rc;
-                if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
-                    R_THROW(rc);
+        // check if we have sphaira installed in other locations and update them.
+        if (found_exe) {
+            for (auto& path : SPHAIRA_PATHS) {
+                log_write("[UPD] checking path: %s\n", path.s);
+                // skip if we already updated this path.
+                if (exe_path == path) {
+                    log_write("[UPD] skipped as already updated\n");
+                    continue;
                 }
 
-                fs::File f;
-                R_TRY(fs.OpenFile(file_path, FsOpenMode_Write, &f));
-                R_TRY(f.SetSize(info.uncompressed_size));
-
-                std::vector<char> buf(chunk_size);
-                s64 offset{};
-                while (offset < info.uncompressed_size) {
-                    const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
-                    if (bytes_read <= 0) {
-                        // log_write("failed to read zip file: %s\n", inzip.c_str());
-                        R_THROW(0x1);
-                    }
-
-                    R_TRY(f.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
-
-                    pbox->UpdateTransfer(offset, info.uncompressed_size);
-                    offset += bytes_read;
-                }
-            }
-
-            // check if we have sphaira installed in other locations and update them.
-            if (file_path == App::GetExePath()) {
-                for (auto& path : SPHAIRA_PATHS) {
-                    log_write("[UPD] checking path: %s\n", path.s);
-                    // skip if we already updated this path.
-                    if (file_path == path) {
-                        log_write("[UPD] skipped as already updated\n");
-                        continue;
-                    }
-
-                    // check that this is really sphaira.
-                    log_write("[UPD] checking nacp\n");
-                    NacpStruct nacp;
-                    if (R_SUCCEEDED(nro_get_nacp(path, nacp)) && !std::strcmp(nacp.lang[0].name, "sphaira")) {
-                        log_write("[UPD] found, updating\n");
-                        pbox->NewTransfer(path);
-                        R_TRY(pbox->CopyFile(&fs, file_path, path));
-                    }
+                // check that this is really sphaira.
+                log_write("[UPD] checking nacp\n");
+                NacpStruct nacp;
+                if (R_SUCCEEDED(nro_get_nacp(path, nacp)) && !std::strcmp(nacp.lang[0].name, "sphaira")) {
+                    log_write("[UPD] found, updating\n");
+                    pbox->NewTransfer(path);
+                    R_TRY(pbox->CopyFile(&fs, exe_path, path));
                 }
             }
         }

@@ -35,6 +35,25 @@ private:
     bool m_is_file_based_emummc{};
 };
 
+struct MemSource final : BaseSource {
+    MemSource(std::span<const u8> data) : m_data{data} { }
+
+    Result Size(s64* out) {
+        *out = m_data.size();
+        R_SUCCEED();
+    }
+
+    Result Read(void* buf, s64 off, s64 size, u64* bytes_read) {
+        size = std::min<s64>(size, m_data.size() - off);
+        std::memcpy(buf, m_data.data() + off, size);
+        *bytes_read = size;
+        R_SUCCEED();
+    }
+
+private:
+    const std::span<const u8> m_data;
+};
+
 struct HashSource {
     virtual ~HashSource() = default;
     virtual void Update(const void* buf, s64 size) = 0;
@@ -178,6 +197,11 @@ Result Hash(ui::ProgressBox* pbox, Type type, std::shared_ptr<BaseSource> source
 
 Result Hash(ui::ProgressBox* pbox, Type type, fs::Fs* fs, const fs::FsPath& path, std::string& out) {
     auto source = std::make_shared<FileSource>(fs, path);
+    return Hash(pbox, type, source, out);
+}
+
+Result Hash(ui::ProgressBox* pbox, Type type, std::span<const u8> data, std::string& out) {
+    auto source = std::make_shared<MemSource>(data);
     return Hash(pbox, type, source, out);
 }
 

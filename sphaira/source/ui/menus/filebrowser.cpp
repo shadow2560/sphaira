@@ -708,75 +708,10 @@ void FsView::UnzipFiles(fs::FsPath dir_path) {
     }
 
     App::Push(std::make_shared<ui::ProgressBox>(0, "Extracting "_i18n, "", [this, dir_path, targets](auto pbox) -> Result {
-        constexpr auto chunk_size = 1024 * 512; // 512KiB
-
         for (auto& e : targets) {
             pbox->SetTitle(e.GetName());
-
             const auto zip_out = GetNewPath(e);
-            auto zfile = unzOpen64(zip_out);
-            R_UNLESS(zfile, 0x1);
-            ON_SCOPE_EXIT(unzClose(zfile));
-
-            unz_global_info64 pglobal_info;
-            if (UNZ_OK != unzGetGlobalInfo64(zfile, &pglobal_info)) {
-                R_THROW(0x1);
-            }
-
-            for (s64 i = 0; i < pglobal_info.number_entry; i++) {
-                if (i > 0) {
-                    if (UNZ_OK != unzGoToNextFile(zfile)) {
-                        log_write("failed to unzGoToNextFile\n");
-                        R_THROW(0x1);
-                    }
-                }
-
-                if (UNZ_OK != unzOpenCurrentFile(zfile)) {
-                    log_write("failed to open current file\n");
-                    R_THROW(0x1);
-                }
-                ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
-
-                unz_file_info64 info;
-                char name[512];
-                if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0)) {
-                    log_write("failed to get current info\n");
-                    R_THROW(0x1);
-                }
-
-                const auto file_path = fs::AppendPath(dir_path, name);
-                pbox->NewTransfer(name);
-
-                // create directories
-                m_fs->CreateDirectoryRecursivelyWithPath(file_path);
-
-                Result rc;
-                if (R_FAILED(rc = m_fs->CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                    log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
-                    R_THROW(rc);
-                }
-
-                fs::File f;
-                R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Write, &f));
-                R_TRY(f.SetSize(info.uncompressed_size));
-
-                std::vector<char> buf(chunk_size);
-                s64 offset{};
-                while (offset < info.uncompressed_size) {
-                    R_TRY(pbox->ShouldExitResult());
-
-                    const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
-                    if (bytes_read <= 0) {
-                        log_write("failed to read zip file: %s\n", name);
-                        R_THROW(0x1);
-                    }
-
-                    R_TRY(f.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
-
-                    pbox->UpdateTransfer(offset, info.uncompressed_size);
-                    offset += bytes_read;
-                }
-            }
+            R_TRY(thread::TransferUnzipAll(pbox, zip_out, m_fs.get(), dir_path));
         }
 
         R_SUCCEED();
@@ -829,8 +764,6 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
     }
 
     App::Push(std::make_shared<ui::ProgressBox>(0, "Compressing "_i18n, "", [this, zip_out, targets](auto pbox) -> Result {
-        constexpr auto chunk_size = 1024 * 512; // 512KiB
-
         const auto t = std::time(NULL);
         const auto tm = std::localtime(&t);
 
@@ -851,6 +784,11 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
             // the file name needs to be relative to the current directory.
             const char* file_name_in_zip = file_path.s + std::strlen(m_path);
 
+            // strip root path (/ or ums0:)
+            if (!std::strncmp(file_name_in_zip, m_fs->Root(), std::strlen(m_fs->Root()))) {
+                file_name_in_zip += std::strlen(m_fs->Root());
+            }
+
             // root paths are banned in zips, they will warn when extracting otherwise.
             if (file_name_in_zip[0] == '/') {
                 file_name_in_zip++;
@@ -858,38 +796,13 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
 
             pbox->NewTransfer(file_name_in_zip);
 
-            const auto ext = std::strrchr(file_name_in_zip, '.');
-            const auto raw = ext && IsExtension(ext + 1, COMPRESSED_EXTENSIONS);
-
-            if (ZIP_OK != zipOpenNewFileInZip2(zfile, file_name_in_zip, &zip_info, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION, raw)) {
+            if (ZIP_OK != zipOpenNewFileInZip(zfile, file_name_in_zip, &zip_info, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION)) {
+                log_write("failed to add zip for %s\n", file_path.s);
                 R_THROW(0x1);
             }
             ON_SCOPE_EXIT(zipCloseFileInZip(zfile));
 
-            fs::File f;
-            R_TRY(m_fs->OpenFile(file_path, FsOpenMode_Read, &f));
-
-            s64 file_size;
-            R_TRY(f.GetSize(&file_size));
-
-            std::vector<char> buf(chunk_size);
-            s64 offset{};
-            while (offset < file_size) {
-                R_TRY(pbox->ShouldExitResult());
-
-                u64 bytes_read;
-                R_TRY(f.Read(offset, buf.data(), buf.size(), FsReadOption_None, &bytes_read));
-
-                if (ZIP_OK != zipWriteInFileInZip(zfile, buf.data(), bytes_read)) {
-                    log_write("failed to write zip file: %s\n", file_path.s);
-                    R_THROW(0x1);
-                }
-
-                pbox->UpdateTransfer(offset, file_size);
-                offset += bytes_read;
-            }
-
-            R_SUCCEED();
+            return thread::TransferZip(pbox, zfile, m_fs.get(), file_path);
         };
 
         for (auto& e : targets) {
