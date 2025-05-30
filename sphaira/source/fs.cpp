@@ -118,6 +118,18 @@ Result CreateDirectory(FsFileSystem* fs, const FsPath& path, bool ignore_read_on
 Result CreateDirectoryRecursively(FsFileSystem* fs, const FsPath& _path, bool ignore_read_only) {
     R_UNLESS(ignore_read_only || !is_read_only_root(_path), Fs::ResultReadOnly);
 
+    // try and create the directory / see if it already exists before the loop.
+    Result rc;
+    if (fs) {
+        rc = CreateDirectory(fs, _path, ignore_read_only);
+    } else {
+        rc = CreateDirectory(_path, ignore_read_only);
+    }
+
+    if (R_SUCCEEDED(rc) || rc == FsError_PathAlreadyExists) {
+        R_SUCCEED();
+    }
+
     auto path_view = std::string_view{_path};
     // todo: fix this for sdmc: and ums0:
     FsPath path{"/"};
@@ -134,7 +146,6 @@ Result CreateDirectoryRecursively(FsFileSystem* fs, const FsPath& _path, bool ig
         std::strncat(path, dir.data(), dir.size());
         log_write("[FS] dir creation path is now: %s\n", path.s);
 
-        Result rc;
         if (fs) {
             rc = CreateDirectory(fs, path, ignore_read_only);
         } else {
@@ -155,31 +166,15 @@ Result CreateDirectoryRecursively(FsFileSystem* fs, const FsPath& _path, bool ig
 Result CreateDirectoryRecursivelyWithPath(FsFileSystem* fs, const FsPath& _path, bool ignore_read_only) {
     R_UNLESS(ignore_read_only || !is_read_only_root(_path), Fs::ResultReadOnly);
 
-    size_t off = 0;
-    while (true) {
-        const auto first = std::strchr(_path + off, '/');
-        if (!first) {
-            R_SUCCEED();
-        }
-
-        off = (first - _path.s) + 1;
-        FsPath path;
-        std::strncpy(path, _path, off);
-
-        Result rc;
-        if (fs) {
-            rc = CreateDirectory(fs, path, ignore_read_only);
-        } else {
-            rc = CreateDirectory(path, ignore_read_only);
-        }
-
-        if (R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
-            log_write("failed to create folder recursively: %s\n", path.s);
-            return rc;
-        }
-
-        // log_write("created_directory recursively: %s\n", path);
+    // strip file name form path.
+    const auto last_slash = std::strrchr(_path, '/');
+    if (!last_slash) {
+        R_SUCCEED();
     }
+
+    FsPath new_path{};
+    std::snprintf(new_path, sizeof(new_path), "%.*s", (int)(last_slash - _path.s), _path.s);
+    return CreateDirectoryRecursively(fs, new_path, ignore_read_only);
 }
 
 Result DeleteFile(FsFileSystem* fs, const FsPath& path, bool ignore_read_only) {
