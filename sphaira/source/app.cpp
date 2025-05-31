@@ -1666,7 +1666,8 @@ void App::DisplayAdvancedOptions(bool left_side) {
     text_scroll_speed_items.push_back("Normal"_i18n);
     text_scroll_speed_items.push_back("Fast"_i18n);
 
-    std::vector<const char*> menu_names;
+    std::vector<std::string> menu_names;
+    ui::SidebarEntryArray::Items menu_items;
     for (auto& e : ui::menu::main::GetMiscMenuEntries()) {
         if (!e.IsShortcut()) {
             continue;
@@ -1677,16 +1678,7 @@ void App::DisplayAdvancedOptions(bool left_side) {
         }
 
         menu_names.emplace_back(e.name);
-    }
-
-    ui::SidebarEntryArray::Items side_menu_items;
-    for (auto& str : menu_names) {
-        side_menu_items.push_back(i18n::get(str));
-    }
-
-    const auto it = std::find(menu_names.cbegin(), menu_names.cend(), g_app->m_right_menu.Get());
-    if (it == menu_names.cend()) {
-        g_app->m_right_menu.Set(menu_names[0]);
+        menu_items.push_back(i18n::get(e.name));
     }
 
     options->Add(std::make_shared<ui::SidebarEntryBool>("Logging"_i18n, App::GetLogEnable(), [](bool& enable){
@@ -1705,10 +1697,15 @@ void App::DisplayAdvancedOptions(bool left_side) {
         App::SetTextScrollSpeed(index_out);
     }, App::GetTextScrollSpeed()));
 
-    options->Add(std::make_shared<ui::SidebarEntryArray>("Set left-side menu"_i18n, side_menu_items, [menu_names](s64& index_out){
+    options->Add(std::make_shared<ui::SidebarEntryArray>("Set left-side menu"_i18n, menu_items, [menu_names](s64& index_out){
         const auto e = menu_names[index_out];
         if (g_app->m_left_menu.Get() != e) {
+            // swap menus around.
+            if (g_app->m_right_menu.Get() == e) {
+                g_app->m_right_menu.Set(g_app->m_left_menu.Get());
+            }
             g_app->m_left_menu.Set(e);
+
             App::Push(std::make_shared<ui::OptionBox>(
                 "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
                     App::ExitRestart();
@@ -1717,10 +1714,15 @@ void App::DisplayAdvancedOptions(bool left_side) {
         }
     }, i18n::get(g_app->m_left_menu.Get())));
 
-    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, side_menu_items, [menu_names](s64& index_out){
+    options->Add(std::make_shared<ui::SidebarEntryArray>("Set right-side menu"_i18n, menu_items, [menu_names](s64& index_out){
         const auto e = menu_names[index_out];
         if (g_app->m_right_menu.Get() != e) {
+            // swap menus around.
+            if (g_app->m_left_menu.Get() == e) {
+                g_app->m_left_menu.Set(g_app->m_right_menu.Get());
+            }
             g_app->m_right_menu.Set(e);
+
             App::Push(std::make_shared<ui::OptionBox>(
                 "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
                     App::ExitRestart();
