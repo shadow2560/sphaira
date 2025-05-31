@@ -373,9 +373,7 @@ void drawAppLable(NVGcontext* vg, const Theme* theme, ScrollingText& st, float x
     const float text_x = box_x + text_pad;
     const float text_y = y_offset + (box_h / 2.f);
 
-    drawRect(vg, {x-4, y-4, w+8, w+8}, theme->GetColour(ThemeEntryID_GRID));
     nvgBeginPath(vg);
-
     nvgRoundedRect(vg, box_x, y_offset, box_w, box_h, 3.f);
     nvgFillColor(vg, theme->GetColour(ThemeEntryID_SELECTED_BACKGROUND));
     nvgFill(vg);
