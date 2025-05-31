@@ -4,6 +4,7 @@
 #include "ui/progress_box.hpp"
 #include <string>
 #include <memory>
+#include <span>
 #include <switch.h>
 
 namespace sphaira::hash {
@@ -26,5 +27,6 @@ auto GetTypeStr(Type type) -> const char*;
 // returns the hash string.
 Result Hash(ui::ProgressBox* pbox, Type type, std::shared_ptr<BaseSource> source, std::string& out);
 Result Hash(ui::ProgressBox* pbox, Type type, fs::Fs* fs, const fs::FsPath& path, std::string& out);
+Result Hash(ui::ProgressBox* pbox, Type type, std::span<const u8> data, std::string& out);
 
 } // namespace sphaira::hash

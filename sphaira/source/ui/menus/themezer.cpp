@@ -11,11 +11,11 @@
 #include "ui/nvg_util.hpp"
 #include "swkbd.hpp"
 #include "i18n.hpp"
+#include "threaded_file_transfer.hpp"
 
 #include <minIni.h>
 #include <stb_image.h>
 #include <cstring>
-#include <minizip/unzip.h>
 #include <yyjson.h>
 #include "yyjson_helper.hpp"
 
@@ -222,7 +222,6 @@ void from_json(const fs::FsPath& path, PackList& e) {
 
 auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> Result {
     static const fs::FsPath zip_out{"/switch/sphaira/cache/themezer/temp.zip"};
-    constexpr auto chunk_size = 1024 * 512; // 512KiB
 
     fs::FsNativeSd fs;
     R_TRY(fs.GetFsOpenResult());
@@ -272,66 +271,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> Result {
 
     // 3. extract the zip
     if (!pbox->ShouldExit()) {
-        auto zfile = unzOpen64(zip_out);
-        R_UNLESS(zfile, 0x1);
-        ON_SCOPE_EXIT(unzClose(zfile));
-
-        unz_global_info64 pglobal_info;
-        if (UNZ_OK != unzGetGlobalInfo64(zfile, &pglobal_info)) {
-            R_THROW(0x1);
-        }
-
-        for (int i = 0; i < pglobal_info.number_entry; i++) {
-            if (i > 0) {
-                if (UNZ_OK != unzGoToNextFile(zfile)) {
-                    log_write("failed to unzGoToNextFile\n");
-                    R_THROW(0x1);
-                }
-            }
-
-            if (UNZ_OK != unzOpenCurrentFile(zfile)) {
-                log_write("failed to open current file\n");
-                R_THROW(0x1);
-            }
-            ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
-
-            unz_file_info64 info;
-            char name[512];
-            if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0)) {
-                log_write("failed to get current info\n");
-                R_THROW(0x1);
-            }
-
-            const auto file_path = fs::AppendPath(dir_path, name);
-            pbox->NewTransfer(name);
-
-            Result rc;
-            if (R_FAILED(rc = fs.CreateFile(file_path, info.uncompressed_size, 0)) && rc != FsError_PathAlreadyExists) {
-                log_write("failed to create file: %s 0x%04X\n", file_path.s, rc);
-                R_THROW(rc);
-            }
-
-            fs::File f;
-            R_TRY(fs.OpenFile(file_path, FsOpenMode_Write, &f));
-            R_TRY(f.SetSize(info.uncompressed_size));
-
-            std::vector<char> buf(chunk_size);
-            s64 offset{};
-            while (offset < info.uncompressed_size) {
-                R_TRY(pbox->ShouldExitResult());
-
-                const auto bytes_read = unzReadCurrentFile(zfile, buf.data(), buf.size());
-                if (bytes_read <= 0) {
-                    // log_write("failed to read zip file: %s\n", inzip.c_str());
-                    R_THROW(0x1);
-                }
-
-                R_TRY(f.Write(offset, buf.data(), bytes_read, FsWriteOption_None));
-
-                pbox->UpdateTransfer(offset, info.uncompressed_size);
-                offset += bytes_read;
-            }
-        }
+        R_TRY(thread::TransferUnzipAll(pbox, zip_out, &fs, dir_path));
     }
 
     log_write("finished install :)\n");

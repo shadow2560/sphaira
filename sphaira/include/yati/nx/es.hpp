@@ -7,7 +7,7 @@
 
 namespace sphaira::es {
 
-enum { TicketModule = 522 };
+enum { TicketModule = 507 };
 
 enum : Result {
     // found ticket has missmatching rights_id from it's name.

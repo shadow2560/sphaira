@@ -433,7 +433,7 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
     inflate_buf.reserve(t->max_buffer_size);
 
     s64 written{};
-    s64 decompress_buf_off{};
+    s64 block_offset{};
     std::vector<u8> buf{};
     buf.reserve(t->max_buffer_size);
 
@@ -454,14 +454,15 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
         }
 
         for (s64 off = 0; off < size;) {
-            // log_write("looking for section\n");
             if (!ncz_section || !ncz_section->InRange(written)) {
+                log_write("[NCZ] looking for new section: %zu\n", written);
                 auto it = std::ranges::find_if(t->ncz_sections, [written](auto& e){
                     return e.InRange(written);
                 });
 
                 R_UNLESS(it != t->ncz_sections.cend(), Result_NczSectionNotFound);
                 ncz_section = &(*it);
+                log_write("[NCZ] found new section: %zu\n", written);
 
                 if (ncz_section->crypto_type >= nca::EncryptionType_AesCtr) {
                     const auto swp = std::byteswap(u64(written) >> 4);
@@ -488,7 +489,7 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
 
         // restore remaining data to the swapped buffer.
         if (!temp_vector.empty()) {
-            log_write("storing data size: %zu\n", temp_vector.size());
+            log_write("[NCZ] storing data size: %zu\n", temp_vector.size());
             inflate_buf = temp_vector;
         }
 
@@ -496,6 +497,7 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
     };
 
     while (t->decompress_offset < t->write_size && R_SUCCEEDED(t->GetResults())) {
+        s64 decompress_buf_off{};
         R_TRY(t->GetDecompressBuf(buf, decompress_buf_off));
 
         // do we have an nsz? if so, setup buffers.
@@ -616,12 +618,14 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
                 // todo: blocks need to use read offset, as the offset + size is compressed range.
                 if (t->ncz_blocks.size()) {
                     if (!ncz_block || !ncz_block->InRange(decompress_buf_off)) {
+                        block_offset = 0;
+                        log_write("[NCZ] looking for new block: %zu\n", decompress_buf_off);
                         auto it = std::ranges::find_if(t->ncz_blocks, [decompress_buf_off](auto& e){
                             return e.InRange(decompress_buf_off);
                         });
 
                         R_UNLESS(it != t->ncz_blocks.cend(), Result_NczBlockNotFound);
-                        // log_write("looking found block\n");
+                        log_write("[NCZ] found new block: %zu off: %zd size: %zd\n", decompress_buf_off, it->offset, it->size);
                         ncz_block = &(*it);
                     }
 
@@ -629,7 +633,7 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
                     auto decompressedBlockSize = 1 << t->ncz_block_header.block_size_exponent;
                     // special handling for the last block to check it's actually compressed
                     if (ncz_block->offset == t->ncz_blocks.back().offset) {
-                        log_write("last block special handling\n");
+                        log_write("[NCZ] last block special handling\n");
                         decompressedBlockSize = t->ncz_block_header.decompressed_size % decompressedBlockSize;
                     }
 
@@ -637,12 +641,12 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
                     compressed = ncz_block->size < decompressedBlockSize;
 
                     // clip read size as blocks can be up to 32GB in size!
-                    const auto size = std::min<u64>(buf.size() - buf_off, ncz_block->size);
-                    buffer = {buf.data() + buf_off, size};
+                    const auto size = std::min<u64>(buffer.size(), ncz_block->size - block_offset);
+                    buffer = buffer.subspan(0, size);
                 }
 
                 if (compressed) {
-                    // log_write("COMPRESSED block\n");
+                    log_write("[NCZ] COMPRESSED block\n");
                     ZSTD_inBuffer input = { buffer.data(), buffer.size(), 0 };
                     while (input.pos < input.size) {
                         R_TRY(t->GetResults());
@@ -650,12 +654,15 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
                         inflate_buf.resize(inflate_offset + chunk_size);
                         ZSTD_outBuffer output = { inflate_buf.data() + inflate_offset, chunk_size, 0 };
                         const auto res = ZSTD_decompressStream(dctx, std::addressof(output), std::addressof(input));
+                        if (ZSTD_isError(res)) {
+                            log_write("[NCZ] ZSTD_decompressStream() pos: %zu size: %zu res: %zd msg: %s\n", input.pos, input.size, res, ZSTD_getErrorName(res));
+                        }
                         R_UNLESS(!ZSTD_isError(res), Result_InvalidNczZstdError);
 
                         t->decompress_offset += output.pos;
                         inflate_offset += output.pos;
                         if (inflate_offset >= INFLATE_BUFFER_MAX) {
-                            // log_write("flushing compressed data: %zd vs %zd diff: %zd\n", inflate_offset, INFLATE_BUFFER_MAX, inflate_offset - INFLATE_BUFFER_MAX);
+                            log_write("[NCZ] flushing compressed data: %zd vs %zd diff: %zd\n", inflate_offset, INFLATE_BUFFER_MAX, inflate_offset - INFLATE_BUFFER_MAX);
                             R_TRY(ncz_flush(INFLATE_BUFFER_MAX));
                         }
                     }
@@ -666,13 +673,14 @@ Result Yati::decompressFuncInternal(ThreadData* t) {
                     t->decompress_offset += buffer.size();
                     inflate_offset += buffer.size();
                     if (inflate_offset >= INFLATE_BUFFER_MAX) {
-                        // log_write("flushing copy data\n");
+                        log_write("[NCZ] flushing copy data\n");
                         R_TRY(ncz_flush(INFLATE_BUFFER_MAX));
                     }
                 }
 
                 buf_off += buffer.size();
                 decompress_buf_off += buffer.size();
+                block_offset += buffer.size();
             }
         }
     }

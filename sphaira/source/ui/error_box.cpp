@@ -6,6 +6,7 @@
 namespace sphaira::ui {
 
 ErrorBox::ErrorBox(const std::string& message) : m_message{message} {
+    log_write("[ERROR] %s\n", m_message.c_str());
 
     m_pos.w = 770.f;
     m_pos.h = 430.f;
@@ -21,6 +22,7 @@ ErrorBox::ErrorBox(const std::string& message) : m_message{message} {
 
 ErrorBox::ErrorBox(Result code, const std::string& message) : ErrorBox{message} {
     m_code = code;
+    log_write("[ERROR] Code: 0x%X Module: %u Description: %u\n", R_VALUE(code), R_MODULE(code), R_DESCRIPTION(code));
 }
 
 auto ErrorBox::Update(Controller* controller, TouchInfo* touch) -> void {

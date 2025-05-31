@@ -11,7 +11,7 @@
 namespace sphaira::yati::source {
 
 struct Usb final : Base {
-    enum { USBModule = 523 };
+    enum { USBModule = 508 };
 
     enum : Result {
         Result_BadMagic = MAKERESULT(USBModule, 0),
