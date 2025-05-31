@@ -671,7 +671,19 @@ void FsView::InstallForwarder() {
                     config.icon = GetRomIcon(m_fs.get(), pbox, file_name, db_indexs, nro);
                     pbox->SetImageDataConst(config.icon);
 
+                    if (!db_indexs.empty()) {
+                        fs::FsNativeSd().read_entire_file("/config/sphaira/logo/rom/NintendoLogo.png", config.logo);
+                        fs::FsNativeSd().read_entire_file("/config/sphaira/logo/rom/StartupMovie.gif", config.gif);
+                    }
+
                     return App::Install(pbox, config);
+                }, [this](Result rc){
+                    App::PushErrorBox(rc, "Failed to install forwarder"_i18n);
+
+                    if (R_SUCCEEDED(rc)) {
+                        App::PlaySoundEffect(SoundEffect_Install);
+                        App::Notify("Installed!"_i18n);
+                    }
                 }));
             } else {
                 log_write("pressed B to skip launch...\n");

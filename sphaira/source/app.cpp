@@ -896,22 +896,18 @@ void App::SetTextScrollSpeed(long index) {
 }
 
 auto App::Install(OwoConfig& config) -> Result {
-    config.nro_path = nro_add_arg_file(config.nro_path);
-    if (!config.icon.empty()) {
-        config.icon = GetNroIcon(config.icon);
-    }
+    App::Push(std::make_shared<ui::ProgressBox>(0, "Installing Forwarder"_i18n, config.name, [config](auto pbox) mutable -> Result {
+        return Install(pbox, config);
+    }, [](Result rc){
+        App::PushErrorBox(rc, "Failed to install forwarder"_i18n);
 
-    const auto rc = install_forwarder(config, App::GetInstallSdEnable() ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser);
+        if (R_SUCCEEDED(rc)) {
+            App::PlaySoundEffect(SoundEffect_Install);
+            App::Notify("Installed!"_i18n);
+        }
+    }));
 
-    if (R_FAILED(rc)) {
-        App::PlaySoundEffect(SoundEffect_Error);
-        App::Push(std::make_shared<ui::ErrorBox>(rc, "Failed to install forwarder"_i18n));
-    } else {
-        App::PlaySoundEffect(SoundEffect_Install);
-        App::Notify("Installed!"_i18n);
-    }
-
-    return rc;
+    R_SUCCEED();
 }
 
 auto App::Install(ui::ProgressBox* pbox, OwoConfig& config) -> Result {
@@ -920,17 +916,15 @@ auto App::Install(ui::ProgressBox* pbox, OwoConfig& config) -> Result {
         config.icon = GetNroIcon(config.icon);
     }
 
-    const auto rc = install_forwarder(pbox, config, GetInstallSdEnable() ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser);
-
-    if (R_FAILED(rc)) {
-        App::PlaySoundEffect(SoundEffect_Error);
-        App::Push(std::make_shared<ui::ErrorBox>(rc, "Failed to install forwarder"_i18n));
-    } else {
-        App::PlaySoundEffect(SoundEffect_Install);
-        App::Notify("Installed!"_i18n);
+    if (config.logo.empty()) {
+        fs::FsNativeSd().read_entire_file("/config/sphaira/logo/NintendoLogo.png", config.logo);
     }
 
-    return rc;
+    if (config.gif.empty()) {
+        fs::FsNativeSd().read_entire_file("/config/sphaira/logo/StartupMovie.gif", config.gif);
+    }
+
+    return install_forwarder(pbox, config, GetInstallSdEnable() ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser);
 }
 
 auto App::IsEmummc() -> bool {
