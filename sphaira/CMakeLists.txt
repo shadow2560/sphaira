@@ -178,7 +178,7 @@ FetchContent_Declare(stb
 
 FetchContent_Declare(yyjson
     GIT_REPOSITORY https://github.com/ibireme/yyjson.git
-    GIT_TAG 0.10.0
+    GIT_TAG 0.11.1
 )
 
 FetchContent_Declare(minIni
