@@ -20,7 +20,9 @@
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic pop
 
+#include "app.hpp"
 #include "log.hpp"
+#include <nvjpg.hpp>
 #include <cstring>
 
 namespace sphaira {
@@ -30,7 +32,6 @@ constexpr int BPP = 4;
 
 auto ImageLoadInternal(stbi_uc* image_data, int x, int y) -> ImageResult {
     if (image_data) {
-        log_write("loaded image: w: %d h: %d\n", x, y);
         ImageResult result{};
         result.data.resize(x*y*BPP);
         result.w = x;
@@ -44,17 +45,63 @@ auto ImageLoadInternal(stbi_uc* image_data, int x, int y) -> ImageResult {
     return {};
 }
 
-} // namespace
+auto ImageLoadInternal(nj::Image&& image) -> ImageResult {
+    if (!image.is_valid() || image.parse()) {
+        log_write("[NVJPG] failed to parse image\n");
+        return {};
+    }
 
-auto ImageLoadFromMemory(std::span<const u8> data) -> ImageResult {
-    int x, y, channels;
-    return ImageLoadInternal(stbi_load_from_memory(data.data(), data.size(), &x, &y, &channels, BPP), x, y);
+    nj::Surface surf{image.width, image.height};
+    if (surf.allocate()) {
+        log_write("[NVJPG] failed to allocate surf\n");
+        return {};
+    }
+
+    if (R_FAILED(App::GetApp()->m_decoder.render(image, surf, 255))) {
+        log_write("[NVJPG] failed to render\n");
+        return {};
+    }
+
+    if (R_FAILED(App::GetApp()->m_decoder.wait(surf))) {
+        log_write("[NVJPG] failed to wait\n");
+        return {};
+    }
+
+    ImageResult result{};
+    result.w = image.width;
+    result.h = image.height;
+    result.data.resize(surf.size());
+    std::memcpy(result.data.data(), surf.data(), result.data.size());
+
+    return result;
 }
 
-auto ImageLoadFromFile(const fs::FsPath& file) -> ImageResult {
-    log_write("doing file load\n");
-    int x, y, channels;
-    return ImageLoadInternal(stbi_load(file, &x, &y, &channels, BPP), x, y);
+} // namespace
+
+auto ImageLoadFromMemory(std::span<const u8> data, u32 flags) -> ImageResult {
+    if (flags & ImageFlag_JPEG) {
+        auto shared_vec = std::make_shared<std::vector<u8>>(data.size());
+        std::memcpy(shared_vec->data(), data.data(), shared_vec->size());
+        // don't make const as it prevents RTO.
+        auto result = ImageLoadInternal(nj::Image{shared_vec});
+        // if it failed, try again but without using oss-jpg.
+        return result.data.empty() ? ImageLoadFromMemory(data, 0) : result;
+    } else {
+        int x, y, channels;
+        return ImageLoadInternal(stbi_load_from_memory(data.data(), data.size(), &x, &y, &channels, BPP), x, y);
+    }
+}
+
+auto ImageLoadFromFile(const fs::FsPath& file, u32 flags) -> ImageResult {
+    if (flags & ImageFlag_JPEG) {
+        // don't make const as it prevents RTO.
+        auto result = ImageLoadInternal(nj::Image{file});
+        // if it failed, try again but without using oss-jpg.
+        return result.data.empty() ? ImageLoadFromFile(file, 0) : result;
+    } else {
+        int x, y, channels;
+        return ImageLoadInternal(stbi_load(file, &x, &y, &channels, BPP), x, y);
+    }
 }
 
 auto ImageResize(std::span<const u8> data, int inx, int iny, int outx, int outy) -> ImageResult {

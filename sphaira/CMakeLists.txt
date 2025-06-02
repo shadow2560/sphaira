@@ -202,6 +202,11 @@ FetchContent_Declare(libnxtc
     GIT_TAG v0.0.2
 )
 
+FetchContent_Declare(nvjpg
+    GIT_REPOSITORY https://github.com/averne/oss-nvjpg.git
+    GIT_TAG fdcaba8
+)
+
 set(USE_NEW_ZSTD ON)
 
 set(ZSTD_BUILD_STATIC ON)
@@ -255,6 +260,7 @@ FetchContent_MakeAvailable(
     zstd
     libusbhsfs
     libnxtc
+    nvjpg
 )
 
 set(FTPSRV_LIB_BUILD TRUE)
@@ -304,6 +310,14 @@ add_library(libnxtc
 )
 target_include_directories(libnxtc PUBLIC ${libnxtc_SOURCE_DIR}/include)
 
+add_library(nvjpg
+    ${nvjpg_SOURCE_DIR}/lib/decoder.cpp
+    ${nvjpg_SOURCE_DIR}/lib/image.cpp
+    ${nvjpg_SOURCE_DIR}/lib/surface.cpp
+)
+target_include_directories(nvjpg PUBLIC ${nvjpg_SOURCE_DIR}/include)
+set_target_properties(nvjpg PROPERTIES CXX_STANDARD 26)
+
 find_package(ZLIB REQUIRED)
 find_library(minizip_lib minizip REQUIRED)
 find_path(minizip_inc minizip REQUIRED)
@@ -334,6 +348,7 @@ target_link_libraries(sphaira PRIVATE
     yyjson
     # libusbhsfs
     libnxtc
+    nvjpg
 
     ${minizip_lib}
     ZLIB::ZLIB

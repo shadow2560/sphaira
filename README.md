@@ -4,7 +4,7 @@ A homebrew menu for the Nintendo Switch.
 
 [See the GBATemp thread for more details / discussion](https://gbatemp.net/threads/sphaira-hbmenu-replacement.664523/).
 
-[We have now have a Discord server!](https://discord.gg/8vZBsrprEc). Please use the issues tab to report bugs, as it is much easier for me to track.
+[We have now have a Discord server!](https://discord.gg/8vZBsrprEc) Please use the issues tab to report bugs, as it is much easier for me to track.
 
 ## Showcase
 
@@ -86,16 +86,21 @@ The output will be found in `build/MinSizeRel/sphaira.nro`
 
 ## Credits
 
-- borealis
-- stb
-- yyjson
-- nx-hbmenu
-- nx-hbloader
-- deko3d-nanovg
-- libpulsar
-- minIni
-- GBATemp
-- hb-appstore
-- haze
-- nxdumptool (for gamecard bin dumping and rsa verify code)
+- [borealis](https://github.com/natinusala/borealis)
+- [stb](https://github.com/nothings/stb)
+- [yyjson](https://github.com/ibireme/yyjson)
+- [nx-hbmenu](https://github.com/switchbrew/nx-hbmenu)
+- [nx-hbloader](https://github.com/switchbrew/nx-hbloader)
+- [deko3d-nanovg](https://github.com/Adubbz/nanovg-deko3d)
+- [libpulsar](https://github.com/p-sam/switch-libpulsar)
+- [minIni](https://github.com/compuphase/minIni)
+- [GBATemp](https://gbatemp.net/threads/sphaira-hbmenu-replacement.664523/)
+- [hb-appstore](https://github.com/fortheusers/hb-appstore)
+- [haze](https://github.com/Atmosphere-NX/Atmosphere/tree/master/troposphere/haze)
+- [nxdumptool](https://github.com/DarkMatterCore/nxdumptool) (for gamecard bin dumping and rsa verify code)
+- [libusbhsfs](https://github.com/DarkMatterCore/libusbhsfs)
+- [libnxtc](https://github.com/DarkMatterCore/libnxtc)
+- [oss-nvjpg](https://github.com/averne/oss-nvjpg)
+- [nsz](https://github.com/nicoboss/nsz)
+- [themezer](https://themezer.net/)
 - Everyone who has contributed to this project!

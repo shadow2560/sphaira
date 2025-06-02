@@ -12,6 +12,7 @@
 #include "swkbd.hpp"
 #include "i18n.hpp"
 #include "threaded_file_transfer.hpp"
+#include "image.hpp"
 
 #include <minIni.h>
 #include <stb_image.h>
@@ -134,19 +135,14 @@ auto loadThemeImage(ThemeEntry& e) -> bool {
     }
     auto vg = App::GetVg();
 
-    fs::FsNativeSd fs;
-    std::vector<u8> image_buf;
-
     const auto path = apiBuildIconCache(e);
-    if (R_FAILED(fs.read_entire_file(path, image_buf))) {
-        log_write("failed to load image from file: %s\n", path.s);
-    } else {
-        int channels_in_file;
-        auto buf = stbi_load_from_memory(image_buf.data(), image_buf.size(), &image.w, &image.h, &channels_in_file, 4);
-        if (buf) {
-            ON_SCOPE_EXIT(stbi_image_free(buf));
-            image.image = nvgCreateImageRGBA(vg, image.w, image.h, 0, buf);
-        }
+    TimeStamp ts;
+    const auto data = ImageLoadFromFile(path, ImageFlag_JPEG);
+    if (!data.data.empty()) {
+        image.w = data.w;
+        image.h = data.h;
+        image.image = nvgCreateImageRGBA(vg, data.w, data.h, 0, data.data.data());
+        log_write("\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
     }
 
     if (!image.image) {

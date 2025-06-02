@@ -10,6 +10,7 @@
 #include "fs.hpp"
 #include "log.hpp"
 
+#include <nvjpg.hpp>
 #include <switch.h>
 #include <vector>
 #include <string>
@@ -271,6 +272,8 @@ public:
     option::OptionLong m_text_scroll_speed{"accessibility", "text_scroll_speed", 1}; // normal
 
     PLSR_PlayerSoundId m_sound_ids[SoundEffect_MAX]{};
+
+    nj::Decoder m_decoder;
 
 private: // from nanovg decko3d example by adubbz
     static constexpr unsigned NumFramebuffers = 2;

@@ -4,6 +4,7 @@
 #include "dumper.hpp"
 #include "defines.hpp"
 #include "i18n.hpp"
+#include "image.hpp"
 
 #include "ui/menus/game_menu.hpp"
 #include "ui/sidebar.hpp"
@@ -318,11 +319,15 @@ void FakeNacpEntry(ThreadResultData& e) {
 
 bool LoadControlImage(Entry& e) {
     if (!e.image && e.control) {
+        ON_SCOPE_EXIT(e.control.reset());
+
         TimeStamp ts;
-        e.image = nvgCreateImageMem(App::GetVg(), 0, e.control->icon, e.jpeg_size);
-        e.control.reset();
-        log_write("\t\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
-        return true;
+        const auto image = ImageLoadFromMemory({e.control->icon, e.jpeg_size}, ImageFlag_JPEG);
+        if (!image.data.empty()) {
+            e.image = nvgCreateImageRGBA(App::GetVg(), image.w, image.h, 0, image.data.data());
+            log_write("\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+            return true;
+        }
     }
 
     return false;

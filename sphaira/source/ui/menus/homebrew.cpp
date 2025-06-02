@@ -10,6 +10,7 @@
 #include "owo.hpp"
 #include "defines.hpp"
 #include "i18n.hpp"
+#include "image.hpp"
 
 #include <minIni.h>
 #include <utility>
@@ -175,9 +176,17 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
                 // really, switch-tools should handle this by resizing the image before
                 // adding it to the nro, as well as validate its a valid jpeg.
                 const auto icon = nro_get_icon(e.path, e.icon_size, e.icon_offset);
+                TimeStamp ts;
                 if (!icon.empty()) {
-                    e.image = nvgCreateImageMem(vg, 0, icon.data(), icon.size());
-                    image_load_count++;
+                    const auto image = ImageLoadFromMemory(icon, ImageFlag_JPEG);
+                    if (!image.data.empty()) {
+                        e.image = nvgCreateImageRGBA(vg, image.w, image.h, 0, image.data.data());
+                        log_write("\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+                        image_load_count++;
+                    } else {
+                        // prevent loading of this icon again as it's already failed.
+                        e.icon_offset = e.icon_size = 0;
+                    }
                 }
             }
         }

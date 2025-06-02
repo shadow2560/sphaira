@@ -1400,6 +1400,10 @@ App::App(const char* argv0) {
 
     curl::Init();
 
+    // this has to be init before deko3d.
+    nj::initialize();
+    m_decoder.initialize();
+
     // get current size of the framebuffer
     const auto fb = GetFrameBufferSize();
     s_width = fb.size.x;
@@ -1849,6 +1853,7 @@ App::~App() {
     ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
 
     log_write("starting to exit\n");
+    TimeStamp ts;
 
     i18n::exit();
     curl::Exit();
@@ -1877,6 +1882,9 @@ App::~App() {
     this->destroyFramebufferResources();
     nvgDeleteDk(this->vg);
     this->renderer.reset();
+
+    m_decoder.finalize();
+    nj::finalize();
 
     // backup hbmenu if it is not sphaira
     if (App::GetReplaceHbmenuEnable() && !IsHbmenu()) {
@@ -1949,6 +1957,8 @@ App::~App() {
         log_write("closing hdd\n");
         usbHsFsExit();
     }
+
+    log_write("\t[EXIT] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
 
     if (App::GetLogEnable()) {
         log_write("closing log\n");
