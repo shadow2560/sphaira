@@ -108,8 +108,11 @@ private:
     std::shared_ptr<ScrollableText> m_details{};
     std::shared_ptr<ScrollableText> m_changelog{};
     std::shared_ptr<ScrollableText> m_detail_changelog{};
+    std::unique_ptr<ScrollableText> m_manifest_list{};
 
     bool m_show_changlog{};
+    bool m_show_file_list{};
+    ImageDownloadState m_file_list_state{};
 };
 
 enum Filter {

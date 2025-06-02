@@ -16,6 +16,7 @@
 #include "hasher.hpp"
 #include "threaded_file_transfer.hpp"
 #include "nro.hpp"
+#include "web.hpp"
 
 #include <minIni.h>
 #include <string>
@@ -141,6 +142,12 @@ auto BuildIconUrl(const Entry& e) -> std::string {
 auto BuildBannerUrl(const Entry& e) -> std::string {
     char out[0x100];
     std::snprintf(out, sizeof(out), "%s/packages/%s/screen.png", URL_BASE, e.name.c_str());
+    return out;
+}
+
+auto BuildManifestUrl(const Entry& e) -> std::string {
+    char out[0x100];
+    std::snprintf(out, sizeof(out), "%s/packages/%s/manifest.install", URL_BASE, e.name.c_str());
     return out;
 }
 
@@ -634,12 +641,15 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
             }
         }}),
         std::make_pair(Button::X, Action{"Options"_i18n, [this](){
-            auto sidebar = std::make_shared<Sidebar>("Options"_i18n, Sidebar::Side::RIGHT);
-            sidebar->Add(std::make_shared<SidebarEntryCallback>("More by Author"_i18n, [this](){
+            auto options = std::make_shared<Sidebar>("Options"_i18n, Sidebar::Side::RIGHT);
+            ON_SCOPE_EXIT(App::Push(options));
+
+            options->Add(std::make_shared<SidebarEntryCallback>("More by Author"_i18n, [this](){
                 m_menu.SetAuthor();
                 SetPop();
             }, true));
-            sidebar->Add(std::make_shared<SidebarEntryCallback>("Leave Feedback"_i18n, [this](){
+
+            options->Add(std::make_shared<SidebarEntryCallback>("Leave Feedback"_i18n, [this](){
                 std::string out;
                 if (R_SUCCEEDED(swkbd::ShowText(out)) && !out.empty()) {
                     const auto post = "name=" "switch_user" "&package=" + m_entry.name + "&message=" + out;
@@ -660,10 +670,44 @@ EntryMenu::EntryMenu(Entry& entry, const LazyImage& default_icon, Menu& menu)
                     });
                 }
             }, true));
-            App::Push(sidebar);
+
+            if (App::IsApplication() && !m_entry.url.empty()) {
+                options->Add(std::make_shared<SidebarEntryCallback>("Visit Website"_i18n, [this](){
+                    WebShow(m_entry.url);
+                }));
+            }
         }}),
         std::make_pair(Button::B, Action{"Back"_i18n, [this](){
             SetPop();
+        }}),
+        std::make_pair(Button::L2, Action{"Files"_i18n, [this](){
+            m_show_file_list ^= 1;
+
+            if (m_show_file_list && !m_manifest_list && m_file_list_state == ImageDownloadState::None) {
+                m_file_list_state = ImageDownloadState::Progress;
+                const auto path = BuildManifestCachePath(m_entry);
+                std::vector<u8> data;
+
+                if (R_SUCCEEDED(fs::read_entire_file(path, data))) {
+                    m_file_list_state = ImageDownloadState::Done;
+                    data.push_back('\0');
+                    m_manifest_list = std::make_unique<ScrollableText>((const char*)data.data(), 0, 374, 250, 768, 18);
+                } else {
+                    curl::Api().ToMemoryAsync(
+                        curl::Url{BuildManifestUrl(m_entry)},
+                        curl::StopToken{this->GetToken()},
+                        curl::OnComplete{[this](auto& result){
+                            if (result.success) {
+                                m_file_list_state = ImageDownloadState::Done;
+                                result.data.push_back('\0');
+                                m_manifest_list = std::make_unique<ScrollableText>((const char*)result.data.data(), 0, 374, 250, 768, 18);
+                            } else {
+                                m_file_list_state = ImageDownloadState::Failed;
+                            }
+                        }}
+                    );
+                }
+            }
         }})
     );
 
@@ -712,7 +756,13 @@ EntryMenu::~EntryMenu() {
 void EntryMenu::Update(Controller* controller, TouchInfo* touch) {
     MenuBase::Update(controller, touch);
 
-    m_detail_changelog->Update(controller, touch);
+    if (m_show_file_list) {
+        if (m_manifest_list) {
+            m_manifest_list->Update(controller, touch);
+        }
+    } else {
+        m_detail_changelog->Update(controller, touch);
+    }
 }
 
 void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
@@ -767,12 +817,24 @@ void EntryMenu::Draw(NVGcontext* vg, Theme* theme) {
         y -= block.h + 18;
     }
 
-    m_detail_changelog->Draw(vg, theme);
+    if (m_show_file_list) {
+        if (m_manifest_list) {
+            m_manifest_list->Draw(vg, theme);
+        } else if (m_file_list_state == ImageDownloadState::Progress) {
+            gfx::drawText(vg, 110, 374, 18, theme->GetColour(ThemeEntryID_TEXT), "Loading..."_i18n.c_str());
+        } else if (m_file_list_state == ImageDownloadState::Failed) {
+            gfx::drawText(vg, 110, 374, 18, theme->GetColour(ThemeEntryID_TEXT), "Failed to download manifest"_i18n.c_str());
+        }
+    } else {
+        m_detail_changelog->Draw(vg, theme);
+    }
 }
 
 void EntryMenu::ShowChangelogAction() {
     std::function<void()> func = std::bind(&EntryMenu::ShowChangelogAction, this);
     m_show_changlog ^= 1;
+    m_show_file_list = false;
+
 
     if (m_show_changlog) {
         SetAction(Button::L, Action{"Details"_i18n, func});

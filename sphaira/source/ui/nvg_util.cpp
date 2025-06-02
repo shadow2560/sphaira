@@ -296,8 +296,8 @@ void drawScrollbar(NVGcontext* vg, const Theme* theme, float x, float y, float h
     if (entry_total > max_entry_display) {
         const float sb_h = 1.f / (float)entry_total * h;
         const float sb_y = SCROLL;
-        gfx::drawRect(vg, x, y, scc2, h, theme->GetColour(ThemeEntryID_SCROLLBAR_BACKGROUND), false);
-        gfx::drawRect(vg, x + scw, y + scw + sb_h * sb_y, scc2 - scw * 2, sb_h * float(max_entry_display) - scw * 2, theme->GetColour(ThemeEntryID_SCROLLBAR), false);
+        gfx::drawRect(vg, x, y, scc2, h, theme->GetColour(ThemeEntryID_SCROLLBAR_BACKGROUND), 5);
+        gfx::drawRect(vg, x + scw, y + scw + sb_h * sb_y, scc2 - scw * 2, sb_h * float(max_entry_display) - scw * 2, theme->GetColour(ThemeEntryID_SCROLLBAR), 5);
     }
 }
 
@@ -318,8 +318,8 @@ void drawScrollbar2(NVGcontext* vg, const Theme* theme, float x, float y, float 
     if (count > page) {
         const float sb_h = 1.f / (float)count * h;
         const float sb_y = index_off;
-        gfx::drawRect(vg, x, y, scc2, h, theme->GetColour(ThemeEntryID_SCROLLBAR_BACKGROUND), false);
-        gfx::drawRect(vg, x + scw, y + scw + sb_h * sb_y, scc2 - scw * 2, sb_h * float(page) - scw * 2, theme->GetColour(ThemeEntryID_SCROLLBAR), false);
+        gfx::drawRect(vg, x, y, scc2, h, theme->GetColour(ThemeEntryID_SCROLLBAR_BACKGROUND), 5);
+        gfx::drawRect(vg, x + scw, y + scw + sb_h * sb_y, scc2 - scw * 2, sb_h * float(page) - scw * 2, theme->GetColour(ThemeEntryID_SCROLLBAR), 5);
     }
 }
 

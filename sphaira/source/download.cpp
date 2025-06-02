@@ -332,7 +332,7 @@ struct ThreadQueue {
     }
 
     auto Add(const Api& api, bool is_upload = false) -> bool {
-        if (api.GetUrl().empty() || api.GetPath().empty() || !api.GetOnComplete()) {
+        if (api.GetUrl().empty() || !api.GetOnComplete()) {
             return false;
         }
 

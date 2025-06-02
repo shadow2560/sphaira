@@ -87,16 +87,8 @@ void ScrollableText::Draw(NVGcontext* vg, Theme* theme) {
     // const Vec4 banner_vec(70, line_vec.y + 20, 848.f, 208.f);
     const Vec4 banner_vec(70, line_vec.y + 20, m_end_w + (110.0F), 208.f);
 
-    // only draw scrollbar if needed
-    if ((m_bounds[3] - m_bounds[1]) > m_clip_y) {
-        const auto scrollbar_size = m_clip_y;
-        const auto max_index = (m_bounds[3] - m_bounds[1]) / m_step;
-        const auto sb_h = 1.f / max_index * scrollbar_size;
-        const auto in_clip = m_clip_y / m_step - 1;
-        const auto sb_y = m_index;
-        gfx::drawRect(vg, banner_vec.w, m_y_off_base, 10, scrollbar_size, theme->GetColour(ThemeEntryID_SCROLLBAR_BACKGROUND));
-        gfx::drawRect(vg, banner_vec.w+2, m_y_off_base + sb_h * sb_y, 10-4, sb_h + (sb_h * in_clip) - 4, theme->GetColour(ThemeEntryID_SCROLLBAR));
-    }
+    const auto max_index = (m_bounds[3] - m_bounds[1]) / m_step;
+    gfx::drawScrollbar2(vg, theme, banner_vec.w + 25, m_y_off_base, m_clip_y, m_index, max_index, 1, m_clip_y / m_step - 1);
 
     nvgSave(vg);
     nvgIntersectScissor(vg, 0, m_y_off_base - m_font_size, 1280, m_clip_y + m_font_size); // clip
