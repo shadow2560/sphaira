@@ -197,6 +197,11 @@ FetchContent_Declare(libusbhsfs
     GIT_TAG db2bf2a
 )
 
+FetchContent_Declare(libnxtc
+    GIT_REPOSITORY https://github.com/DarkMatterCore/libnxtc.git
+    GIT_TAG v0.0.2
+)
+
 set(USE_NEW_ZSTD ON)
 
 set(ZSTD_BUILD_STATIC ON)
@@ -249,6 +254,7 @@ FetchContent_MakeAvailable(
     yyjson
     zstd
     libusbhsfs
+    libnxtc
 )
 
 set(FTPSRV_LIB_BUILD TRUE)
@@ -291,6 +297,13 @@ target_include_directories(ftpsrv_helper PUBLIC ${ftpsrv_SOURCE_DIR}/src/platfor
 add_library(stb INTERFACE)
 target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
 
+add_library(libnxtc
+    ${libnxtc_SOURCE_DIR}/source/nxtc.c
+    ${libnxtc_SOURCE_DIR}/source/nxtc_log.c
+    ${libnxtc_SOURCE_DIR}/source/nxtc_utils.c
+)
+target_include_directories(libnxtc PUBLIC ${libnxtc_SOURCE_DIR}/include)
+
 find_package(ZLIB REQUIRED)
 find_library(minizip_lib minizip REQUIRED)
 find_path(minizip_inc minizip REQUIRED)
@@ -320,6 +333,7 @@ target_link_libraries(sphaira PRIVATE
     stb
     yyjson
     # libusbhsfs
+    libnxtc
 
     ${minizip_lib}
     ZLIB::ZLIB

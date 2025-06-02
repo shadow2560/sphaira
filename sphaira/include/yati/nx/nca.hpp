@@ -221,7 +221,7 @@ Result VerifyFixedKey(const Header& header);
 
 // helpers that parse an nca.
 Result ParseCnmt(const fs::FsPath& path, u64 program_id, ncm::PackagedContentMeta& header, std::vector<u8>& extended_header, std::vector<NcmPackagedContentInfo>& infos);
-Result ParseControl(const fs::FsPath& path, u64 program_id, void* nacp_out = nullptr, s64 nacp_size = 0, std::vector<u8>* icon_out = nullptr);
+Result ParseControl(const fs::FsPath& path, u64 program_id, void* nacp_out = nullptr, s64 nacp_size = 0, std::vector<u8>* icon_out = nullptr, s64 nacp_off = 0);
 
 auto GetKeyGenStr(u8 key_gen) -> const char*;
 

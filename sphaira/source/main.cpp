@@ -83,6 +83,10 @@ void userAppExit(void) {
     psmExit();
     plExit();
     socketExit();
+    // NOTE (DMC): prevents exfat corruption.
+    if (auto fs = fsdevGetDeviceFileSystem("sdmc:")) {
+        fsFsCommit(fs);
+    }
     appletUnlockExit();
 }
 

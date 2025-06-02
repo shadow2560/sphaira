@@ -22,13 +22,12 @@ enum class NacpLoadStatus {
 
 struct Entry {
     u64 app_id{};
-    char display_version[0x10]{};
     NacpLanguageEntry lang{};
     int image{};
     bool selected{};
 
     std::shared_ptr<NsApplicationControlData> control{};
-    u64 control_size{};
+    u64 jpeg_size{};
     NacpLoadStatus status{NacpLoadStatus::None};
 
     auto GetName() const -> const char* {
@@ -38,35 +37,38 @@ struct Entry {
     auto GetAuthor() const -> const char* {
         return lang.author;
     }
-
-    auto GetDisplayVersion() const -> const char* {
-        return display_version;
-    }
 };
 
 struct ThreadResultData {
     u64 id{};
     std::shared_ptr<NsApplicationControlData> control{};
-    u64 control_size{};
-    char display_version[0x10]{};
+    u64 jpeg_size{};
     NacpLanguageEntry lang{};
     NacpLoadStatus status{NacpLoadStatus::None};
 };
 
 struct ThreadData {
-    ThreadData();
+    ThreadData(bool title_cache);
 
-    auto IsRunning() const -> bool;
     void Run();
     void Close();
     void Push(u64 id);
     void Push(std::span<const Entry> entries);
     void Pop(std::vector<ThreadResultData>& out);
 
+    auto IsRunning() const -> bool {
+        return m_running;
+    }
+
+    auto IsTitleCacheEnabled() const {
+        return m_title_cache;
+    }
+
 private:
     UEvent m_uevent{};
     Mutex m_mutex_id{};
     Mutex m_mutex_result{};
+    bool m_title_cache{};
 
     // app_ids pushed to the queue, signal uevent when pushed.
     std::vector<u64> m_ids{};
@@ -141,13 +143,14 @@ private:
     bool m_is_reversed{};
     bool m_dirty{};
 
-    ThreadData m_thread_data{};
+    std::unique_ptr<ThreadData> m_thread_data{};
     Thread m_thread{};
 
     option::OptionLong m_sort{INI_SECTION, "sort", SortType::SortType_Updated};
     option::OptionLong m_order{INI_SECTION, "order", OrderType::OrderType_Descending};
-    option::OptionLong m_layout{INI_SECTION, "layout", LayoutType::LayoutType_GridDetail};
+    option::OptionLong m_layout{INI_SECTION, "layout", LayoutType::LayoutType_Grid};
     option::OptionBool m_hide_forwarders{INI_SECTION, "hide_forwarders", false};
+    option::OptionBool m_title_cache{INI_SECTION, "title_cache", true};
 };
 
 } // namespace sphaira::ui::menu::game

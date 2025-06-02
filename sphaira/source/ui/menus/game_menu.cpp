@@ -23,12 +23,41 @@
 #include <cstring>
 #include <algorithm>
 #include <minIni.h>
+#include <nxtc.h>
 
 namespace sphaira::ui::menu::game {
 namespace {
 
 constexpr int THREAD_PRIO = PRIO_PREEMPTIVE;
 constexpr int THREAD_CORE = 1;
+
+// taken from nxtc
+constexpr u8 g_nacpLangTable[SetLanguage_Total] = {
+    [SetLanguage_JA]     =  2,
+    [SetLanguage_ENUS]   =  0,
+    [SetLanguage_FR]     =  3,
+    [SetLanguage_DE]     =  4,
+    [SetLanguage_IT]     =  7,
+    [SetLanguage_ES]     =  6,
+    [SetLanguage_ZHCN]   = 14,
+    [SetLanguage_KO]     = 12,
+    [SetLanguage_NL]     =  8,
+    [SetLanguage_PT]     = 10,
+    [SetLanguage_RU]     = 11,
+    [SetLanguage_ZHTW]   = 13,
+    [SetLanguage_ENGB]   =  1,
+    [SetLanguage_FRCA]   =  9,
+    [SetLanguage_ES419]  =  5,
+    [SetLanguage_ZHHANS] = 14,
+    [SetLanguage_ZHHANT] = 13,
+    [SetLanguage_PTBR]   = 15
+};
+
+auto GetNacpLangEntryIndex() -> u8 {
+    SetLanguage lang{SetLanguage_ENUS};
+    nxtcGetCacheLanguage(&lang);
+    return g_nacpLangTable[lang];
+}
 
 constexpr u32 ContentMetaTypeToContentFlag(u8 meta_type) {
     if (meta_type & 0x80) {
@@ -284,15 +313,13 @@ void FakeNacpEntry(ThreadResultData& e) {
     // fake the nacp entry
     std::strcpy(e.lang.name, "Corrupted");
     std::strcpy(e.lang.author, "Corrupted");
-    std::strcpy(e.display_version, "0.0.0");
     e.control.reset();
 }
 
 bool LoadControlImage(Entry& e) {
     if (!e.image && e.control) {
         TimeStamp ts;
-        const auto jpeg_size = e.control_size - sizeof(NacpStruct);
-        e.image = nvgCreateImageMem(App::GetVg(), 0, e.control->icon, jpeg_size);
+        e.image = nvgCreateImageMem(App::GetVg(), 0, e.control->icon, e.jpeg_size);
         e.control.reset();
         log_write("\t\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
         return true;
@@ -301,14 +328,8 @@ bool LoadControlImage(Entry& e) {
     return false;
 }
 
-Result LoadControlManual(u64 id, ThreadResultData& data) {
-    TimeStamp ts;
-
-    MetaEntries entries;
-    R_TRY(GetMetaEntries(id, entries));
-    R_UNLESS(!entries.empty(), 0x1);
-
-    const auto& ee = entries.back();
+Result GetControlPathFromStatus(const NsApplicationContentMetaStatus& status, u64* out_program_id, fs::FsPath* out_path) {
+    const auto& ee = status;
     if (ee.storageID != NcmStorageId_SdCard && ee.storageID != NcmStorageId_BuiltInUser && ee.storageID != NcmStorageId_GameCard) {
         return 0x1;
     }
@@ -322,17 +343,28 @@ Result LoadControlManual(u64 id, ThreadResultData& data) {
     NcmContentId content_id;
     R_TRY(ncmContentMetaDatabaseGetContentIdByType(&db, &content_id, &key, NcmContentType_Control));
 
-    u64 program_id;
-    R_TRY(ncmContentStorageGetProgramId(&cs, &program_id, &content_id, FsContentAttributes_All));
+    R_TRY(ncmContentStorageGetProgramId(&cs, out_program_id, &content_id, FsContentAttributes_All));
 
+    R_TRY(ncmContentStorageGetPath(&cs, out_path->s, sizeof(*out_path), &content_id));
+    R_SUCCEED();
+}
+
+Result LoadControlManual(u64 id, ThreadResultData& data) {
+    TimeStamp ts;
+
+    MetaEntries entries;
+    R_TRY(GetMetaEntries(id, entries));
+    R_UNLESS(!entries.empty(), 0x1);
+
+    u64 program_id;
     fs::FsPath path;
-    R_TRY(ncmContentStorageGetPath(&cs, path, sizeof(path), &content_id));
+    R_TRY(GetControlPathFromStatus(entries.back(), &program_id, &path));
 
     std::vector<u8> icon;
-    R_TRY(nca::ParseControl(path, program_id, &data.control->nacp, sizeof(data.control->nacp), &icon));
+    R_TRY(nca::ParseControl(path, program_id, &data.control->nacp.lang[GetNacpLangEntryIndex()], sizeof(NacpLanguageEntry), &icon));
     std::memcpy(data.control->icon, icon.data(), icon.size());
 
-    data.control_size = sizeof(data.control->nacp) + icon.size();
+    data.jpeg_size = icon.size();
     log_write("\t\t[manual control] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
 
     R_SUCCEED();
@@ -347,8 +379,10 @@ auto LoadControlEntry(u64 id) -> ThreadResultData {
     bool manual_load = true;
     if (hosversionBefore(20,0,0)) {
         TimeStamp ts;
-        if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, id, data.control.get(), sizeof(NsApplicationControlData), &data.control_size))) {
+        u64 actual_size;
+        if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, id, data.control.get(), sizeof(NsApplicationControlData), &actual_size))) {
             manual_load = false;
+            data.jpeg_size = actual_size - sizeof(NacpStruct);
             log_write("\t\t[ns control cache] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
         }
     }
@@ -360,17 +394,16 @@ auto LoadControlEntry(u64 id) -> ThreadResultData {
     Result rc{};
     if (!manual_load) {
         TimeStamp ts;
-        rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, id, data.control.get(), sizeof(NsApplicationControlData), &data.control_size);
-        log_write("\t\t[ns control storage] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+        u64 actual_size;
+        if (R_SUCCEEDED(rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, id, data.control.get(), sizeof(NsApplicationControlData), &actual_size))) {
+            data.jpeg_size = actual_size - sizeof(NacpStruct);
+            log_write("\t\t[ns control storage] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+        }
     }
 
     if (R_SUCCEEDED(rc)) {
-        NacpLanguageEntry* lang{};
-        if (R_SUCCEEDED(rc = nsGetApplicationDesiredLanguage(&data.control->nacp, &lang)) && lang) {
-            data.lang = *lang;
-            std::memcpy(data.display_version, data.control->nacp.display_version, sizeof(data.display_version));
-            data.status = NacpLoadStatus::Loaded;
-        }
+        data.lang = data.control->nacp.lang[GetNacpLangEntryIndex()];
+        data.status = NacpLoadStatus::Loaded;
     }
 
     if (R_FAILED(rc)) {
@@ -383,8 +416,7 @@ auto LoadControlEntry(u64 id) -> ThreadResultData {
 void LoadResultIntoEntry(Entry& e, const ThreadResultData& result) {
     e.status = result.status;
     e.control = result.control;
-    e.control_size = result.control_size;
-    std::memcpy(e.display_version, result.display_version, sizeof(result.display_version));
+    e.jpeg_size= result.jpeg_size;
     e.lang = result.lang;
     e.status = result.status;
 }
@@ -462,8 +494,16 @@ auto BuildNspPath(const Entry& e, const NsApplicationContentMetaStatus& status) 
     utilsReplaceIllegalCharacters(name_buf, true);
 
     char version[sizeof(NacpStruct::display_version) + 1]{};
+    // status.storageID
     if (status.meta_type == NcmContentMetaType_Patch) {
-        std::snprintf(version, sizeof(version), "%s ", e.GetDisplayVersion());
+        u64 program_id;
+        fs::FsPath path;
+        if (R_SUCCEEDED(GetControlPathFromStatus(status, &program_id, &path))) {
+            char display_version[0x10];
+            if (R_SUCCEEDED(nca::ParseControl(path, program_id, display_version, sizeof(display_version), nullptr, offsetof(NacpStruct, display_version)))) {
+                std::snprintf(version, sizeof(version), "%s ", display_version);
+            }
+        }
     }
 
     fs::FsPath path;
@@ -619,6 +659,11 @@ void LaunchEntry(const Entry& e) {
 void ThreadFunc(void* user) {
     auto data = static_cast<ThreadData*>(user);
 
+    if (data->IsTitleCacheEnabled() && !nxtcInitialize()) {
+        log_write("[NXTC] failed to init cache\n");
+    }
+    ON_SCOPE_EXIT(nxtcExit());
+
     while (data->IsRunning()) {
         data->Run();
     }
@@ -626,21 +671,23 @@ void ThreadFunc(void* user) {
 
 } // namespace
 
-ThreadData::ThreadData() {
+ThreadData::ThreadData(bool title_cache) : m_title_cache{title_cache} {
     ueventCreate(&m_uevent, true);
     mutexInit(&m_mutex_id);
     mutexInit(&m_mutex_result);
     m_running = true;
 }
 
-auto ThreadData::IsRunning() const -> bool {
-    return m_running;
-}
-
 void ThreadData::Run() {
+    const auto waiter = waiterForUEvent(&m_uevent);
     while (IsRunning()) {
-        const auto waiter = waiterForUEvent(&m_uevent);
-        waitSingle(waiter, UINT64_MAX);
+        const auto rc = waitSingle(waiter, 3e+9);
+
+        // if we timed out, flush the cache and poll again.
+        if (R_FAILED(rc)) {
+            nxtcFlushCacheFile();
+            continue;
+        }
 
         if (!IsRunning()) {
             return;
@@ -658,10 +705,28 @@ void ThreadData::Run() {
                 return;
             }
 
-            // sleep after every other entry loaded.
-            svcSleepThread(2e+6); // 2ms
+            ThreadResultData result{ids[i]};
+            TimeStamp ts;
+            if (auto data = nxtcGetApplicationMetadataEntryById(ids[i])) {
+                log_write("[NXTC] loaded from cache time taken: %.2fs %zums %zuns\n", ts.GetSecondsD(), ts.GetMs(), ts.GetNs());
+                ON_SCOPE_EXIT(nxtcFreeApplicationMetadata(&data));
 
-            const auto result = LoadControlEntry(ids[i]);
+                result.control = std::make_unique<NsApplicationControlData>();
+                result.status = NacpLoadStatus::Loaded;
+                std::strcpy(result.lang.name, data->name);
+                std::strcpy(result.lang.author, data->publisher);
+                std::memcpy(result.control->icon, data->icon_data, data->icon_size);
+                result.jpeg_size = data->icon_size;
+            } else {
+                // sleep after every other entry loaded.
+                svcSleepThread(2e+6); // 2ms
+
+                result = LoadControlEntry(ids[i]);
+                if (result.status == NacpLoadStatus::Loaded) {
+                    nxtcAddEntry(ids[i], &result.control->nacp, result.jpeg_size, result.control->icon, true);
+                }
+            }
+
             mutexLock(&m_mutex_result);
             ON_SCOPE_EXIT(mutexUnlock(&m_mutex_result));
             m_result.emplace_back(result);
@@ -871,6 +936,10 @@ Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
                     ));
                 }, true));
             }
+
+            options->Add(std::make_shared<SidebarEntryBool>("Title cache"_i18n, m_title_cache.Get(), [this](bool& v_out){
+                m_title_cache.Set(v_out);
+            }));
         }})
     );
 
@@ -883,13 +952,14 @@ Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
         e.Open();
     }
 
-    threadCreate(&m_thread, ThreadFunc, &m_thread_data, nullptr, 1024*32, THREAD_PRIO, THREAD_CORE);
+    m_thread_data = std::make_unique<ThreadData>(m_title_cache.Get());
+    threadCreate(&m_thread, ThreadFunc, m_thread_data.get(), nullptr, 1024*32, THREAD_PRIO, THREAD_CORE);
     svcSetThreadCoreMask(m_thread.handle, THREAD_CORE, THREAD_AFFINITY_DEFAULT(THREAD_CORE));
     threadStart(&m_thread);
 }
 
 Menu::~Menu() {
-    m_thread_data.Close();
+    m_thread_data->Close();
 
     for (auto& e : ncm_entries) {
         e.Close();
@@ -928,7 +998,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     int image_load_count = 0;
 
     std::vector<ThreadResultData> data;
-    m_thread_data.Pop(data);
+    m_thread_data->Pop(data);
 
     for (const auto& d : data) {
         const auto it = std::ranges::find_if(m_entries, [&d](auto& e) {
@@ -945,7 +1015,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         auto& e = m_entries[pos];
 
         if (e.status == NacpLoadStatus::None) {
-            m_thread_data.Push(e.app_id);
+            m_thread_data->Push(e.app_id);
             e.status = NacpLoadStatus::Progress;
         }
 
@@ -956,8 +1026,11 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
             }
         }
 
+        char title_id[33];
+        std::snprintf(title_id, sizeof(title_id), "%016lX", e.app_id);
+
         const auto selected = pos == m_index;
-        DrawEntry(vg, theme, m_layout.Get(), v, selected, e.image, e.GetName(), e.GetAuthor(), e.GetDisplayVersion());
+        DrawEntry(vg, theme, m_layout.Get(), v, selected, e.image, e.GetName(), e.GetAuthor(), title_id);
 
         if (e.selected) {
             gfx::drawRect(vg, v, theme->GetColour(ThemeEntryID_FOCUS), 5);

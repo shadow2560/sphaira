@@ -186,7 +186,7 @@ Result ParseCnmt(const fs::FsPath& path, u64 program_id, ncm::PackagedContentMet
     R_SUCCEED();
 }
 
-Result ParseControl(const fs::FsPath& path, u64 program_id, void* nacp_out, s64 nacp_size, std::vector<u8>* icon_out) {
+Result ParseControl(const fs::FsPath& path, u64 program_id, void* nacp_out, s64 nacp_size, std::vector<u8>* icon_out, s64 nacp_off) {
     FsFileSystem fs;
     R_TRY(fsOpenFileSystemWithId(std::addressof(fs), program_id, FsFileSystemType_ContentControl, path, FsContentAttributes_All));
     ON_SCOPE_EXIT(fsFsClose(std::addressof(fs)));
@@ -198,7 +198,7 @@ Result ParseControl(const fs::FsPath& path, u64 program_id, void* nacp_out, s64 
         ON_SCOPE_EXIT(fsFileClose(std::addressof(file)));
 
         u64 bytes_read;
-        R_TRY(fsFileRead(&file, 0, nacp_out, nacp_size, 0, &bytes_read));
+        R_TRY(fsFileRead(&file, nacp_off, nacp_out, nacp_size, 0, &bytes_read));
     }
 
     // read icon.
