@@ -396,6 +396,7 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
                 log_write("failed to delete file: %s\n", safe_buf.s);
             } else {
                 log_write("deleted file: %s\n", safe_buf.s);
+                svcSleepThread(1e+5);
                 // todo: delete empty directories!
                 // fs::delete_directory(safe_buf);
             }
@@ -603,6 +604,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
                     log_write("failed to delete: %s\n", safe_buf.s);
                 } else {
                     log_write("deleted file: %s\n", safe_buf.s);
+                    svcSleepThread(1e+5);
                 }
             }
         }

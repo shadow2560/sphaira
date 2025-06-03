@@ -1425,9 +1425,11 @@ static Result DeleteAllCollections(ProgressBox* pbox, fs::Fs* fs, const Selected
                 if ((mode & FsDirOpenMode_ReadDirs) && p.type == FsDirEntryType_Dir) {
                     log_write("deleting dir: %s\n", full_path.s);
                     R_TRY(fs->DeleteDirectory(full_path));
+                    svcSleepThread(1e+5);
                 } else if ((mode & FsDirOpenMode_ReadFiles) && p.type == FsDirEntryType_File) {
                     log_write("deleting file: %s\n", full_path.s);
                     R_TRY(fs->DeleteFile(full_path));
+                    svcSleepThread(1e+5);
                 }
             }
 
