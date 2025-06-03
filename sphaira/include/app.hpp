@@ -10,7 +10,9 @@
 #include "fs.hpp"
 #include "log.hpp"
 
+#ifdef USE_NVJPG
 #include <nvjpg.hpp>
+#endif
 #include <switch.h>
 #include <vector>
 #include <string>
@@ -273,7 +275,9 @@ public:
 
     PLSR_PlayerSoundId m_sound_ids[SoundEffect_MAX]{};
 
+#ifdef USE_NVJPG
     nj::Decoder m_decoder;
+#endif
 
 private: // from nanovg decko3d example by adubbz
     static constexpr unsigned NumFramebuffers = 2;

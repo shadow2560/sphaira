@@ -1400,9 +1400,11 @@ App::App(const char* argv0) {
 
     curl::Init();
 
+#ifdef USE_NVJPG
     // this has to be init before deko3d.
     nj::initialize();
     m_decoder.initialize();
+#endif
 
     // get current size of the framebuffer
     const auto fb = GetFrameBufferSize();
@@ -1883,8 +1885,10 @@ App::~App() {
     nvgDeleteDk(this->vg);
     this->renderer.reset();
 
+#ifdef USE_NVJPG
     m_decoder.finalize();
     nj::finalize();
+#endif
 
     // backup hbmenu if it is not sphaira
     if (App::GetReplaceHbmenuEnable() && !IsHbmenu()) {

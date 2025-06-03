@@ -208,6 +208,8 @@ FetchContent_Declare(nvjpg
 )
 
 set(USE_NEW_ZSTD ON)
+# has issues with some homebrew and game icons (oxenfree, overwatch2).
+set(USE_NVJPG ON)
 
 set(ZSTD_BUILD_STATIC ON)
 set(ZSTD_BUILD_SHARED OFF)
@@ -310,13 +312,15 @@ add_library(libnxtc
 )
 target_include_directories(libnxtc PUBLIC ${libnxtc_SOURCE_DIR}/include)
 
-add_library(nvjpg
-    ${nvjpg_SOURCE_DIR}/lib/decoder.cpp
-    ${nvjpg_SOURCE_DIR}/lib/image.cpp
-    ${nvjpg_SOURCE_DIR}/lib/surface.cpp
-)
-target_include_directories(nvjpg PUBLIC ${nvjpg_SOURCE_DIR}/include)
-set_target_properties(nvjpg PROPERTIES CXX_STANDARD 26)
+if (USE_NVJPG)
+    add_library(nvjpg
+        ${nvjpg_SOURCE_DIR}/lib/decoder.cpp
+        ${nvjpg_SOURCE_DIR}/lib/image.cpp
+        ${nvjpg_SOURCE_DIR}/lib/surface.cpp
+    )
+    target_include_directories(nvjpg PUBLIC ${nvjpg_SOURCE_DIR}/include)
+    set_target_properties(nvjpg PROPERTIES CXX_STANDARD 26)
+endif()
 
 find_package(ZLIB REQUIRED)
 find_library(minizip_lib minizip REQUIRED)
@@ -348,7 +352,6 @@ target_link_libraries(sphaira PRIVATE
     yyjson
     # libusbhsfs
     libnxtc
-    nvjpg
 
     ${minizip_lib}
     ZLIB::ZLIB
@@ -363,6 +366,11 @@ else()
     message(STATUS "USING LOCAL ZSTD")
     target_link_libraries(sphaira PRIVATE ${zstd_lib})
     target_include_directories(sphaira PRIVATE ${zstd_inc})
+endif()
+
+if (USE_NVJPG)
+    target_link_libraries(sphaira PRIVATE nvjpg)
+    target_compile_definitions(sphaira PRIVATE USE_NVJPG)
 endif()
 
 target_include_directories(sphaira PRIVATE
