@@ -17,6 +17,7 @@
 #include "threaded_file_transfer.hpp"
 #include "nro.hpp"
 #include "web.hpp"
+#include "minizip_helper.hpp"
 
 #include <minIni.h>
 #include <string>
@@ -75,62 +76,6 @@ constexpr const char* SORT_STR[] = {
 constexpr const char* ORDER_STR[] = {
     "Desc",
     "Asc",
-};
-
-struct MzMem {
-    const void* buf;
-    size_t size;
-    size_t offset;
-};
-
-ZPOS64_T minizip_tell_file_func(voidpf opaque, voidpf stream) {
-    auto mem = static_cast<const MzMem*>(opaque);
-    return mem->offset;
-}
-
-long minizip_seek_file_func(voidpf opaque, voidpf stream, ZPOS64_T offset, int origin) {
-    auto mem = static_cast<MzMem*>(opaque);
-    size_t new_offset = 0;
-
-    switch (origin) {
-        case ZLIB_FILEFUNC_SEEK_SET: new_offset = offset; break;
-        case ZLIB_FILEFUNC_SEEK_CUR: new_offset = mem->offset + offset; break;
-        case ZLIB_FILEFUNC_SEEK_END: new_offset = (mem->size - 1) + offset; break;
-        default: return -1;
-    }
-
-    if (new_offset > mem->size) {
-        return -1;
-    }
-
-    mem->offset = new_offset;
-    return 0;
-}
-
-voidpf minizip_open_file_func(voidpf opaque, const void* filename, int mode) {
-    return opaque;
-}
-
-uLong minizip_read_file_func(voidpf opaque, voidpf stream, void* buf, uLong size) {
-    auto mem = static_cast<MzMem*>(opaque);
-
-    size = std::min(size, mem->size - mem->offset);
-    std::memcpy(buf, (const u8*)mem->buf + mem->offset, size);
-    mem->offset += size;
-
-    return size;
-}
-
-int minizip_close_file_func(voidpf opaque, voidpf stream) {
-    return 0;
-}
-
-constexpr zlib_filefunc64_def zlib_filefunc = {
-    .zopen64_file = minizip_open_file_func,
-    .zread_file = minizip_read_file_func,
-    .ztell64_file = minizip_tell_file_func,
-    .zseek64_file = minizip_seek_file_func,
-    .zclose_file = minizip_close_file_func,
 };
 
 auto BuildIconUrl(const Entry& e) -> std::string {
@@ -474,20 +419,17 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
         }
     }
 
-    struct MzMem mem{};
-    mem.buf = api_result.data.data();
-    mem.size = api_result.data.size();
-    auto file_func = zlib_filefunc;
-    file_func.opaque = &mem;
-
-    zlib_filefunc64_def* file_func_ptr{};
+    mz::MzSpan mz_span{api_result.data};
+    zlib_filefunc64_def file_func;
     if (!file_download) {
-        file_func_ptr = &file_func;
+        mz::FileFuncSpan(&mz_span, &file_func);
+    } else {
+        mz::FileFuncStdio(&file_func);
     }
 
     // 3. extract the zip
     if (!pbox->ShouldExit()) {
-        auto zfile = unzOpen2_64(zip_out, file_func_ptr);
+        auto zfile = unzOpen2_64(zip_out, &file_func);
         R_UNLESS(zfile, 0x1);
         ON_SCOPE_EXIT(unzClose(zfile));
 

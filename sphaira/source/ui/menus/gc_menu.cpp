@@ -529,7 +529,7 @@ Result Menu::GcMount() {
     // the fs, same as mounting storage.
     for (u32 i = 0; i < REMOUNT_ATTEMPT_MAX; i++) {
         R_TRY(fsDeviceOperatorGetGameCardHandle(std::addressof(m_dev_op), std::addressof(m_handle)));
-        m_fs = std::make_unique<fs::FsNativeGameCard>(std::addressof(m_handle), FsGameCardPartition_Secure, false);
+        m_fs = std::make_unique<fs::FsNativeGameCard>(std::addressof(m_handle), FsGameCardPartition_Secure);
         if (R_SUCCEEDED(m_fs->GetFsOpenResult())) {
             break;
         }

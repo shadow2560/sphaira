@@ -527,26 +527,36 @@ struct FsNativeSd final : FsNative {
 #endif
 
 struct FsNativeBis final : FsNative {
-    FsNativeBis(FsBisPartitionId id, const FsPath& string, bool ignore_read_only = true) : FsNative{ignore_read_only} {
+    FsNativeBis(FsBisPartitionId id, const FsPath& string) {
         m_open_result = fsOpenBisFileSystem(&m_fs, id, string);
     }
 };
 
 struct FsNativeImage final : FsNative {
-    FsNativeImage(FsImageDirectoryId id, bool ignore_read_only = true) : FsNative{ignore_read_only} {
+    FsNativeImage(FsImageDirectoryId id) {
         m_open_result = fsOpenImageDirectoryFileSystem(&m_fs, id);
     }
 };
 
 struct FsNativeContentStorage final : FsNative {
-    FsNativeContentStorage(FsContentStorageId id, bool ignore_read_only = true) : FsNative{ignore_read_only} {
+    FsNativeContentStorage(FsContentStorageId id) {
         m_open_result = fsOpenContentStorageFileSystem(&m_fs, id);
     }
 };
 
 struct FsNativeGameCard final : FsNative {
-    FsNativeGameCard(const FsGameCardHandle* handle, FsGameCardPartition partition, bool ignore_read_only = true) : FsNative{ignore_read_only} {
+    FsNativeGameCard(const FsGameCardHandle* handle, FsGameCardPartition partition) {
         m_open_result = fsOpenGameCardFileSystem(&m_fs, handle, partition);
+    }
+};
+
+struct FsNativeSave final : FsNative {
+    FsNativeSave(FsSaveDataSpaceId save_data_space_id, const FsSaveDataAttribute *attr, bool read_only) {
+        if (read_only) {
+            m_open_result = fsOpenReadOnlySaveDataFileSystem(&m_fs, save_data_space_id, attr);
+        } else {
+            m_open_result = fsOpenSaveDataFileSystem(&m_fs, save_data_space_id, attr);
+        }
     }
 };
 

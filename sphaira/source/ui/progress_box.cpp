@@ -88,6 +88,7 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
         m_last_offset = m_offset;
     }
 
+    const auto action = m_action;
     const auto title = m_title;
     const auto transfer = m_transfer;
     const auto size = m_size;
@@ -166,7 +167,7 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
         gfx::drawTextArgs(vg, center_x, prog_bar.y + prog_bar.h + 30, 18, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), "%s (%s)", time_str, speed_str);
     }
 
-    gfx::drawTextArgs(vg, center_x, m_pos.y + 40, 24, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), m_action.c_str());
+    gfx::drawTextArgs(vg, center_x, m_pos.y + 40, 24, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, theme->GetColour(ThemeEntryID_TEXT), action.c_str());
 
     const auto draw_text = [&](ScrollingText& scroll, const std::string& txt, float y, float size, float pad, ThemeEntryID id){
         float bounds[4];
@@ -185,6 +186,14 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
     }
 
     nvgRestore(vg);
+}
+
+auto ProgressBox::SetActionName(const std::string& action)  -> ProgressBox& {
+    mutexLock(&m_mutex);
+    m_action = action;
+    mutexUnlock(&m_mutex);
+    Yield();
+    return *this;
 }
 
 auto ProgressBox::SetTitle(const std::string& title)  -> ProgressBox& {

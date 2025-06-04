@@ -2,6 +2,7 @@
 #include "log.hpp"
 #include "defines.hpp"
 #include "app.hpp"
+#include "minizip_helper.hpp"
 
 #include <vector>
 #include <algorithm>
@@ -456,7 +457,7 @@ Result TransferUnzip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::F
         [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
             const auto result = unzReadCurrentFile(zfile, data, size);
             if (result <= 0) {
-                // log_write("failed to read zip file: %s\n", inzip.c_str());
+                log_write("failed to read zip file: %s %d\n", path.s, result);
                 R_THROW(0x1);
             }
 
@@ -474,21 +475,29 @@ Result TransferUnzip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::F
     ));
 
     // validate crc32 (if set in the info).
-    R_UNLESS(!crc32 || crc32 == crc32_out, 0x1);
+    R_UNLESS(!crc32 || crc32 == crc32_out, 0x8);
 
     R_SUCCEED();
 }
 
-Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path) {
+Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path, u32* crc32) {
     fs::File f;
     R_TRY(fs->OpenFile(path, FsOpenMode_Read, &f));
 
     s64 file_size;
     R_TRY(f.GetSize(&file_size));
 
+    if (crc32) {
+        *crc32 = 0;
+    }
+
     return thread::TransferInternal(pbox, file_size,
         [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
-            return f.Read(off, data, size, FsReadOption_None, bytes_read);
+            const auto rc = f.Read(off, data, size, FsReadOption_None, bytes_read);
+            if (R_SUCCEEDED(rc) && crc32) {
+                *crc32 = crc32CalculateWithSeed(*crc32, data, *bytes_read);
+            }
+            return rc;
         },
         [&](const void* data, s64 off, s64 size) -> Result {
             if (ZIP_OK != zipWriteInFileInZip(zfile, data, size)) {
@@ -559,7 +568,10 @@ Result TransferUnzipAll(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs
 }
 
 Result TransferUnzipAll(ui::ProgressBox* pbox, const fs::FsPath& zip_out, fs::Fs* fs, const fs::FsPath& base_path, UnzipAllFilter filter) {
-    auto zfile = unzOpen64(zip_out);
+    zlib_filefunc64_def file_func;
+    mz::FileFuncStdio(&file_func);
+
+    auto zfile = unzOpen2_64(zip_out, &file_func);
     R_UNLESS(zfile, 0x1);
     ON_SCOPE_EXIT(unzClose(zfile));
 

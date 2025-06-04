@@ -43,7 +43,7 @@ Result TransferPull(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, StartCa
 Result TransferUnzip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path, s64 size, u32 crc32 = 0);
 
 // same as above but for zipping files.
-Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path);
+Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path, u32* crc32 = nullptr);
 
 // passes the name inside the zip an final output path.
 using UnzipAllFilter = std::function<bool(const fs::FsPath& name, fs::FsPath& path)>;

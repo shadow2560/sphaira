@@ -998,6 +998,11 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
 void Menu::Draw(NVGcontext* vg, Theme* theme) {
     MenuBase::Draw(vg, theme);
 
+    if (m_entries.empty()) {
+        gfx::drawTextArgs(vg, GetX() + GetW() / 2.f, GetY() + GetH() / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->GetColour(ThemeEntryID_TEXT_INFO), "Empty..."_i18n.c_str());
+        return;
+    }
+
     // max images per frame, in order to not hit io / gpu too hard.
     const int image_load_max = 2;
     int image_load_count = 0;
@@ -1096,7 +1101,7 @@ void Menu::ScanHomebrew() {
             u64 unk_x11;// = e.unk_x11;
             memcpy(&unk_x0a, e.unk_x0a, sizeof(e.unk_x0a));
             memcpy(&unk_x11, e.unk_x11, sizeof(e.unk_x11));
-            log_write("ID: %016lx got type: %u unk_x09: %u unk_x0a: %zu unk_x10: %u unk_x11: %zu\n", e.application_id, e.type,
+            log_write("ID: %016lx got type: %u unk_x09: %u unk_x0a: %zu unk_x10: %u unk_x11: %zu\n", e.app_id, e.type,
                 unk_x09,
                 unk_x0a,
                 unk_x10,

@@ -40,6 +40,7 @@ add_executable(sphaira
     source/ui/menus/irs_menu.cpp
     source/ui/menus/main_menu.cpp
     source/ui/menus/menu_base.cpp
+    source/ui/menus/save_menu.cpp
     source/ui/menus/themezer.cpp
     source/ui/menus/ghdl.cpp
     source/ui/menus/usb_menu.cpp
@@ -79,6 +80,7 @@ add_executable(sphaira
     source/i18n.cpp
     source/ftpsrv_helper.cpp
     source/threaded_file_transfer.cpp
+    source/minizip_helper.cpp
 
     source/usb/base.cpp
     source/usb/usbds.cpp
@@ -198,8 +200,8 @@ FetchContent_Declare(libusbhsfs
 )
 
 FetchContent_Declare(libnxtc
-    GIT_REPOSITORY https://github.com/DarkMatterCore/libnxtc.git
-    GIT_TAG v0.0.2
+    GIT_REPOSITORY https://github.com/ITotalJustice/libnxtc.git
+    GIT_TAG 0d369b8
 )
 
 FetchContent_Declare(nvjpg

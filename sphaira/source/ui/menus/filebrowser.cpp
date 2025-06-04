@@ -21,6 +21,7 @@
 #include "hasher.hpp"
 #include "location.hpp"
 #include "threaded_file_transfer.hpp"
+#include "minizip_helper.hpp"
 
 #include "yati/yati.hpp"
 #include "yati/source/file.hpp"
@@ -435,7 +436,6 @@ FsView::~FsView() {
 }
 
 void FsView::Update(Controller* controller, TouchInfo* touch) {
-    Widget::Update(controller, touch);
     m_list->OnUpdate(controller, touch, m_index, m_entries_current.size(), [this](bool touch, auto i) {
         if (touch && m_index == i) {
             FireAction(Button::A);
@@ -790,7 +790,10 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
         zip_info.tmz_date.tm_mon = tm->tm_mon;
         zip_info.tmz_date.tm_year = tm->tm_year;
 
-        auto zfile = zipOpen(zip_out, APPEND_STATUS_CREATE);
+        zlib_filefunc64_def file_func;
+        mz::FileFuncStdio(&file_func);
+
+        auto zfile = zipOpen2_64(zip_out, APPEND_STATUS_CREATE, nullptr, &file_func);
         R_UNLESS(zfile, 0x1);
         ON_SCOPE_EXIT(zipClose(zfile, "sphaira v" APP_VERSION_HASH));
 
@@ -1854,6 +1857,13 @@ Menu::~Menu() {
 }
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
+    // workaround the buttons not being display properly.
+    // basically, inherit all actions from the view, draw them,
+    // then restore state after.
+    const auto actions_copy = GetActions();
+    ON_SCOPE_EXIT(m_actions = actions_copy);
+    m_actions.insert_range(view->GetActions());
+
     MenuBase::Update(controller, touch);
     view->Update(controller, touch);
 }
