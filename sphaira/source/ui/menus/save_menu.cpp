@@ -913,7 +913,7 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
                     m_auto_backup_on_restore.Set(v_out);
                 }));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Compress backup (slow)"_i18n, m_compress_save_backup.Get(), [this](bool& v_out){
+                options->Add(std::make_shared<SidebarEntryBool>("Compress backup"_i18n, m_compress_save_backup.Get(), [this](bool& v_out){
                     m_compress_save_backup.Set(v_out);
                 }));
             }));

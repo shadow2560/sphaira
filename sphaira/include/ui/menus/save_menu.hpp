@@ -150,7 +150,7 @@ private:
     option::OptionLong m_order{INI_SECTION, "order", OrderType::OrderType_Descending};
     option::OptionLong m_layout{INI_SECTION, "layout", LayoutType::LayoutType_Grid};
     option::OptionBool m_auto_backup_on_restore{INI_SECTION, "auto_backup_on_restore", true};
-    option::OptionBool m_compress_save_backup{INI_SECTION, "compress_save_backup", false};
+    option::OptionBool m_compress_save_backup{INI_SECTION, "compress_save_backup", true};
 };
 
 } // namespace sphaira::ui::menu::save
