@@ -275,7 +275,7 @@ set(FTPSRV_LIB_SESSIONS 16)
 set(FTPSRV_LIB_BUF_SIZE 1024*64)
 
 set(FTPSRV_LIB_CUSTOM_DEFINES
-    USE_VFS_SAVE=$<BOOL:TRUE>
+    USE_VFS_SAVE=$<BOOL:FALSE>
     USE_VFS_STORAGE=$<BOOL:TRUE>
     # disabled as it may conflict with the gamecard menu.
     USE_VFS_GC=$<BOOL:FALSE>
@@ -294,7 +294,6 @@ add_library(ftpsrv_helper
     ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_none.c
     ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_root.c
     ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_fs.c
-    ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_save.c
     ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_storage.c
     ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_stdio.c
     ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs/vfs_nx_hdd.c
