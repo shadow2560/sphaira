@@ -1857,18 +1857,23 @@ App::~App() {
     log_write("starting to exit\n");
     TimeStamp ts;
 
-    i18n::exit();
-    curl::Exit();
+    appletUnhook(&m_appletHookCookie);
+
+    // destroy this first as it seems to prevent a crash when exiting the appstore
+    // when an image that was being drawn is displayed
+    // replicate: saves -> homebrew -> misc -> appstore -> sphaira -> changelog -> exit
+    // it will crash when deleting image 43.
+    this->destroyFramebufferResources();
 
     // this has to be called before any cleanup to ensure the lifetime of
     // nvg is still active as some widgets may need to free images.
     m_widgets.clear();
     nvgDeleteImage(vg, m_default_image);
 
-    appletUnhook(&m_appletHookCookie);
+    i18n::exit();
+    curl::Exit();
 
     ini_puts("config", "theme", m_theme.meta.ini_path, CONFIG_PATH);
-
     CloseTheme();
 
     // Free any loaded sound from memory
@@ -1881,7 +1886,6 @@ App::~App() {
 	// De-initialize our player
     plsrPlayerExit();
 
-    this->destroyFramebufferResources();
     nvgDeleteDk(this->vg);
     this->renderer.reset();
 
