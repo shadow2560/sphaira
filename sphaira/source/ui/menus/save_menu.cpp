@@ -222,9 +222,9 @@ void FakeNacpEntry(ThreadResultData& e) {
 auto GetSaveFolder(u8 data_type) -> fs::FsPath {
     switch (data_type) {
         case FsSaveDataType_System:     return "Save System";
-        case FsSaveDataType_SystemBcat: return "Save System Bcat";
+        case FsSaveDataType_SystemBcat: return "Save System BCAT";
         case FsSaveDataType_Account:    return "Save";
-        case FsSaveDataType_Bcat:       return "Save Bcat";
+        case FsSaveDataType_Bcat:       return "Save BCAT";
         case FsSaveDataType_Device:     return "Save Device";
         case FsSaveDataType_Temporary:  return "Save Temporary";
         case FsSaveDataType_Cache:      return "Save Cache";
@@ -710,11 +710,11 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
             PopupList::Items data_type_items;
             data_type_items.emplace_back("System"_i18n);
             data_type_items.emplace_back("Account"_i18n);
-            data_type_items.emplace_back("Bcat"_i18n);
+            data_type_items.emplace_back("BCAT"_i18n);
             data_type_items.emplace_back("Device"_i18n);
             data_type_items.emplace_back("Temporary"_i18n);
             data_type_items.emplace_back("Cache"_i18n);
-            data_type_items.emplace_back("SystemBcat"_i18n);
+            data_type_items.emplace_back("System BCAT"_i18n);
 
             options->Add(std::make_shared<SidebarEntryCallback>("Sort By"_i18n, [this](){
                 auto options = std::make_shared<Sidebar>("Sort Options"_i18n, Sidebar::Side::RIGHT);
@@ -1391,29 +1391,8 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
             R_UNLESS(ZIP_OK == zipWriteInFileInZip(zfile, &meta, sizeof(meta)), 0x1);
         }
 
-        const auto zip_add = [&](const FsDirectoryEntry& dir_entry, const fs::FsPath& file_path) -> Result {
-            auto zip_info = zip_info_default;
-
-            // try and load the actual timestamp of the file.
-            // TODO: not supported for saves...
-            #if 1
-            FsTimeStampRaw timestamp{};
-            if (R_SUCCEEDED(save_fs.GetFileTimeStampRaw(file_path, &timestamp)) && timestamp.is_valid) {
-                const auto time = (time_t)timestamp.modified;
-                if (auto tm = localtime(&time)) {
-                    zip_info.tmz_date.tm_sec = tm->tm_sec;
-                    zip_info.tmz_date.tm_min = tm->tm_min;
-                    zip_info.tmz_date.tm_hour = tm->tm_hour;
-                    zip_info.tmz_date.tm_mday = tm->tm_mday;
-                    zip_info.tmz_date.tm_mon = tm->tm_mon;
-                    zip_info.tmz_date.tm_year = tm->tm_year;
-                    log_write("got timestamp!\n");
-                }
-            }
-            #endif
-
-            // the file name needs to be relative to the current directory.
-            const char* file_name_in_zip = file_path.s + std::strlen("/");
+        const auto zip_add = [&](const fs::FsPath& file_path) -> Result {
+            const char* file_name_in_zip = file_path.s;
 
             // strip root path (/ or ums0:)
             if (!std::strncmp(file_name_in_zip, save_fs.Root(), std::strlen(save_fs.Root()))) {
@@ -1421,14 +1400,14 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
             }
 
             // root paths are banned in zips, they will warn when extracting otherwise.
-            if (file_name_in_zip[0] == '/') {
+            while (file_name_in_zip[0] == '/') {
                 file_name_in_zip++;
             }
 
             pbox->NewTransfer(file_name_in_zip);
 
             const auto level = compressed ? Z_DEFAULT_COMPRESSION : Z_NO_COMPRESSION;
-            if (ZIP_OK != zipOpenNewFileInZip(zfile, file_name_in_zip, &zip_info, NULL, 0, NULL, 0, NULL, Z_DEFLATED, level)) {
+            if (ZIP_OK != zipOpenNewFileInZip(zfile, file_name_in_zip, &zip_info_default, NULL, 0, NULL, 0, NULL, Z_DEFLATED, level)) {
                 log_write("failed to add zip for %s\n", file_path.s);
                 R_THROW(0x1);
             }
@@ -1441,7 +1420,7 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
         for (const auto& collection : collections) {
             for (const auto& file : collection.files) {
                 const auto file_path = fs::AppendPath(collection.path, file.name);
-                R_TRY(zip_add(file, file_path));
+                R_TRY(zip_add(file_path));
             }
         }
     }

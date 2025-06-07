@@ -813,7 +813,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
             }
 
             // root paths are banned in zips, they will warn when extracting otherwise.
-            if (file_name_in_zip[0] == '/') {
+            while (file_name_in_zip[0] == '/') {
                 file_name_in_zip++;
             }
 
