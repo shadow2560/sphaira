@@ -551,11 +551,15 @@ struct FsNativeGameCard final : FsNative {
 };
 
 struct FsNativeSave final : FsNative {
-    FsNativeSave(FsSaveDataSpaceId save_data_space_id, const FsSaveDataAttribute *attr, bool read_only) {
-        if (read_only) {
-            m_open_result = fsOpenReadOnlySaveDataFileSystem(&m_fs, save_data_space_id, attr);
+    FsNativeSave(FsSaveDataType data_type, FsSaveDataSpaceId save_data_space_id, const FsSaveDataAttribute *attr, bool read_only) {
+        if (data_type == FsSaveDataType_System || data_type == FsSaveDataType_SystemBcat) {
+            m_open_result = fsOpenSaveDataFileSystemBySystemSaveDataId(&m_fs, FsSaveDataSpaceId_System, attr);
         } else {
-            m_open_result = fsOpenSaveDataFileSystem(&m_fs, save_data_space_id, attr);
+            if (read_only) {
+                m_open_result = fsOpenReadOnlySaveDataFileSystem(&m_fs, save_data_space_id, attr);
+            } else {
+                m_open_result = fsOpenSaveDataFileSystem(&m_fs, save_data_space_id, attr);
+            }
         }
     }
 };

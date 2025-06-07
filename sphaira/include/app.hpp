@@ -195,7 +195,7 @@ public:
     static auto GetAccountList() -> std::vector<AccountProfileBase> {
         std::vector<AccountProfileBase> out;
 
-        AccountUid uids[8];
+        AccountUid uids[ACC_USER_LIST_SIZE];
         s32 account_count;
         if (R_SUCCEEDED(accountListAllUsers(uids, std::size(uids), &account_count))) {
             for (s32 i = 0; i < account_count; i++) {

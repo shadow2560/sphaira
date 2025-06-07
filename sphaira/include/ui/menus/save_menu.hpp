@@ -4,6 +4,7 @@
 #include "ui/list.hpp"
 #include "fs.hpp"
 #include "option.hpp"
+#include "dumper.hpp"
 #include <memory>
 #include <vector>
 #include <span>
@@ -126,6 +127,10 @@ private:
     void BackupSaves(std::vector<std::reference_wrapper<Entry>>& entries);
     void RestoreSave();
 
+    auto BuildSavePath(const Entry& e, bool is_auto) const -> fs::FsPath;
+    Result RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::FsPath& path) const;
+    Result BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& location, const Entry& e, bool compressed, bool is_auto = false) const;
+
 private:
     static constexpr inline const char* INI_SECTION = "saves";
 
@@ -138,6 +143,7 @@ private:
 
     std::vector<AccountProfileBase> m_accounts{};
     s64 m_account_index{};
+    u8 m_data_type{FsSaveDataType_Account};
 
     ThreadData m_thread_data{};
     Thread m_thread{};
