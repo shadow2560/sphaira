@@ -93,12 +93,18 @@ bool is_read_only(std::string_view path) {
 
 } // namespace
 
-FsPath AppendPath(const FsPath& root_path, const FsPath& file_path) {
+FsPath AppendPath(const FsPath& root_path, const FsPath& _file_path) {
+    // strip leading '/' in file path.
+    auto file_path = _file_path.s;
+    while (file_path[0] == '/') {
+        file_path++;
+    }
+
     FsPath path;
     if (root_path[std::strlen(root_path) - 1] != '/') {
-        std::snprintf(path, sizeof(path), "%s/%s", root_path.s, file_path.s);
+        std::snprintf(path, sizeof(path), "%s/%s", root_path.s, file_path);
     } else {
-        std::snprintf(path, sizeof(path), "%s%s", root_path.s, file_path.s);
+        std::snprintf(path, sizeof(path), "%s%s", root_path.s, file_path);
     }
     return path;
 }
