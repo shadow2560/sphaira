@@ -370,16 +370,16 @@ auto BuildSaveBasePath(const Entry& e) -> fs::FsPath {
     return fs::AppendPath("/dumps/SAVE/", name);
 }
 
-auto BuildSavePath(const AccountEntry& acc, const Entry& e, bool is_auto) -> fs::FsPath {
+auto BuildSavePath(const AccountProfileBase& acc, const Entry& e, bool is_auto) -> fs::FsPath {
     const auto t = std::time(NULL);
     const auto tm = std::localtime(&t);
     const auto base = BuildSaveBasePath(e);
 
     fs::FsPath name_buf;
     if (is_auto) {
-        std::snprintf(name_buf, sizeof(name_buf), "AUTO - %s", acc.base.nickname);
+        std::snprintf(name_buf, sizeof(name_buf), "AUTO - %s", acc.nickname);
     } else {
-        std::snprintf(name_buf, sizeof(name_buf), "%s", acc.base.nickname);
+        std::snprintf(name_buf, sizeof(name_buf), "%s", acc.nickname);
     }
     utilsReplaceIllegalCharacters(name_buf, true);
 
@@ -505,7 +505,7 @@ Result RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::FsPath& 
     R_SUCCEED();
 }
 
-Result BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& location, const AccountEntry& acc, const Entry& e, bool compressed, bool is_auto = false) {
+Result BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& location, const AccountProfileBase& acc, const Entry& e, bool compressed, bool is_auto = false) {
     std::unique_ptr<fs::Fs> fs;
     if (location.entry.type == dump::DumpLocationType_Stdio) {
         fs = std::make_unique<fs::FsStdio>(true, location.stdio[location.entry.index].mount);
@@ -849,7 +849,7 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
 
             SidebarEntryArray::Items account_items;
             for (const auto& e : m_accounts) {
-                account_items.emplace_back(e.base.nickname);
+                account_items.emplace_back(e.nickname);
             }
 
             if (m_entries.size()) {
@@ -934,11 +934,11 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
         for (s32 i = 0; i < account_count; i++) {
             AccountProfile profile;
             if (R_SUCCEEDED(accountGetProfile(&profile, uids[i]))) {
+                ON_SCOPE_EXIT(accountProfileClose(&profile));
+
                 AccountProfileBase base;
                 if (R_SUCCEEDED(accountProfileGet(&profile, nullptr, &base))) {
-                    m_accounts.emplace_back(uids[i], profile, base);
-                } else {
-                    accountProfileClose(&profile);
+                    m_accounts.emplace_back(base);
                 }
             }
         }
@@ -969,10 +969,6 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
 
 Menu::~Menu() {
     m_thread_data.Close();
-
-    for (auto& e : m_accounts) {
-        accountProfileClose(&e.profile);
-    }
 
     for (auto& e : ncm_entries) {
         e.Close();
@@ -1067,7 +1063,7 @@ void Menu::SetIndex(s64 index) {
     }
 
     char title[0x40];
-    std::snprintf(title, sizeof(title), "%s | %016lX", m_accounts[m_account_index].base.nickname, m_entries[m_index].application_id);
+    std::snprintf(title, sizeof(title), "%s | %016lX", m_accounts[m_account_index].nickname, m_entries[m_index].application_id);
     SetTitleSubHeading(title);
     this->SetSubHeading(std::to_string(m_index + 1) + " / " + std::to_string(m_entries.size()));
 }

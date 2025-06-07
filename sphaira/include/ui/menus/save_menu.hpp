@@ -39,12 +39,6 @@ struct Entry final : FsSaveDataInfo {
     }
 };
 
-struct AccountEntry {
-    AccountUid uid;
-    AccountProfile profile;
-    AccountProfileBase base;
-};
-
 struct ThreadResultData {
     u64 id{};
     std::shared_ptr<NsApplicationControlData> control{};
@@ -140,7 +134,7 @@ private:
     bool m_is_reversed{};
     bool m_dirty{};
 
-    std::vector<AccountEntry> m_accounts{};
+    std::vector<AccountProfileBase> m_accounts{};
     s64 m_account_index{};
 
     ThreadData m_thread_data{};
