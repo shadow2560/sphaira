@@ -8,6 +8,7 @@
 #include "image.hpp"
 #include "threaded_file_transfer.hpp"
 #include "minizip_helper.hpp"
+#include "dumper.hpp"
 
 #include "ui/menus/save_menu.hpp"
 #include "ui/menus/filebrowser.hpp"
@@ -504,7 +505,16 @@ Result RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::FsPath& 
     R_SUCCEED();
 }
 
-Result BackupSaveInternal(ProgressBox* pbox, const AccountEntry& acc, const Entry& e, bool compressed, bool is_auto = false) {
+Result BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& location, const AccountEntry& acc, const Entry& e, bool compressed, bool is_auto = false) {
+    std::unique_ptr<fs::Fs> fs;
+    if (location.entry.type == dump::DumpLocationType_Stdio) {
+        fs = std::make_unique<fs::FsStdio>(true, location.stdio[location.entry.index].mount);
+    } else if (location.entry.type == dump::DumpLocationType_SdCard) {
+        fs = std::make_unique<fs::FsNativeSd>();
+    } else {
+        R_THROW(0x1);
+    }
+
     pbox->SetTitle(e.GetName());
     if (e.image) {
         pbox->SetImage(e.image);
@@ -539,10 +549,6 @@ Result BackupSaveInternal(ProgressBox* pbox, const AccountEntry& acc, const Entr
     // the save file may be empty, this isn't an error, but we exit early.
     R_UNLESS(!collections.empty(), 0x0);
 
-    // we will actually store this to the dump locations, eventually.
-    fs::FsNativeSd fs;
-    R_TRY(fs.GetFsOpenResult());
-
     const auto t = std::time(NULL);
     const auto tm = std::localtime(&t);
 
@@ -555,11 +561,11 @@ Result BackupSaveInternal(ProgressBox* pbox, const AccountEntry& acc, const Entr
     zip_info_default.tmz_date.tm_mon = tm->tm_mon;
     zip_info_default.tmz_date.tm_year = tm->tm_year;
 
-    const auto path = BuildSavePath(acc, e, is_auto);
+    const auto path = fs::AppendPath(fs->Root(), BuildSavePath(acc, e, is_auto));
     const auto temp_path = path + ".temp";
 
-    fs.CreateDirectoryRecursivelyWithPath(temp_path);
-    ON_SCOPE_EXIT(fs.DeleteFile(temp_path));
+    fs->CreateDirectoryRecursivelyWithPath(temp_path);
+    ON_SCOPE_EXIT(fs->DeleteFile(temp_path));
 
     // zip to memory if less than 1GB and not applet mode.
     // TODO: use my mmz code from ftpsrv to stream zip creation.
@@ -606,9 +612,9 @@ Result BackupSaveInternal(ProgressBox* pbox, const AccountEntry& acc, const Entr
 
             // try and load the actual timestamp of the file.
             // TODO: not supported for saves...
-            #if 0
+            #if 1
             FsTimeStampRaw timestamp{};
-            if (R_SUCCEEDED(fs.GetFileTimeStampRaw(file_path, &timestamp)) && timestamp.is_valid) {
+            if (R_SUCCEEDED(save_fs.GetFileTimeStampRaw(file_path, &timestamp)) && timestamp.is_valid) {
                 const auto time = (time_t)timestamp.modified;
                 if (auto tm = localtime(&time)) {
                     zip_info.tmz_date.tm_sec = tm->tm_sec;
@@ -660,10 +666,10 @@ Result BackupSaveInternal(ProgressBox* pbox, const AccountEntry& acc, const Entr
     const auto is_file_based_emummc = App::IsFileBaseEmummc();
     if (!file_download) {
         pbox->NewTransfer("Flushing zip to file");
-        R_TRY(fs.CreateFile(temp_path, mz_mem.buf.size(), 0));
+        R_TRY(fs->CreateFile(temp_path, mz_mem.buf.size(), 0));
 
         fs::File file;
-        R_TRY(fs.OpenFile(temp_path, FsOpenMode_Write, &file));
+        R_TRY(fs->OpenFile(temp_path, FsOpenMode_Write, &file));
 
         R_TRY(thread::Transfer(pbox, mz_mem.buf.size(),
             [&](void* data, s64 off, s64 size, u64* bytes_read) -> Result {
@@ -682,10 +688,9 @@ Result BackupSaveInternal(ProgressBox* pbox, const AccountEntry& acc, const Entr
         ));
     }
 
-    fs.DeleteFile(path);
-    R_TRY(fs.RenameFile(temp_path, path));
+    fs->DeleteFile(path);
+    R_TRY(fs->RenameFile(temp_path, path));
 
-    App::Notify("Backed up to "_i18n + path.toString());
     R_SUCCEED();
 }
 
@@ -1174,101 +1179,98 @@ void Menu::OnLayoutChange() {
 }
 
 void Menu::BackupSaves(std::vector<std::reference_wrapper<Entry>>& entries) {
-    int image = 0;
-    if (entries.size() == 1) {
-        image = entries[0].get().image;
-    }
-
-    App::Push(std::make_shared<OptionBox>(
-        "Are you sure you want to backup save(s)?"_i18n,
-        "Back"_i18n, "Backup"_i18n, 0, [this, entries](auto op_index){
-            if (op_index && *op_index) {
-                App::Push(std::make_shared<ProgressBox>(0, "Backup"_i18n, "", [this, entries](auto pbox) -> Result {
-                    for (auto& e : entries) {
-                        // the entry may not have loaded yet.
-                        LoadControlEntry(e);
-                        R_TRY(BackupSaveInternal(pbox, m_accounts[m_account_index], e, m_compress_save_backup.Get()));
-                    }
-                    R_SUCCEED();
-                }, [](Result rc){
-                    App::PushErrorBox(rc, "Backup failed!"_i18n);
-
-                    if (R_SUCCEEDED(rc)) {
-                        App::Notify("Backup successfull!"_i18n);
-                    }
-                }));
+    dump::DumpGetLocation("Select backup location"_i18n, dump::DumpLocationFlag_SdCard|dump::DumpLocationFlag_Stdio, [this, entries](const dump::DumpLocation& location){
+        App::Push(std::make_shared<ProgressBox>(0, "Backup"_i18n, "", [this, entries, location](auto pbox) -> Result {
+            for (auto& e : entries) {
+                // the entry may not have loaded yet.
+                LoadControlEntry(e);
+                R_TRY(BackupSaveInternal(pbox, location, m_accounts[m_account_index], e, m_compress_save_backup.Get()));
             }
-        }, image
-    ));
+            R_SUCCEED();
+        }, [](Result rc){
+            App::PushErrorBox(rc, "Backup failed!"_i18n);
+
+            if (R_SUCCEEDED(rc)) {
+                App::Notify("Backup successfull!"_i18n);
+            }
+        }));
+    });
 }
 
 void Menu::RestoreSave() {
-    const auto save_path = BuildSaveBasePath(m_entries[m_index]);
-
-    fs::FsNativeSd fs;
-    filebrowser::FsDirCollection collection;
-    filebrowser::FsView::get_collection(&fs, save_path, "", collection, true, false, false);
-
-    // reverse as they will be sorted in oldest -> newest.
-    std::ranges::reverse(collection.files);
-
-    std::vector<fs::FsPath> paths;
-    PopupList::Items items;
-    for (const auto&p : collection.files) {
-        const auto view = std::string_view{p.name};
-        if (view.starts_with("BCAT") || !view.ends_with(".zip")) {
-            continue;
+    dump::DumpGetLocation("Select restore location"_i18n, dump::DumpLocationFlag_SdCard|dump::DumpLocationFlag_Stdio, [this](const dump::DumpLocation& location){
+        std::unique_ptr<fs::Fs> fs;
+        if (location.entry.type == dump::DumpLocationType_Stdio) {
+            fs = std::make_unique<fs::FsStdio>(true, location.stdio[location.entry.index].mount);
+        } else if (location.entry.type == dump::DumpLocationType_SdCard) {
+            fs = std::make_unique<fs::FsNativeSd>();
         }
 
-        items.emplace_back(p.name);
-        paths.emplace_back(fs::AppendPath(collection.path, p.name));
-    }
+        const auto save_path = fs::AppendPath(fs->Root(), BuildSaveBasePath(m_entries[m_index]));
+        filebrowser::FsDirCollection collection;
+        filebrowser::FsView::get_collection(fs.get(), save_path, "", collection, true, false, false);
 
-    if (paths.empty()) {
-        App::Push(std::make_shared<ui::OptionBox>(
-            "No saves found in "_i18n + save_path.toString(),
-            "OK"_i18n
-        ));
-        return;
-    }
+        // reverse as they will be sorted in oldest -> newest.
+        std::ranges::reverse(collection.files);
 
-    const auto title = "Restore save for: "_i18n + m_entries[m_index].GetName();
-    App::Push(std::make_shared<PopupList>(
-        title, items, [this, paths, items](auto op_index){
-            if (!op_index) {
-                return;
+        std::vector<fs::FsPath> paths;
+        PopupList::Items items;
+        for (const auto&p : collection.files) {
+            const auto view = std::string_view{p.name};
+            if (view.starts_with("BCAT") || !view.ends_with(".zip")) {
+                continue;
             }
 
-            const auto file_name = items[*op_index];
-            const auto file_path = paths[*op_index];
-
-            App::Push(std::make_shared<OptionBox>(
-                "Are you sure you want to restore "_i18n + file_name + "?",
-                "Back"_i18n, "Restore"_i18n, 0, [this, file_path](auto op_index){
-                    if (op_index && *op_index) {
-                        App::Push(std::make_shared<ProgressBox>(0, "Restore"_i18n, "", [this, file_path](auto pbox) -> Result {
-                            // the entry may not have loaded yet.
-                            LoadControlEntry(m_entries[m_index]);
-
-                            if (m_auto_backup_on_restore.Get()) {
-                                pbox->SetActionName("Auto backup"_i18n);
-                                R_TRY(BackupSaveInternal(pbox, m_accounts[m_account_index], m_entries[m_index], m_compress_save_backup.Get(), true));
-                            }
-
-                            pbox->SetActionName("Restore"_i18n);
-                            return RestoreSaveInternal(pbox, m_entries[m_index], file_path);
-                        }, [this](Result rc){
-                            App::PushErrorBox(rc, "Restore failed!"_i18n);
-
-                            if (R_SUCCEEDED(rc)) {
-                                App::Notify("Restore successfull!"_i18n);
-                            }
-                        }));
-                    }
-                }, m_entries[m_index].image
-            ));
+            items.emplace_back(p.name);
+            paths.emplace_back(fs::AppendPath(collection.path, p.name));
         }
-    ));
+
+        if (paths.empty()) {
+            App::Push(std::make_shared<ui::OptionBox>(
+                "No saves found in "_i18n + save_path.toString(),
+                "OK"_i18n
+            ));
+            return;
+        }
+
+        const auto title = "Restore save for: "_i18n + m_entries[m_index].GetName();
+        App::Push(std::make_shared<PopupList>(
+            title, items, [this, paths, items, location](auto op_index){
+                if (!op_index) {
+                    return;
+                }
+
+                const auto file_name = items[*op_index];
+                const auto file_path = paths[*op_index];
+
+                App::Push(std::make_shared<OptionBox>(
+                    "Are you sure you want to restore "_i18n + file_name + "?",
+                    "Back"_i18n, "Restore"_i18n, 0, [this, file_path, location](auto op_index){
+                        if (op_index && *op_index) {
+                            App::Push(std::make_shared<ProgressBox>(0, "Restore"_i18n, "", [this, file_path, location](auto pbox) -> Result {
+                                // the entry may not have loaded yet.
+                                LoadControlEntry(m_entries[m_index]);
+
+                                if (m_auto_backup_on_restore.Get()) {
+                                    pbox->SetActionName("Auto backup"_i18n);
+                                    R_TRY(BackupSaveInternal(pbox, location, m_accounts[m_account_index], m_entries[m_index], m_compress_save_backup.Get(), true));
+                                }
+
+                                pbox->SetActionName("Restore"_i18n);
+                                return RestoreSaveInternal(pbox, m_entries[m_index], file_path);
+                            }, [this](Result rc){
+                                App::PushErrorBox(rc, "Restore failed!"_i18n);
+
+                                if (R_SUCCEEDED(rc)) {
+                                    App::Notify("Restore successfull!"_i18n);
+                                }
+                            }));
+                        }
+                    }, m_entries[m_index].image
+                ));
+            }
+        ));
+    });
 }
 
 } // namespace sphaira::ui::menu::save
