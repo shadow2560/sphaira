@@ -81,6 +81,8 @@ enum OrderType {
 
 using LayoutType = grid::LayoutType;
 
+void SignalChange();
+
 struct Menu final : grid::Menu {
     Menu(u32 flags);
     ~Menu();

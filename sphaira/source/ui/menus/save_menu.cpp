@@ -41,6 +41,8 @@ constexpr u32 NX_SAVE_META_MAGIC = 0x4A4B5356; // JKSV
 constexpr u32 NX_SAVE_META_VERSION = 1;
 constexpr const char* NX_SAVE_META_NAME = ".nx_save_meta.bin";
 
+constinit UEvent g_change_uevent;
+
 // https://github.com/J-D-K/JKSV/issues/264#issuecomment-2618962807
 struct NXSaveMeta {
     u32 magic{}; // NX_SAVE_META_MAGIC
@@ -714,6 +716,10 @@ void ThreadFunc(void* user) {
 
 } // namespace
 
+void SignalChange() {
+    ueventSignal(&g_change_uevent);
+}
+
 ThreadData::ThreadData() {
     ueventCreate(&m_uevent, true);
     mutexInit(&m_mutex_id);
@@ -928,21 +934,7 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
     OnLayoutChange();
     nsInitialize();
 
-    AccountUid uids[8];
-    s32 account_count;
-    if (R_SUCCEEDED(accountListAllUsers(uids, std::size(uids), &account_count))) {
-        for (s32 i = 0; i < account_count; i++) {
-            AccountProfile profile;
-            if (R_SUCCEEDED(accountGetProfile(&profile, uids[i]))) {
-                ON_SCOPE_EXIT(accountProfileClose(&profile));
-
-                AccountProfileBase base;
-                if (R_SUCCEEDED(accountProfileGet(&profile, nullptr, &base))) {
-                    m_accounts.emplace_back(base);
-                }
-            }
-        }
-    }
+    m_accounts = App::GetAccountList();
 
     // try and find the last / default account and set that.
     AccountUid uid{};
@@ -965,6 +957,7 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
     threadCreate(&m_thread, ThreadFunc, &m_thread_data, nullptr, 1024*32, THREAD_PRIO, THREAD_CORE);
     svcSetThreadCoreMask(m_thread.handle, THREAD_CORE, THREAD_AFFINITY_DEFAULT(THREAD_CORE));
     threadStart(&m_thread);
+    ueventCreate(&g_change_uevent, true);
 }
 
 Menu::~Menu() {
@@ -982,6 +975,10 @@ Menu::~Menu() {
 }
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
+    if (R_SUCCEEDED(waitSingle(waiterForUEvent(&g_change_uevent), 0))) {
+        m_dirty = true;
+    }
+
     if (m_dirty) {
         App::Notify("Updating application record list");
         SortAndFindLastFile(true);

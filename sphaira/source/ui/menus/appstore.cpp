@@ -1,4 +1,5 @@
 #include "ui/menus/appstore.hpp"
+#include "ui/menus/homebrew.hpp"
 #include "ui/sidebar.hpp"
 #include "ui/popup_list.hpp"
 #include "ui/progress_box.hpp"
@@ -798,6 +799,7 @@ void EntryMenu::UpdateOptions() {
         App::Push(std::make_shared<ProgressBox>(m_entry.image.image, "Downloading "_i18n, m_entry.title, [this](auto pbox){
             return InstallApp(pbox, m_entry);
         }, [this](Result rc){
+            homebrew::SignalChange();
             App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
 
             if (R_SUCCEEDED(rc)) {
@@ -813,6 +815,7 @@ void EntryMenu::UpdateOptions() {
         App::Push(std::make_shared<ProgressBox>(m_entry.image.image, "Uninstalling "_i18n, m_entry.title, [this](auto pbox){
             return UninstallApp(pbox, m_entry);
         }, [this](Result rc){
+            homebrew::SignalChange();
             App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
 
             if (R_SUCCEEDED(rc)) {

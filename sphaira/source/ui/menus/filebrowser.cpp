@@ -44,6 +44,8 @@
 namespace sphaira::ui::menu::filebrowser {
 namespace {
 
+constinit UEvent g_change_uevent;
+
 constexpr FsEntry FS_ENTRY_DEFAULT{
     "microSD card", "/", FsType::Sd, FsEntryFlag_Assoc,
 };
@@ -288,6 +290,10 @@ auto GetRomIcon(fs::Fs* fs, ProgressBox* pbox, std::string filename, const RomDa
 }
 
 } // namespace
+
+void SignalChange() {
+    ueventSignal(&g_change_uevent);
+}
 
 FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSide side) : m_menu{menu}, m_side{side} {
     this->SetActions(
@@ -1083,13 +1089,17 @@ void FsView::Sort() {
     std::sort(m_entries_current.begin(), m_entries_current.end(), sorter);
 }
 
-void FsView::SortAndFindLastFile() {
+void FsView::SortAndFindLastFile(bool scan) {
     std::optional<LastFile> last_file;
     if (!m_path.empty() && !m_entries_current.empty()) {
         last_file = LastFile(GetEntry().name, m_index, m_list->GetYoff(), m_entries_current.size());
     }
 
-    Sort();
+    if (scan) {
+        Scan(m_path);
+    } else {
+        Sort();
+    }
 
     if (last_file.has_value()) {
         SetIndexFromLastFile(*last_file);
@@ -1851,12 +1861,22 @@ Menu::Menu(u32 flags) : MenuBase{"FileBrowser"_i18n, flags} {
     }
 
     view = view_left = std::make_shared<FsView>(this, ViewSide::Left);
+    ueventCreate(&g_change_uevent, true);
 }
 
 Menu::~Menu() {
 }
 
 void Menu::Update(Controller* controller, TouchInfo* touch) {
+    if (R_SUCCEEDED(waitSingle(waiterForUEvent(&g_change_uevent), 0))) {
+        if (IsSplitScreen()) {
+            view_left->SortAndFindLastFile(true);
+            view_right->SortAndFindLastFile(true);
+        } else {
+            view->SortAndFindLastFile(true);
+        }
+    }
+
     // workaround the buttons not being display properly.
     // basically, inherit all actions from the view, draw them,
     // then restore state after.

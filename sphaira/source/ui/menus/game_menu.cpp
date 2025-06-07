@@ -5,6 +5,7 @@
 #include "defines.hpp"
 #include "i18n.hpp"
 #include "image.hpp"
+#include "swkbd.hpp"
 
 #include "ui/menus/game_menu.hpp"
 #include "ui/sidebar.hpp"
@@ -945,6 +946,33 @@ Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
             options->Add(std::make_shared<SidebarEntryBool>("Title cache"_i18n, m_title_cache.Get(), [this](bool& v_out){
                 m_title_cache.Set(v_out);
             }));
+
+            // todo: impl this.
+            #if 0
+            options->Add(std::make_shared<SidebarEntryCallback>("Create save"_i18n, [this](){
+                ui::PopupList::Items items{};
+                const auto accounts = App::GetAccountList();
+                for (auto& p : accounts) {
+                    items.emplace_back(p.nickname);
+                }
+
+                fsCreateSaveDataFileSystem;
+
+                App::Push(std::make_shared<ui::PopupList>(
+                    "Select user to create save for"_i18n, items, [accounts](auto op_index){
+                        if (op_index) {
+                            s64 out;
+                            if (R_SUCCEEDED(swkbd::ShowNumPad(out, "Enter the save size"_i18n.c_str()))) {
+                            }
+                        }
+                    }
+                ));
+
+                // 1. Select user to create save for.
+                // 2. Enter the save size.
+                // 3. Enter the journal size (0 for default).
+            }));
+            #endif
         }})
     );
 

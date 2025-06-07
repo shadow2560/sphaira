@@ -154,6 +154,8 @@ struct FsDirCollection {
 
 using FsDirCollections = std::vector<FsDirCollection>;
 
+void SignalChange();
+
 struct Menu;
 
 struct FsView final : Widget {
@@ -244,7 +246,7 @@ private:
     }
 
     void Sort();
-    void SortAndFindLastFile();
+    void SortAndFindLastFile(bool scan = false);
     void SetIndexFromLastFile(const LastFile& last_file);
 
     void OnDeleteCallback();
