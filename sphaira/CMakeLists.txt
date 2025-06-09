@@ -154,7 +154,7 @@ set(FETCHCONTENT_QUIET FALSE)
 FetchContent_Declare(ftpsrv
     GIT_REPOSITORY https://github.com/ITotalJustice/ftpsrv.git
     # GIT_TAG 1.2.2
-    GIT_TAG 8c18431
+    GIT_TAG 8782f6b
     SOURCE_SUBDIR NONE
 )
 
@@ -268,7 +268,6 @@ FetchContent_MakeAvailable(
 )
 
 set(FTPSRV_LIB_BUILD TRUE)
-set(FTPSRV_LIB_SOCK_UNISTD TRUE)
 set(FTPSRV_LIB_VFS_CUSTOM ${ftpsrv_SOURCE_DIR}/src/platform/nx/vfs_nx.h)
 set(FTPSRV_LIB_PATH_SIZE 0x301)
 set(FTPSRV_LIB_SESSIONS 16)
@@ -285,6 +284,7 @@ set(FTPSRV_LIB_CUSTOM_DEFINES
     USE_VFS_USBHSFS_INIT=$<BOOL:FALSE>
     # disable romfs mounting as otherwise we cannot write / modify sphaira.nro
     USE_VFS_ROMFS=$<BOOL:FALSE>
+    FTP_SOCKET_HEADER="${ftpsrv_SOURCE_DIR}/src/platform/nx/socket_nx.h"
 )
 
 add_subdirectory(${ftpsrv_SOURCE_DIR} binary_dir)
