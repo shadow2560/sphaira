@@ -21,7 +21,7 @@ void threadFunc(void* arg) {
 
 ProgressBox::ProgressBox(int image, const std::string& action, const std::string& title, ProgressBoxCallback callback, ProgressBoxDoneCallback done, int cpuid, int prio, int stack_size) {
     if (App::GetApp()->m_progress_boost_mode.Get()) {
-        appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+        App::SetBoostMode(true);
     }
 
     SetAction(Button::B, Action{"Back"_i18n, [this](){
@@ -67,7 +67,7 @@ ProgressBox::~ProgressBox() {
     FreeImage();
     m_done(m_thread_data.result);
 
-    appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
+    App::SetBoostMode(false);
 }
 
 auto ProgressBox::Update(Controller* controller, TouchInfo* touch) -> void {

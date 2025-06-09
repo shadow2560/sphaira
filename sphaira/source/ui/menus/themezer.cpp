@@ -581,8 +581,8 @@ void Menu::PackListDownload() {
         curl::Flags{curl::Flag_Cache},
         curl::StopToken{this->GetToken()},
         curl::OnComplete{[this, page_index](auto& result){
-            appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
-            ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+            App::SetBoostMode(true);
+            ON_SCOPE_EXIT(App::SetBoostMode(false));
 
             log_write("got themezer data\n");
             if (!result.success) {

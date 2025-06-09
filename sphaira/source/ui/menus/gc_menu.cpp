@@ -980,8 +980,8 @@ Result Menu::DumpGames(u32 flags) {
     R_TRY(GcMountStorage());
 
     const auto do_dump = [this](u32 flags) -> Result {
-        appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
-        ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+        App::SetBoostMode(true);
+        ON_SCOPE_EXIT(App::SetBoostMode(false));
 
         u32 location_flags = dump::DumpLocationFlag_All;
 

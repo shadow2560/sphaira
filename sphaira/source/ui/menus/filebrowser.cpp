@@ -968,8 +968,8 @@ void FsView::UploadFiles() {
 }
 
 auto FsView::Scan(const fs::FsPath& new_path, bool is_walk_up) -> Result {
-    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
-    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+    App::SetBoostMode(true);
+    ON_SCOPE_EXIT(App::SetBoostMode(false));
 
     log_write("new scan path: %s\n", new_path.s);
     if (!is_walk_up && !m_path.empty() && !m_entries_current.empty()) {

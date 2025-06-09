@@ -1170,8 +1170,8 @@ void Menu::SetIndex(s64 index) {
 }
 
 void Menu::ScanHomebrew() {
-    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
-    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+    App::SetBoostMode(true);
+    ON_SCOPE_EXIT(App::SetBoostMode(false));
 
     from_json(REPO_PATH, m_entries);
 

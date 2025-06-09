@@ -192,6 +192,28 @@ public:
         }
     }
 
+    static void SetBoostMode(bool enable, bool force = false) {
+        static Mutex mutex{};
+        static int ref_count{};
+
+        mutexLock(&mutex);
+        ON_SCOPE_EXIT(mutexUnlock(&mutex));
+
+        if (enable) {
+            ref_count++;
+            appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+        } else {
+            if (ref_count) {
+                ref_count--;
+            }
+        }
+
+        if (!ref_count || force) {
+            ref_count = 0;
+            appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
+        }
+    }
+
     static auto GetAccountList() -> std::vector<AccountProfileBase> {
         std::vector<AccountProfileBase> out;
 

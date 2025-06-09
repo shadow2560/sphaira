@@ -1283,8 +1283,8 @@ void App::ScanThemeEntries() {
 App::App(const char* argv0) {
     TimeStamp ts;
 
-    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
-    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+    // boost mode is enabled in userAppInit().
+    ON_SCOPE_EXIT(App::SetBoostMode(false));
 
     g_app = this;
     m_start_timestamp = armGetSystemTick();
@@ -1851,8 +1851,8 @@ void App::DisplayDumpOptions(bool left_side) {
 }
 
 App::~App() {
-    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
-    ON_SCOPE_EXIT(appletSetCpuBoostMode(ApmCpuBoostMode_Normal));
+    // boost mode is disabled in userAppExit().
+    App::SetBoostMode(true);
 
     log_write("starting to exit\n");
     TimeStamp ts;
