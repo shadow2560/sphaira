@@ -76,7 +76,7 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
             curl::OnProgress{pbox->OnDownloadProgressCallback()}
         );
 
-        R_UNLESS(result.success, 0x1);
+        R_UNLESS(result.success, Result_MainFailedToDownloadUpdate);
     }
 
     ON_SCOPE_EXIT(fs.DeleteFile(zip_out));

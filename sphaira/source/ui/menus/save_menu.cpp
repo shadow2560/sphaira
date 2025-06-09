@@ -394,7 +394,7 @@ Result LoadControlManual(u64 id, ThreadResultData& data) {
 
     MetaEntries entries;
     R_TRY(GetMetaEntries(id, entries));
-    R_UNLESS(!entries.empty(), 0x1);
+    R_UNLESS(!entries.empty(), Result_GameEmptyMetaEntries);
 
     u64 program_id;
     fs::FsPath path;
@@ -1193,7 +1193,7 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
     mz::FileFuncStdio(&file_func);
 
     auto zfile = unzOpen2_64(path, &file_func);
-    R_UNLESS(zfile, 0x1);
+    R_UNLESS(zfile, Result_UnzOpen2_64);
     ON_SCOPE_EXIT(unzClose(zfile));
     log_write("opened zip\n");
 
@@ -1225,22 +1225,22 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
 
         // todo:: manually calculate / guess the save size.
         unz_global_info64 ginfo;
-        R_UNLESS(UNZ_OK == unzGetGlobalInfo64(zfile, &ginfo), 0x1);
-        R_UNLESS(UNZ_OK == unzGoToFirstFile(zfile), 0x1);
+        R_UNLESS(UNZ_OK == unzGetGlobalInfo64(zfile, &ginfo), Result_UnzGetGlobalInfo64);
+        R_UNLESS(UNZ_OK == unzGoToFirstFile(zfile), Result_UnzGoToFirstFile);
 
         for (s64 i = 0; i < ginfo.number_entry; i++) {
             R_TRY(pbox->ShouldExitResult());
 
             if (i > 0) {
-                R_UNLESS(UNZ_OK == unzGoToNextFile(zfile), 0x1);
+                R_UNLESS(UNZ_OK == unzGoToNextFile(zfile), Result_UnzGoToNextFile);
             }
 
-            R_UNLESS(UNZ_OK == unzOpenCurrentFile(zfile), 0x1);
+            R_UNLESS(UNZ_OK == unzOpenCurrentFile(zfile), Result_UnzOpenCurrentFile);
             ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
             unz_file_info64 info;
             fs::FsPath name;
-            R_UNLESS(UNZ_OK == unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0), 0x1);
+            R_UNLESS(UNZ_OK == unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0), Result_UnzGetCurrentFileInfo64);
 
             if (name == NX_SAVE_META_NAME) {
                 continue;
@@ -1296,7 +1296,7 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
     } else if (location.entry.type == dump::DumpLocationType_SdCard) {
         fs = std::make_unique<fs::FsNativeSd>();
     } else {
-        R_THROW(0x1);
+        std::unreachable();
     }
 
     pbox->SetTitle(e.GetName());
@@ -1367,7 +1367,7 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
 
     {
         auto zfile = zipOpen2_64(temp_path, APPEND_STATUS_CREATE, nullptr, &file_func);
-        R_UNLESS(zfile, 0x1);
+        R_UNLESS(zfile, Result_ZipOpen2_64);
         ON_SCOPE_EXIT(zipClose(zfile, "sphaira v" APP_VERSION_HASH));
 
         // add save meta.
@@ -1386,9 +1386,9 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
                 .raw_size = e.size,
             };
 
-            R_UNLESS(ZIP_OK == zipOpenNewFileInZip(zfile, NX_SAVE_META_NAME, &zip_info_default, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_NO_COMPRESSION), 0x1);
+            R_UNLESS(ZIP_OK == zipOpenNewFileInZip(zfile, NX_SAVE_META_NAME, &zip_info_default, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_NO_COMPRESSION), Result_ZipOpenNewFileInZip);
             ON_SCOPE_EXIT(zipCloseFileInZip(zfile));
-            R_UNLESS(ZIP_OK == zipWriteInFileInZip(zfile, &meta, sizeof(meta)), 0x1);
+            R_UNLESS(ZIP_OK == zipWriteInFileInZip(zfile, &meta, sizeof(meta)), Result_ZipWriteInFileInZip);
         }
 
         const auto zip_add = [&](const fs::FsPath& file_path) -> Result {
@@ -1409,7 +1409,7 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
             const auto level = compressed ? Z_DEFAULT_COMPRESSION : Z_NO_COMPRESSION;
             if (ZIP_OK != zipOpenNewFileInZip(zfile, file_name_in_zip, &zip_info_default, NULL, 0, NULL, 0, NULL, Z_DEFLATED, level)) {
                 log_write("failed to add zip for %s\n", file_path.s);
-                R_THROW(0x1);
+                R_THROW(Result_ZipOpenNewFileInZip);
             }
             ON_SCOPE_EXIT(zipCloseFileInZip(zfile));
 

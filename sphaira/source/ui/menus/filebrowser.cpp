@@ -800,7 +800,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
         mz::FileFuncStdio(&file_func);
 
         auto zfile = zipOpen2_64(zip_out, APPEND_STATUS_CREATE, nullptr, &file_func);
-        R_UNLESS(zfile, 0x1);
+        R_UNLESS(zfile, Result_ZipOpen2_64);
         ON_SCOPE_EXIT(zipClose(zfile, "sphaira v" APP_VERSION_HASH));
 
         const auto zip_add = [&](const fs::FsPath& file_path) -> Result {
@@ -821,7 +821,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
 
             if (ZIP_OK != zipOpenNewFileInZip(zfile, file_name_in_zip, &zip_info, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION)) {
                 log_write("failed to add zip for %s\n", file_path.s);
-                R_THROW(0x1);
+                R_THROW(Result_ZipOpenNewFileInZip);
             }
             ON_SCOPE_EXIT(zipCloseFileInZip(zfile));
 
@@ -927,7 +927,7 @@ void FsView::UploadFiles() {
                                 }
                             );
 
-                            R_UNLESS(result.success, 0x1);
+                            R_UNLESS(result.success, Result_FileBrowserFailedUpload);
                             R_SUCCEED();
                         }
                     );
@@ -1332,8 +1332,8 @@ void FsView::OnRenameCallback() {
 }
 
 auto FsView::CheckIfUpdateFolder() -> Result {
-    R_UNLESS(IsSd(), FsError_InvalidMountName);
-    R_UNLESS(m_fs->IsNative(), 0x1);
+    R_UNLESS(IsSd(), Result_FileBrowserDirNotDaybreak);
+    R_UNLESS(m_fs->IsNative(), Result_FileBrowserDirNotDaybreak);
 
     // check if we have already tried to find daybreak
     if (m_daybreak_path.has_value() && m_daybreak_path.value().empty()) {
@@ -1357,16 +1357,16 @@ auto FsView::CheckIfUpdateFolder() -> Result {
     }
 
     // check that we have enough ncas and not too many
-    R_UNLESS(m_entries.size() > 150 && m_entries.size() < 300, 0x1);
+    R_UNLESS(m_entries.size() > 150 && m_entries.size() < 300, Result_FileBrowserDirNotDaybreak);
 
     // check that all entries end in .nca
     const auto nca_ext = std::string_view{".nca"};
     for (auto& e : m_entries) {
         // check that we are at the bottom level
-        R_UNLESS(e.type == FsDirEntryType_File, 0x1);
+        R_UNLESS(e.type == FsDirEntryType_File, Result_FileBrowserDirNotDaybreak);
 
         const auto ext = std::strrchr(e.name, '.');
-        R_UNLESS(ext && ext == nca_ext, 0x1);
+        R_UNLESS(ext && ext == nca_ext, Result_FileBrowserDirNotDaybreak);
     }
 
     R_SUCCEED();

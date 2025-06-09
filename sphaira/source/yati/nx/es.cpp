@@ -194,16 +194,16 @@ Result GetTitleKey(keys::KeyEntry& out, const TicketData& data, const keys::Keys
         log_write("properties_bitfield: 0x%X\n", data.properties_bitfield);
         log_write("device_id: 0x%lX vs 0x%lX\n", data.device_id, std::byteswap(rsa_key->device_id));
 
-        R_UNLESS(data.device_id == std::byteswap(rsa_key->device_id), 0x1);
+        R_UNLESS(data.device_id == std::byteswap(rsa_key->device_id), Result_EsPersonalisedTicketDeviceIdMissmatch);
         log_write("device id is same\n");
 
         u8 out_keydata[RSA2048_BYTES]{};
         size_t out_keydata_size;
-        R_UNLESS(rsa2048OaepDecrypt(out_keydata, sizeof(out_keydata), data.title_key_block, rsa_key->modulus, &rsa_key->public_exponent, sizeof(rsa_key->public_exponent), rsa_key->private_exponent, sizeof(rsa_key->private_exponent), NULL, 0, &out_keydata_size), 0x1);
-        R_UNLESS(out_keydata_size >= sizeof(out), 0x1);
+        R_UNLESS(rsa2048OaepDecrypt(out_keydata, sizeof(out_keydata), data.title_key_block, rsa_key->modulus, &rsa_key->public_exponent, sizeof(rsa_key->public_exponent), rsa_key->private_exponent, sizeof(rsa_key->private_exponent), NULL, 0, &out_keydata_size), Result_EsFailedDecryptPersonalisedTicket);
+        R_UNLESS(out_keydata_size >= sizeof(out), Result_EsBadDecryptedPersonalisedTicketSize);
         std::memcpy(std::addressof(out), out_keydata, sizeof(out));
     } else {
-        R_THROW(0x1);
+        R_THROW(Result_EsBadTitleKeyType);
     }
 
     R_SUCCEED();

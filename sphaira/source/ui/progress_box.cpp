@@ -258,7 +258,7 @@ auto ProgressBox::ShouldExit() -> bool {
 
 auto ProgressBox::ShouldExitResult() -> Result {
     if (ShouldExit()) {
-        R_THROW(0xFFFF);
+        R_THROW(Result_TransferCancelled);
     }
     R_SUCCEED();
 }

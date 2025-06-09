@@ -238,7 +238,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> Result {
 
         if (!result.success || result.data.empty()) {
             log_write("error with download: %s\n", url.c_str());
-            R_THROW(0x1);
+            R_THROW(Result_ThemezerFailedToDownloadThemeMeta);
         }
 
         from_json(result.data, download_pack);
@@ -255,7 +255,7 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> Result {
             curl::OnProgress{pbox->OnDownloadProgressCallback()}
         );
 
-        R_UNLESS(result.success, 0x1);
+        R_UNLESS(result.success, Result_ThemezerFailedToDownloadTheme);
     }
 
     ON_SCOPE_EXIT(fs.DeleteFile(zip_out));

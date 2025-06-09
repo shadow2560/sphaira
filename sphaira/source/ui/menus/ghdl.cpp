@@ -88,7 +88,7 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
     R_TRY(fs.GetFsOpenResult());
     ON_SCOPE_EXIT(fs.DeleteFile(temp_file));
 
-    R_UNLESS(!gh_asset.browser_download_url.empty(), 0x1);
+    R_UNLESS(!gh_asset.browser_download_url.empty(), Result_GhdlEmptyAsset);
 
     // 2. download the asset
     if (!pbox->ShouldExit()) {
@@ -101,7 +101,7 @@ auto DownloadApp(ProgressBox* pbox, const GhApiAsset& gh_asset, const AssetEntry
             curl::OnProgress{pbox->OnDownloadProgressCallback()}
         );
 
-        R_UNLESS(result.success, 0x1);
+        R_UNLESS(result.success, Result_GhdlFailedToDownloadAsset);
     }
 
     fs::FsPath root_path{"/"};
@@ -141,11 +141,11 @@ auto DownloadAssetJson(ProgressBox* pbox, const std::string& url, GhApiEntry& ou
             }
         );
 
-        R_UNLESS(result.success, 0x1);
+        R_UNLESS(result.success, Result_GhdlFailedToDownloadAssetJson);
         from_json(result.path, out);
     }
 
-    R_UNLESS(!out.assets.empty(), 0x1);
+    R_UNLESS(!out.assets.empty(), Result_GhdlEmptyAsset);
     R_SUCCEED();
 }
 

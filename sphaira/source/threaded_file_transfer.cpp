@@ -155,7 +155,7 @@ ThreadData::ThreadData(ui::ProgressBox* _pbox, s64 size, ReadCallback _rfunc, Wr
 }
 
 auto ThreadData::GetResults() -> Result {
-    R_UNLESS(!pbox->ShouldExit(), 0x1);
+    R_UNLESS(!pbox->ShouldExit(), Result_TransferCancelled);
     R_TRY(read_result);
     R_TRY(write_result);
     R_TRY(pull_result);
@@ -458,7 +458,7 @@ Result TransferUnzip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::F
             const auto result = unzReadCurrentFile(zfile, data, size);
             if (result <= 0) {
                 log_write("failed to read zip file: %s %d\n", path.s, result);
-                R_THROW(0x1);
+                R_THROW(Result_UnzReadCurrentFile);
             }
 
             if (crc32) {
@@ -502,7 +502,7 @@ Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsP
         [&](const void* data, s64 off, s64 size) -> Result {
             if (ZIP_OK != zipWriteInFileInZip(zfile, data, size)) {
                 log_write("failed to write zip file: %s\n", path.s);
-                R_THROW(0x1);
+                R_THROW(Result_ZipWriteInFileInZip);
             }
             R_SUCCEED();
         },
@@ -513,11 +513,11 @@ Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsP
 Result TransferUnzipAll(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& base_path, UnzipAllFilter filter) {
     unz_global_info64 ginfo;
     if (UNZ_OK != unzGetGlobalInfo64(zfile, &ginfo)) {
-        R_THROW(0x1);
+        R_THROW(Result_UnzGetGlobalInfo64);
     }
 
     if (UNZ_OK != unzGoToFirstFile(zfile)) {
-        R_THROW(0x1);
+        R_THROW(Result_UnzGoToFirstFile);
     }
 
     for (s64 i = 0; i < ginfo.number_entry; i++) {
@@ -526,13 +526,13 @@ Result TransferUnzipAll(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs
         if (i > 0) {
             if (UNZ_OK != unzGoToNextFile(zfile)) {
                 log_write("failed to unzGoToNextFile\n");
-                R_THROW(0x1);
+                R_THROW(Result_UnzGoToNextFile);
             }
         }
 
         if (UNZ_OK != unzOpenCurrentFile(zfile)) {
             log_write("failed to open current file\n");
-            R_THROW(0x1);
+            R_THROW(Result_UnzOpenCurrentFile);
         }
         ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
@@ -540,7 +540,7 @@ Result TransferUnzipAll(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs
         fs::FsPath name;
         if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, name, sizeof(name), 0, 0, 0, 0)) {
             log_write("failed to get current info\n");
-            R_THROW(0x1);
+            R_THROW(Result_UnzGetCurrentFileInfo64);
         }
 
         // check if we should skip this file.
@@ -572,7 +572,7 @@ Result TransferUnzipAll(ui::ProgressBox* pbox, const fs::FsPath& zip_out, fs::Fs
     mz::FileFuncStdio(&file_func);
 
     auto zfile = unzOpen2_64(zip_out, &file_func);
-    R_UNLESS(zfile, 0x1);
+    R_UNLESS(zfile, Result_UnzOpen2_64);
     ON_SCOPE_EXIT(unzClose(zfile));
 
     return TransferUnzipAll(pbox, zfile, fs, base_path, filter);

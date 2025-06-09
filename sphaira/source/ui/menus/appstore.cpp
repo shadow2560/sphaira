@@ -330,8 +330,9 @@ auto UninstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
     fs::FsNativeSd fs;
 
     if (manifest.empty()) {
-        R_UNLESS(!entry.binary.empty(), 0x1);
-        fs.DeleteFile(entry.binary);
+        if (!entry.binary.empty()) {
+            R_TRY(fs.DeleteFile(entry.binary));
+        }
     } else {
         for (auto& e : manifest) {
             pbox->NewTransfer(e.path);
@@ -397,7 +398,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
             api_result = curl::ToMemory(api);
         }
 
-        R_UNLESS(api_result.success, 0x1);
+        R_UNLESS(api_result.success, Result_AppstoreFailedZipDownload);
     }
 
     ON_SCOPE_EXIT(fs.DeleteFile(zip_out));
@@ -416,7 +417,7 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
 
         if (strncasecmp(hash_out.data(), entry.md5.data(), entry.md5.length())) {
             log_write("bad md5: %.*s vs %.*s\n", 32, hash_out.data(), 32, entry.md5.c_str());
-            R_THROW(0x1);
+            R_THROW(Result_AppstoreFailedMd5);
         }
     }
 
@@ -431,13 +432,13 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
     // 3. extract the zip
     if (!pbox->ShouldExit()) {
         auto zfile = unzOpen2_64(zip_out, &file_func);
-        R_UNLESS(zfile, 0x1);
+        R_UNLESS(zfile, Result_UnzOpen2_64);
         ON_SCOPE_EXIT(unzClose(zfile));
 
         // get manifest
         if (UNZ_END_OF_LIST_OF_FILE == unzLocateFile(zfile, "manifest.install", 0)) {
             log_write("failed to find manifest.install\n");
-            R_THROW(0x1);
+            R_THROW(Result_UnzLocateFile);
         }
 
         ManifestEntries new_manifest;
@@ -445,26 +446,26 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
         {
             if (UNZ_OK != unzOpenCurrentFile(zfile)) {
                 log_write("failed to open current file\n");
-                R_THROW(0x1);
+                R_THROW(Result_UnzOpenCurrentFile);
             }
             ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
             unz_file_info64 info;
             if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, 0, 0, 0, 0, 0, 0)) {
                 log_write("failed to get current info\n");
-                R_THROW(0x1);
+                R_THROW(Result_UnzGetGlobalInfo64);
             }
 
             std::vector<char> manifest_data(info.uncompressed_size);
             if ((int)info.uncompressed_size != unzReadCurrentFile(zfile, manifest_data.data(), manifest_data.size())) {
                 log_write("failed to read manifest file\n");
-                R_THROW(0x1);
+                R_THROW(Result_UnzReadCurrentFile);
             }
 
             new_manifest = ParseManifest(manifest_data);
             if (new_manifest.empty()) {
                 log_write("manifest is empty!\n");
-                R_THROW(0x1);
+                R_THROW(Result_AppstoreFailedParseManifest);
             }
         }
 
@@ -473,19 +474,19 @@ auto InstallApp(ProgressBox* pbox, const Entry& entry) -> Result {
 
             if (UNZ_END_OF_LIST_OF_FILE == unzLocateFile(zfile, inzip, 0)) {
                 log_write("failed to find %s\n", inzip.s);
-                R_THROW(0x1);
+                R_THROW(Result_UnzLocateFile);
             }
 
             if (UNZ_OK != unzOpenCurrentFile(zfile)) {
                 log_write("failed to open current file\n");
-                R_THROW(0x1);
+                R_THROW(Result_UnzOpenCurrentFile);
             }
             ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
             unz_file_info64 info;
             if (UNZ_OK != unzGetCurrentFileInfo64(zfile, &info, 0, 0, 0, 0, 0, 0)) {
                 log_write("failed to get current info\n");
-                R_THROW(0x1);
+                R_THROW(Result_UnzGetCurrentFileInfo64);
             }
 
             auto path = output;

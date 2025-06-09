@@ -221,7 +221,7 @@ struct XciSource final : dump::BaseSource {
                 span = initial;
             }
 
-            R_UNLESS(!span.empty(), 0x1);
+            R_UNLESS(!span.empty(), Result_GcBadReadForDump);
 
             size = ClipSize(off, size, span.size());
             *bytes_read = size;
@@ -376,7 +376,7 @@ Result GcSource::Read(void* buf, s64 off, s64 size, u64* bytes_read) {
         }
 
         // this will never fail, unless i break something in yati.
-        R_UNLESS(found, 0x1);
+        R_UNLESS(found, Result_GcBadReadForDump);
     }
 
     return m_file.Read(off - m_offset, buf, size, 0, bytes_read);
@@ -593,7 +593,7 @@ Result Menu::GcMount() {
                 return !std::strncmp(str.str, e.name, std::strlen(str.str));
             });
 
-            R_UNLESS(it != buf.cend(), yati::Result_NcaNotFound);
+            R_UNLESS(it != buf.cend(), Result_YatiNcaNotFound);
             collections.emplace_back(it->name, it->file_size, info.content_type, info.id_offset);
         }
 
@@ -624,7 +624,7 @@ Result Menu::GcMount() {
         }
     }
 
-    R_UNLESS(m_entries.size(), 0x1);
+    R_UNLESS(m_entries.size(), Result_GcEmptyGamecard);
 
     // append tickets to every application, yati will ignore if undeeded.
     for (auto& e : m_entries) {
@@ -742,12 +742,12 @@ Result Menu::GcMountStorage() {
     std::memcpy(&trim_size, header + 0x118, sizeof(trim_size));
     std::memcpy(&m_package_id, header + 0x110, sizeof(m_package_id));
     std::memcpy(m_initial_data_hash, header + 0x160, sizeof(m_initial_data_hash));
-    R_UNLESS(magic == XCI_MAGIC, 0x1);
+    R_UNLESS(magic == XCI_MAGIC, Result_GcBadXciMagic);
 
     // calculate the reported size, error if not found.
     m_storage_full_size = GetXciSizeFromRomSize(rom_size);
     log_write("[GC] m_storage_full_size: %zd rom_size: 0x%X\n", m_storage_full_size, rom_size);
-    R_UNLESS(m_storage_full_size > 0, 0x1);
+    R_UNLESS(m_storage_full_size > 0, Result_GcBadXciRomSize);
 
     R_TRY(fsStorageGetSize(&m_storage, &m_parition_normal_size));
     R_TRY(GcMountPartition(FsGameCardPartitionRaw_Secure));
@@ -1141,7 +1141,7 @@ Result Menu::GcGetSecurityInfo(GameCardSecurityInformation& out) {
         }
     }
 
-    R_THROW(0x1);
+    R_THROW(Result_GcFailedToGetSecurityInfo);
 }
 
 } // namespace sphaira::ui::menu::gc

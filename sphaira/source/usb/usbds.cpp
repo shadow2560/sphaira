@@ -216,7 +216,7 @@ Result UsbDs::WaitUntilConfigured(u64 timeout) {
 
         // check if we got one of the cancel events.
         if (R_SUCCEEDED(rc) && idx == waiters.size() - 1) {
-            rc = Result_Cancelled;
+            rc = Result_UsbCancelled;
             break;
         }
 
@@ -254,7 +254,7 @@ Result UsbDs::GetSpeed(UsbDeviceSpeed* out, u16* max_packet_size) {
     }
 
     *max_packet_size = DEVICE_SPEED[*out];
-    R_UNLESS(*max_packet_size > 0, 0x1);
+    R_UNLESS(*max_packet_size > 0, Result_UsbDsBadDeviceSpeed);
     R_SUCCEED();
 }
 
@@ -275,7 +275,7 @@ Result UsbDs::WaitTransferCompletion(UsbSessionEndpoint ep, u64 timeout) {
     // check if we got one of the cancel events.
     if (R_SUCCEEDED(rc) && idx == waiters.size() - 1) {
         log_write("got usb cancel event\n");
-        rc = Result_Cancelled;
+        rc = Result_UsbCancelled;
     } else if (R_SUCCEEDED(rc) && idx == waiters.size() - 2) {
         log_write("got usbDsGetStateChangeEvent() event\n");
         m_max_packet_size = 0;

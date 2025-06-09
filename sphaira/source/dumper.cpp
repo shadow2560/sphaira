@@ -227,7 +227,7 @@ Result DumpToUsbS2S(ui::ProgressBox* pbox, BaseSource* source, std::span<const f
                     log_write("skipped polling for exit command\n");
                 }
 
-                if (rc == usb->Result_Exit) {
+                if (rc == Result_UsbUploadExit) {
                     log_write("got exit command\n");
                     R_SUCCEED();
                 }
@@ -303,7 +303,7 @@ Result DumpToNetwork(ui::ProgressBox* pbox, const location::Entry& loc, BaseSour
                     }
                 );
 
-                R_UNLESS(result.success, 0x1);
+                R_UNLESS(result.success, Result_DumpFailedNetworkUpload);
                 R_SUCCEED();
             }
         ));

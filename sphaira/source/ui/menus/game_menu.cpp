@@ -193,7 +193,7 @@ struct NspEntry {
                     const auto it = std::ranges::find_if(tickets, [&id](auto& e){
                         return !std::memcmp(&id, &e.id, sizeof(id));
                     });
-                    R_UNLESS(it != tickets.end(), 0x1);
+                    R_UNLESS(it != tickets.end(), Result_GameBadReadForDump);
 
                     const auto& data = collection.name.ends_with(".tik") ? it->tik_data : it->cert_data;
                     std::memcpy(buf, data.data() + off, size);
@@ -225,7 +225,7 @@ struct NspSource final : dump::BaseSource {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
             return path.find(e.path.s) != path.npos;
         });
-        R_UNLESS(it != m_entries.end(), 0x1);
+        R_UNLESS(it != m_entries.end(), Result_GameBadReadForDump);
 
         const auto rc = it->Read(buf, off, size, bytes_read);
         if (m_is_file_based_emummc) {
@@ -360,7 +360,7 @@ Result LoadControlManual(u64 id, ThreadResultData& data) {
 
     MetaEntries entries;
     R_TRY(GetMetaEntries(id, entries));
-    R_UNLESS(!entries.empty(), 0x1);
+    R_UNLESS(!entries.empty(), Result_GameEmptyMetaEntries);
 
     u64 program_id;
     fs::FsPath path;
@@ -541,8 +541,8 @@ Result BuildContentEntry(const NsApplicationContentMetaStatus& status, ContentIn
     NcmContentMetaKey key;
     R_TRY(ncmContentMetaDatabaseList(std::addressof(db), std::addressof(meta_total), std::addressof(meta_entries_written), std::addressof(key), 1, (NcmContentMetaType)status.meta_type, app_id, id_min, id_max, NcmContentInstallType_Full));
     log_write("ncmContentMetaDatabaseList(): AppId: %016lX Id: %016lX total: %d written: %d storageID: %u key.id %016lX\n", app_id, status.application_id, meta_total, meta_entries_written, status.storageID, key.id);
-    R_UNLESS(meta_total == 1, 0x1);
-    R_UNLESS(meta_entries_written == 1, 0x1);
+    R_UNLESS(meta_total == 1, Result_GameMultipleKeysFound);
+    R_UNLESS(meta_entries_written == 1, Result_GameMultipleKeysFound);
 
     std::vector<NcmContentInfo> cnmt_infos;
     for (s32 i = 0; ; i++) {
@@ -648,7 +648,7 @@ Result BuildNspEntries(Entry& e, u32 flags, std::vector<NspEntry>& out) {
         out.emplace_back(nsp).icon = e.image;
     }
 
-    R_UNLESS(!out.empty(), 0x1);
+    R_UNLESS(!out.empty(), Result_GameNoNspEntriesBuilt);
     R_SUCCEED();
 }
 

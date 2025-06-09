@@ -261,22 +261,6 @@ Result FileGetSizeAndTimestamp(fs::Fs* fs, const FsPath& path, FsTimeStampRaw* t
 Result IsDirEmpty(fs::Fs* m_fs, const fs::FsPath& path, bool* out);
 
 struct Fs {
-    static constexpr inline u32 FsModule = 505;
-    static constexpr inline Result ResultTooManyEntries = MAKERESULT(FsModule, 1);
-    static constexpr inline Result ResultNewPathTooLarge = MAKERESULT(FsModule, 2);
-    static constexpr inline Result ResultInvalidType = MAKERESULT(FsModule, 3);
-    static constexpr inline Result ResultEmpty = MAKERESULT(FsModule, 4);
-    static constexpr inline Result ResultAlreadyRoot = MAKERESULT(FsModule, 5);
-    static constexpr inline Result ResultNoCurrentPath = MAKERESULT(FsModule, 6);
-    static constexpr inline Result ResultBrokenCurrentPath = MAKERESULT(FsModule, 7);
-    static constexpr inline Result ResultIndexOutOfBounds = MAKERESULT(FsModule, 8);
-    static constexpr inline Result ResultFsNotActive = MAKERESULT(FsModule, 9);
-    static constexpr inline Result ResultNewPathEmpty = MAKERESULT(FsModule, 10);
-    static constexpr inline Result ResultLoadingCancelled = MAKERESULT(FsModule, 11);
-    static constexpr inline Result ResultBrokenRoot = MAKERESULT(FsModule, 12);
-    static constexpr inline Result ResultUnknownStdioError = MAKERESULT(FsModule, 13);
-    static constexpr inline Result ResultReadOnly = MAKERESULT(FsModule, 14);
-
     Fs(bool ignore_read_only = true) : m_ignore_read_only{ignore_read_only} {}
     virtual ~Fs() = default;
 

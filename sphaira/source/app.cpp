@@ -51,7 +51,7 @@ constexpr const u8 DEFAULT_IMAGE_DATA[]{
 };
 
 void download_default_music() {
-    App::Push(std::make_shared<ui::ProgressBox>(0, "Downloading "_i18n, "default_music.bfstm", [](auto pbox){
+    App::Push(std::make_shared<ui::ProgressBox>(0, "Downloading "_i18n, "default_music.bfstm", [](auto pbox) -> Result {
         const auto result = curl::Api().ToFile(
             curl::Url{DEFAULT_MUSIC_URL},
             curl::Path{DEFAULT_MUSIC_PATH},
@@ -59,7 +59,7 @@ void download_default_music() {
         );
 
         if (!result.success) {
-            R_THROW(0x1);
+            R_THROW(Result_AppFailedMusicDownload);
         }
 
         R_SUCCEED();

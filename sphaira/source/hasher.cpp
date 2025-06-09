@@ -192,7 +192,7 @@ Result Hash(ui::ProgressBox* pbox, Type type, std::shared_ptr<BaseSource> source
         case Type::Sha1: return Hash(pbox, std::make_unique<HashSha1>(), source, out);
         case Type::Sha256: return Hash(pbox, std::make_unique<HashSha256>(), source, out);
     }
-    R_THROW(0x1);
+    std::unreachable();
 }
 
 Result Hash(ui::ProgressBox* pbox, Type type, fs::Fs* fs, const fs::FsPath& path, std::string& out) {
