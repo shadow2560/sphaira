@@ -405,6 +405,55 @@ auto ApplicationEntry::GetSize() const -> s64 {
 
 Menu::Menu(u32 flags) : MenuBase{"GameCard"_i18n, flags} {
     this->SetActions(
+        std::make_pair(Button::A, Action{"OK"_i18n, [this](){
+            if (m_option_index == 2) {
+                SetPop();
+            } else {
+                if (!m_mounted) {
+                    return;
+                }
+
+                if (m_option_index == 0) {
+                    if (!App::GetInstallEnable()) {
+                        App::Push(std::make_shared<ui::OptionBox>(
+                            "Install disabled...\n"
+                            "Please enable installing via the install options."_i18n,
+                            "OK"_i18n
+                        ));
+                    } else {
+                        log_write("[GC] doing install A\n");
+                        App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) -> Result {
+                            auto source = std::make_shared<GcSource>(m_entries[m_entry_index], m_fs.get());
+                            return yati::InstallFromCollections(pbox, source, source->m_collections, source->m_config);
+                        }, [this](Result rc){
+                            App::PushErrorBox(rc, "Gc install failed!"_i18n);
+
+                            if (R_SUCCEEDED(rc)) {
+                                App::Notify("Gc install success!"_i18n);
+                            }
+                        }));
+                    }
+                } else {
+                    auto options = std::make_shared<Sidebar>("Select content to dump"_i18n, Sidebar::Side::RIGHT);
+                    ON_SCOPE_EXIT(App::Push(options));
+
+                    const auto add = [&](const std::string& name, u32 flags){
+                        options->Add(std::make_shared<SidebarEntryCallback>(name, [this, flags](){
+                            DumpGames(flags);
+                            m_dirty = true;
+                        }, true));
+                    };
+
+                    add("Dump All"_i18n, DumpFileFlag_All);
+                    add("Dump All Bins"_i18n, DumpFileFlag_AllBin);
+                    add("Dump XCI"_i18n, DumpFileFlag_XCI);
+                    add("Dump Card ID Set"_i18n, DumpFileFlag_Set);
+                    add("Dump Card UID"_i18n, DumpFileFlag_UID);
+                    add("Dump Certificate"_i18n, DumpFileFlag_Cert);
+                    add("Dump Initial Data"_i18n, DumpFileFlag_Initial);
+                }
+            }
+        }}),
         std::make_pair(Button::B, Action{"Back"_i18n, [this](){
             SetPop();
         }}),
@@ -642,57 +691,6 @@ Result Menu::GcMount() {
             e.lang_entry = *lang_entry;
         }
     }
-
-    SetAction(Button::A, Action{"OK"_i18n, [this](){
-        if (m_option_index == 2) {
-            SetPop();
-        } else {
-            log_write("[GC] pressed A\n");
-            if (!m_mounted) {
-                return;
-            }
-
-            if (m_option_index == 0) {
-                if (!App::GetInstallEnable()) {
-                    App::Push(std::make_shared<ui::OptionBox>(
-                        "Install disabled...\n"
-                        "Please enable installing via the install options."_i18n,
-                        "OK"_i18n
-                    ));
-                } else {
-                    log_write("[GC] doing install A\n");
-                    App::Push(std::make_shared<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) -> Result {
-                        auto source = std::make_shared<GcSource>(m_entries[m_entry_index], m_fs.get());
-                        return yati::InstallFromCollections(pbox, source, source->m_collections, source->m_config);
-                    }, [this](Result rc){
-                        App::PushErrorBox(rc, "Gc install failed!"_i18n);
-
-                        if (R_SUCCEEDED(rc)) {
-                            App::Notify("Gc install success!"_i18n);
-                        }
-                    }));
-                }
-            } else {
-                auto options = std::make_shared<Sidebar>("Select content to dump"_i18n, Sidebar::Side::RIGHT);
-                ON_SCOPE_EXIT(App::Push(options));
-
-                const auto add = [&](const std::string& name, u32 flags){
-                    options->Add(std::make_shared<SidebarEntryCallback>(name, [this, flags](){
-                        DumpGames(flags);
-                        m_dirty = true;
-                    }, true));
-                };
-
-                add("Dump All"_i18n, DumpFileFlag_All);
-                add("Dump All Bins"_i18n, DumpFileFlag_AllBin);
-                add("Dump XCI"_i18n, DumpFileFlag_XCI);
-                add("Dump Card ID Set"_i18n, DumpFileFlag_Set);
-                add("Dump Card UID"_i18n, DumpFileFlag_UID);
-                add("Dump Certificate"_i18n, DumpFileFlag_Cert);
-                add("Dump Initial Data"_i18n, DumpFileFlag_Initial);
-            }
-        }
-    }});
 
     if (m_entries.size() > 1) {
         SetAction(Button::L2, Action{"Prev"_i18n, [this](){
