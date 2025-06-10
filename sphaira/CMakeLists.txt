@@ -206,7 +206,7 @@ FetchContent_Declare(libnxtc
 
 FetchContent_Declare(nvjpg
     GIT_REPOSITORY https://github.com/averne/oss-nvjpg.git
-    GIT_TAG fdcaba8
+    GIT_TAG 16c10a3
 )
 
 set(USE_NEW_ZSTD ON)
