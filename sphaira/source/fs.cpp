@@ -702,6 +702,47 @@ Result Dir::GetEntryCount(s64* out) {
     R_SUCCEED();
 }
 
+Result Dir::Read(s64 *total_entries, size_t max_entries, FsDirectoryEntry *buf) {
+    R_UNLESS(m_fs, Result_FsNotActive);
+    *total_entries = 0;
+
+    if (m_fs->IsNative()) {
+        R_TRY(fsDirRead(&m_native, total_entries, max_entries, buf));
+    } else {
+        while (auto d = readdir(m_stdio)) {
+            if (!std::strcmp(d->d_name, ".") || !std::strcmp(d->d_name, "..")) {
+                continue;
+            }
+
+            FsDirectoryEntry entry{};
+
+            if (d->d_type == DT_DIR) {
+                if (!(m_mode & FsDirOpenMode_ReadDirs)) {
+                    continue;
+                }
+                entry.type = FsDirEntryType_Dir;
+            } else if (d->d_type == DT_REG) {
+                if (!(m_mode & FsDirOpenMode_ReadFiles)) {
+                    continue;
+                }
+                entry.type = FsDirEntryType_File;
+            } else {
+                log_write("[FS] WARNING: unknown type when reading dir: %u\n", d->d_type);
+                continue;
+            }
+
+            std::strcpy(entry.name, d->d_name);
+            std::memcpy(&buf[*total_entries], &entry, sizeof(*buf));
+            *total_entries = *total_entries + 1;
+            if (*total_entries >= max_entries) {
+                break;
+            }
+        }
+    }
+
+    R_SUCCEED();
+}
+
 Result Dir::ReadAll(std::vector<FsDirectoryEntry>& buf) {
     buf.clear();
     R_UNLESS(m_fs, Result_FsNotActive);

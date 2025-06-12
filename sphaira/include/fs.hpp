@@ -195,6 +195,7 @@ struct Dir {
     ~Dir();
 
     Result GetEntryCount(s64* out);
+    Result Read(s64 *total_entries, size_t max_entries, FsDirectoryEntry *buf);
     Result ReadAll(std::vector<FsDirectoryEntry>& buf);
     void Close();
 
@@ -397,36 +398,6 @@ struct FsNative : Fs {
     Result GetTotalSpace(const FsPath& path, s64* out) {
         return fsFsGetTotalSpace(&m_fs, path, out);
     }
-
-    // Result OpenDirectory(const FsPath& path, u32 mode, FsDir *out) {
-    //     return fsFsOpenDirectory(&m_fs, path, mode, out);
-    // }
-
-    // void DirClose(FsDir *d) {
-    //     fsDirClose(d);
-    // }
-
-    // Result DirGetEntryCount(FsDir *d, s64* out) {
-    //     return fsDirGetEntryCount(d, out);
-    // }
-
-    // Result DirGetEntryCount(const FsPath& path, u32 mode, s64* out) {
-    //     FsDir d;
-    //     R_TRY(OpenDirectory(path, mode, &d));
-    //     ON_SCOPE_EXIT(DirClose(&d));
-    //     return DirGetEntryCount(&d, out);
-    // }
-
-    // Result DirRead(FsDir *d, s64 *total_entries, size_t max_entries, FsDirectoryEntry *buf) {
-    //     return fsDirRead(d, total_entries, max_entries, buf);
-    // }
-
-    // Result DirRead(const FsPath& path, u32 mode, s64 *total_entries, size_t max_entries, FsDirectoryEntry *buf) {
-    //     FsDir d;
-    //     R_TRY(OpenDirectory(path, mode, &d));
-    //     ON_SCOPE_EXIT(DirClose(&d));
-    //     return DirRead(&d, total_entries, max_entries, buf);
-    // }
 
     virtual bool IsFsActive() {
         return serviceIsActive(&m_fs.s);

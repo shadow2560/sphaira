@@ -4,22 +4,6 @@
 #include <ranges>
 #include <cstring>
 
-namespace sphaira::usb {
-namespace {
-
-// TODO: pr missing speed fields to libnx.
-enum { UsbDeviceSpeed_None = 0x0 };
-enum { UsbDeviceSpeed_Low = 0x1 };
-
-constexpr u16 DEVICE_SPEED[] = {
-    [UsbDeviceSpeed_None] = 0x0,
-    [UsbDeviceSpeed_Low] = 0x0,
-    [UsbDeviceSpeed_Full] = 0x40,
-    [UsbDeviceSpeed_High] = 0x200,
-    [UsbDeviceSpeed_Super] = 0x400,
-};
-
-// TODO: pr this to libnx.
 Result usbDsGetSpeed(UsbDeviceSpeed *out) {
     if (hosversionBefore(8,0,0)) {
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
@@ -28,6 +12,17 @@ Result usbDsGetSpeed(UsbDeviceSpeed *out) {
     serviceAssumeDomain(usbDsGetServiceSession());
     return serviceDispatchOut(usbDsGetServiceSession(), hosversionAtLeast(11,0,0) ? 11 : 12, *out);
 }
+
+namespace sphaira::usb {
+namespace {
+
+constexpr u16 DEVICE_SPEED[] = {
+    [UsbDeviceSpeed_None] = 0x0,
+    [UsbDeviceSpeed_Low] = 0x0,
+    [UsbDeviceSpeed_Full] = 0x40,
+    [UsbDeviceSpeed_High] = 0x200,
+    [UsbDeviceSpeed_Super] = 0x400,
+};
 
 } // namespace
 

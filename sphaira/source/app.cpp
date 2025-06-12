@@ -19,13 +19,13 @@
 #include "defines.hpp"
 #include "i18n.hpp"
 #include "ftpsrv_helper.hpp"
+#include "haze_helper.hpp"
 #include "web.hpp"
 #include "swkbd.hpp"
 
 #include <nanovg_dk.h>
 #include <minIni.h>
 #include <pulsar.h>
-#include <haze.h>
 #include <algorithm>
 #include <ranges>
 #include <cassert>
@@ -400,11 +400,6 @@ void LoadThemeInternal(ThemeMeta meta, ThemeData& theme_data, int inherit_level 
     }
 }
 
-void haze_callback(const HazeCallbackData *data) {
-    App::NotifyFlashLed();
-    evman::push(*data, false);
-}
-
 void nxlink_callback(const NxlinkCallbackData *data) {
     App::NotifyFlashLed();
     evman::push(*data, false);
@@ -460,9 +455,6 @@ void App::Loop() {
                 } else if constexpr(std::is_same_v<T, evman::ExitEventData>) {
                     log_write("[ExitEventData] got event\n");
                     m_quit = true;
-                } else if constexpr(std::is_same_v<T, HazeCallbackData>) {
-                    // log_write("[ExitEventData] got event\n");
-                    // m_quit = true;
                 } else if constexpr(std::is_same_v<T, NxlinkCallbackData>) {
                     switch (arg.type) {
                         case NxlinkCallbackType_Connected:
@@ -857,9 +849,9 @@ void App::SetMtpEnable(bool enable) {
     if (App::GetMtpEnable() != enable) {
         g_app->m_mtp_enabled.Set(enable);
         if (enable) {
-            hazeInitialize(haze_callback, 0x2C, 2);
+            haze::Init();
         } else {
-            hazeExit();
+            haze::Exit();
         }
     }
 }
@@ -1379,7 +1371,7 @@ App::App(const char* argv0) {
     }
 
     if (App::GetMtpEnable()) {
-        hazeInitialize(haze_callback, PRIO_PREEMPTIVE, 2);
+        haze::Init();
     }
 
     if (App::GetFtpEnable()) {
@@ -1948,7 +1940,7 @@ App::~App() {
 
     if (App::GetMtpEnable()) {
         log_write("closing mtp\n");
-        hazeExit();
+        haze::Exit();
     }
 
     if (App::GetFtpEnable()) {

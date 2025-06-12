@@ -45,6 +45,7 @@ add_executable(sphaira
     source/ui/menus/ghdl.cpp
     source/ui/menus/usb_menu.cpp
     source/ui/menus/ftp_menu.cpp
+    source/ui/menus/mtp_menu.cpp
     source/ui/menus/gc_menu.cpp
     source/ui/menus/game_menu.cpp
     source/ui/menus/grid_menu_base.cpp
@@ -79,6 +80,7 @@ add_executable(sphaira
     source/hasher.cpp
     source/i18n.cpp
     source/ftpsrv_helper.cpp
+    source/haze_helper.cpp
     source/threaded_file_transfer.cpp
     source/minizip_helper.cpp
 
@@ -160,7 +162,7 @@ FetchContent_Declare(ftpsrv
 
 FetchContent_Declare(libhaze
     GIT_REPOSITORY https://github.com/ITotalJustice/libhaze.git
-    GIT_TAG 8e16df2
+    GIT_TAG d318432
 )
 
 FetchContent_Declare(libpulsar
