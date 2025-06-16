@@ -263,7 +263,7 @@ auto ProgressBox::ShouldExitResult() -> Result {
     R_SUCCEED();
 }
 
-auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
+auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src_path, const fs::FsPath& dst_path, bool single_threaded) -> Result {
     const auto is_file_based_emummc = App::IsFileBaseEmummc();
     const auto is_both_native = fs_src->IsNative() && fs_dst->IsNative();
 
@@ -300,20 +300,20 @@ auto ProgressBox::CopyFile(fs::Fs* fs_src, fs::Fs* fs_dst, const fs::FsPath& src
             }
 
             return rc;
-        }
+        }, single_threaded ? thread::Mode::SingleThreaded : thread::Mode::MultiThreaded
     ));
 
     R_SUCCEED();
 }
 
-auto ProgressBox::CopyFile(fs::Fs* fs, const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
-    return CopyFile(fs, fs, src_path, dst_path);
+auto ProgressBox::CopyFile(fs::Fs* fs, const fs::FsPath& src_path, const fs::FsPath& dst_path, bool single_threaded) -> Result {
+    return CopyFile(fs, fs, src_path, dst_path, single_threaded);
 }
 
-auto ProgressBox::CopyFile(const fs::FsPath& src_path, const fs::FsPath& dst_path) -> Result {
+auto ProgressBox::CopyFile(const fs::FsPath& src_path, const fs::FsPath& dst_path, bool single_threaded) -> Result {
     fs::FsNativeSd fs;
     R_TRY(fs.GetFsOpenResult());
-    return CopyFile(&fs, src_path, dst_path);
+    return CopyFile(&fs, src_path, dst_path, single_threaded);
 }
 
 void ProgressBox::Yield() {

@@ -500,7 +500,6 @@ Result OpenFile(fs::Fs* fs, const fs::FsPath& path, u32 mode, File* f) {
         }
 
         R_UNLESS(f->m_stdio, Result_FsUnknownStdioError);
-        std::strcpy(f->m_path, path);
     }
 
     R_SUCCEED();
@@ -580,17 +579,7 @@ Result File::GetSize(s64* out) {
         R_TRY(fsFileGetSize(&m_native, out));
     } else {
         struct stat st;
-        const auto fd = fileno(m_stdio);
-        bool did_stat{};
-
-        if (fd && !fstat(fd, &st)) {
-            did_stat = true;
-        }
-
-        if (!did_stat) {
-            R_UNLESS(!lstat(m_path, &st), Result_FsUnknownStdioError);
-        }
-
+        R_UNLESS(!fstat(fileno(m_stdio), &st), Result_FsUnknownStdioError);
         *out = st.st_size;
     }
 

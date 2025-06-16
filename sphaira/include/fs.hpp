@@ -12,10 +12,14 @@ namespace fs {
 
 struct FsPath {
     FsPath() = default;
-    constexpr FsPath(const auto& str) { From(str); }
+
+    constexpr FsPath(const FsPath& p) { From(p); }
+    constexpr FsPath(const char* str) { From(str); }
+    constexpr FsPath(const std::string& str) { From(str); }
+    constexpr FsPath(const std::string_view& str) { From(str); }
 
     constexpr void From(const FsPath& p) {
-        *this = p;
+        From(p.s);
     }
 
     constexpr void From(const char* str) {
@@ -38,6 +42,10 @@ struct FsPath {
 
     constexpr auto toString() const -> std::string {
         return s;
+    }
+
+    constexpr auto starts_with(std::string_view str) const -> bool {
+        return !strncasecmp(s, str.data(), str.length());
     }
 
     constexpr auto empty() const {
@@ -64,6 +72,11 @@ struct FsPath {
     constexpr operator std::string_view() const { return s; }
     constexpr char& operator[](std::size_t idx) { return s[idx]; }
     constexpr const char& operator[](std::size_t idx) const { return s[idx]; }
+
+    constexpr FsPath& operator=(const FsPath& p) noexcept {
+        From(p.s);
+        return *this;
+    }
 
     constexpr FsPath operator+(const FsPath& v) const noexcept {
         FsPath r{*this};
@@ -186,9 +199,6 @@ struct File {
     FsFile m_native{};
     std::FILE* m_stdio{};
     s64 m_stdio_off{};
-    // sadly, fatfs doesn't support fstat, so we have to manually
-    // stat the file to get it's size.
-    FsPath m_path{};
 };
 
 struct Dir {

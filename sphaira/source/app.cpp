@@ -1292,21 +1292,6 @@ App::App(const char* argv0) {
         __nx_applet_exit_mode = 1;
     }
 
-    // get emummc config.
-    alignas(0x1000) AmsEmummcPaths paths{};
-    SecmonArgs args{};
-    args.X[0] = 0xF0000404; /* smcAmsGetEmunandConfig */
-    args.X[1] = 0; /* EXO_EMUMMC_MMC_NAND*/
-    args.X[2] = (u64)&paths; /* out path */
-    svcCallSecureMonitor(&args);
-    m_emummc_paths = paths;
-
-    log_write("emummc : %u\n", App::IsEmummc());
-    if (App::IsEmummc()) {
-        log_write("[emummc] file based path: %s\n", m_emummc_paths.file_based_path);
-        log_write("[emummc] nintendo path: %s\n", m_emummc_paths.nintendo);
-    }
-
     fs::FsNativeSd fs;
     fs.CreateDirectoryRecursively("/config/sphaira");
     fs.CreateDirectory("/config/sphaira/assoc");
@@ -1368,6 +1353,48 @@ App::App(const char* argv0) {
         log_file_init();
         log_write("hello world v%s\n", APP_VERSION_HASH);
         App::Notify("Warning! Logs are enabled, Sphaira will run slowly!"_i18n);
+    }
+
+    if (log_is_init()) {
+        SetSysFirmwareVersion fw_version{};
+        setsysInitialize();
+        ON_SCOPE_EXIT(setsysExit());
+        setsysGetFirmwareVersion(&fw_version);
+
+        log_write("[version] platform: %s\n", fw_version.platform);
+        log_write("[version] version_hash: %s\n", fw_version.version_hash);
+        log_write("[version] display_version: %s\n", fw_version.display_version);
+        log_write("[version] display_title: %s\n", fw_version.display_title);
+
+        splInitialize();
+        ON_SCOPE_EXIT(splExit());
+
+        u64 out{};
+        splGetConfig((SplConfigItem)65000, &out);
+        log_write("[ams] version: %lu.%lu.%lu\n", (out >> 56) & 0xFF, (out >> 48) & 0xFF, (out >> 40) & 0xFF);
+        log_write("[ams] target version: %lu.%lu.%lu\n", (out >> 24) & 0xFF, (out >> 16) & 0xFF, (out >> 8) & 0xFF);
+        log_write("[ams] key gen: %lu\n", (out >> 32) & 0xFF);
+
+        splGetConfig((SplConfigItem)65003, &out);
+        log_write("[ams] hash: %lx\n", out);
+
+        splGetConfig((SplConfigItem)65010, &out);
+        log_write("[ams] usb 3.0 enabled: %lu\n", out);
+    }
+
+    // get emummc config.
+    alignas(0x1000) AmsEmummcPaths paths{};
+    SecmonArgs args{};
+    args.X[0] = 0xF0000404; /* smcAmsGetEmunandConfig */
+    args.X[1] = 0; /* EXO_EMUMMC_MMC_NAND*/
+    args.X[2] = (u64)&paths; /* out path */
+    svcCallSecureMonitor(&args);
+    m_emummc_paths = paths;
+
+    log_write("[emummc] enabled: %u\n", App::IsEmummc());
+    if (App::IsEmummc()) {
+        log_write("[emummc] file based path: %s\n", m_emummc_paths.file_based_path);
+        log_write("[emummc] nintendo path: %s\n", m_emummc_paths.nintendo);
     }
 
     if (App::GetMtpEnable()) {

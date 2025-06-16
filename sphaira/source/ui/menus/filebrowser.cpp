@@ -442,6 +442,8 @@ FsView::~FsView() {
 }
 
 void FsView::Update(Controller* controller, TouchInfo* touch) {
+    Widget::Update(controller, touch);
+
     m_list->OnUpdate(controller, touch, m_index, m_entries_current.size(), [this](bool touch, auto i) {
         if (touch && m_index == i) {
             FireAction(Button::A);
@@ -728,10 +730,12 @@ void FsView::UnzipFiles(fs::FsPath dir_path) {
     }
 
     App::Push(std::make_shared<ui::ProgressBox>(0, "Extracting "_i18n, "", [this, dir_path, targets](auto pbox) -> Result {
+        const auto is_hdd_fs = m_fs->Root().starts_with("ums");
+
         for (auto& e : targets) {
             pbox->SetTitle(e.GetName());
             const auto zip_out = GetNewPath(e);
-            R_TRY(thread::TransferUnzipAll(pbox, zip_out, m_fs.get(), dir_path));
+            R_TRY(thread::TransferUnzipAll(pbox, zip_out, m_fs.get(), dir_path, nullptr, is_hdd_fs ? thread::Mode::SingleThreaded : thread::Mode::SingleThreadedIfSmaller));
         }
 
         R_SUCCEED();
@@ -786,6 +790,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
     App::Push(std::make_shared<ui::ProgressBox>(0, "Compressing "_i18n, "", [this, zip_out, targets](auto pbox) -> Result {
         const auto t = std::time(NULL);
         const auto tm = std::localtime(&t);
+        const auto is_hdd_fs = m_fs->Root().starts_with("ums");
 
         // pre-calculate the time rather than calculate it in the loop.
         zip_fileinfo zip_info{};
@@ -825,7 +830,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
             }
             ON_SCOPE_EXIT(zipCloseFileInZip(zfile));
 
-            return thread::TransferZip(pbox, zfile, m_fs.get(), file_path);
+            return thread::TransferZip(pbox, zfile, m_fs.get(), file_path, nullptr, is_hdd_fs ? thread::Mode::SingleThreaded : thread::Mode::SingleThreadedIfSmaller);
         };
 
         for (auto& e : targets) {
@@ -1207,6 +1212,7 @@ void FsView::OnPasteCallback() {
         App::Push(std::make_shared<ProgressBox>(0, "Pasting"_i18n, "", [this](auto pbox) -> Result {
             auto& selected = m_menu->m_selected;
             auto src_fs = selected.m_view->GetFs();
+            const auto is_same_fs = selected.SameFs(this);
 
             if (selected.SameFs(this) && selected.m_type == SelectedType::Cut) {
                 for (const auto& p : selected.m_files) {
@@ -1271,7 +1277,7 @@ void FsView::OnPasteCallback() {
                     } else {
                         pbox->SetTitle(p.name);
                         pbox->NewTransfer("Copying "_i18n + src_path);
-                        R_TRY(pbox->CopyFile(src_fs, m_fs.get(), src_path, dst_path));
+                        R_TRY(pbox->CopyFile(src_fs, m_fs.get(), src_path, dst_path, is_same_fs));
                         R_TRY(on_paste_file(src_path, dst_path));
                     }
                 }
@@ -1301,7 +1307,7 @@ void FsView::OnPasteCallback() {
 
                         pbox->SetTitle(p.name);
                         pbox->NewTransfer("Copying "_i18n + src_path);
-                        R_TRY(pbox->CopyFile(src_fs, m_fs.get(), src_path, dst_path));
+                        R_TRY(pbox->CopyFile(src_fs, m_fs.get(), src_path, dst_path, is_same_fs));
                         R_TRY(on_paste_file(src_path, dst_path));
                     }
                 }
@@ -1880,9 +1886,9 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
     // workaround the buttons not being display properly.
     // basically, inherit all actions from the view, draw them,
     // then restore state after.
-    const auto actions_copy = GetActions();
-    ON_SCOPE_EXIT(m_actions = actions_copy);
-    m_actions.insert_range(view->GetActions());
+    // const auto actions_copy = GetActions();
+    // ON_SCOPE_EXIT(m_actions = actions_copy);
+    // m_actions.insert_range(view->GetActions());
 
     MenuBase::Update(controller, touch);
     view->Update(controller, touch);

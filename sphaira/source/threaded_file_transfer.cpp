@@ -416,21 +416,21 @@ Result TransferInternal(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, Wri
 } // namespace
 
 Result Transfer(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, WriteCallback wfunc, Mode mode) {
-    return TransferInternal(pbox, size, rfunc, wfunc, nullptr, Mode::MultiThreaded);
+    return TransferInternal(pbox, size, rfunc, wfunc, nullptr, mode);
 }
 
 Result TransferPull(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, StartCallback sfunc, Mode mode) {
     return TransferInternal(pbox, size, rfunc, nullptr, [sfunc](StartThreadCallback start, PullCallback pull) -> Result {
         R_TRY(start());
         return sfunc(pull);
-    }, Mode::MultiThreaded);
+    }, mode);
 }
 
 Result TransferPull(ui::ProgressBox* pbox, s64 size, ReadCallback rfunc, StartCallback2 sfunc, Mode mode) {
-    return TransferInternal(pbox, size, rfunc, nullptr, sfunc, Mode::MultiThreaded);
+    return TransferInternal(pbox, size, rfunc, nullptr, sfunc, mode);
 }
 
-Result TransferUnzip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path, s64 size, u32 crc32) {
+Result TransferUnzip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path, s64 size, u32 crc32, Mode mode) {
     Result rc;
     if (R_FAILED(rc = fs->CreateDirectoryRecursivelyWithPath(path)) && rc != FsError_PathAlreadyExists) {
         log_write("failed to create folder: %s 0x%04X\n", path.s, rc);
@@ -471,7 +471,7 @@ Result TransferUnzip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::F
         [&](const void* data, s64 off, s64 size) -> Result {
             return f.Write(off, data, size, FsWriteOption_None);
         },
-        nullptr, Mode::SingleThreadedIfSmaller, SMALL_BUFFER_SIZE
+        nullptr, mode, SMALL_BUFFER_SIZE
     ));
 
     // validate crc32 (if set in the info).
@@ -480,7 +480,7 @@ Result TransferUnzip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::F
     R_SUCCEED();
 }
 
-Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path, u32* crc32) {
+Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& path, u32* crc32, Mode mode) {
     fs::File f;
     R_TRY(fs->OpenFile(path, FsOpenMode_Read, &f));
 
@@ -506,11 +506,11 @@ Result TransferZip(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsP
             }
             R_SUCCEED();
         },
-        nullptr, Mode::SingleThreadedIfSmaller, SMALL_BUFFER_SIZE
+        nullptr, mode, SMALL_BUFFER_SIZE
     );
 }
 
-Result TransferUnzipAll(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& base_path, UnzipAllFilter filter) {
+Result TransferUnzipAll(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs::FsPath& base_path, UnzipAllFilter filter, Mode mode) {
     unz_global_info64 ginfo;
     if (UNZ_OK != unzGetGlobalInfo64(zfile, &ginfo)) {
         R_THROW(Result_UnzGetGlobalInfo64);
@@ -560,14 +560,14 @@ Result TransferUnzipAll(ui::ProgressBox* pbox, void* zfile, fs::Fs* fs, const fs
                 R_THROW(rc);
             }
         } else {
-            R_TRY(TransferUnzip(pbox, zfile, fs, path, info.uncompressed_size, info.crc));
+            R_TRY(TransferUnzip(pbox, zfile, fs, path, info.uncompressed_size, info.crc, mode));
         }
     }
 
     R_SUCCEED();
 }
 
-Result TransferUnzipAll(ui::ProgressBox* pbox, const fs::FsPath& zip_out, fs::Fs* fs, const fs::FsPath& base_path, UnzipAllFilter filter) {
+Result TransferUnzipAll(ui::ProgressBox* pbox, const fs::FsPath& zip_out, fs::Fs* fs, const fs::FsPath& base_path, UnzipAllFilter filter, Mode mode) {
     zlib_filefunc64_def file_func;
     mz::FileFuncStdio(&file_func);
 
@@ -575,7 +575,7 @@ Result TransferUnzipAll(ui::ProgressBox* pbox, const fs::FsPath& zip_out, fs::Fs
     R_UNLESS(zfile, Result_UnzOpen2_64);
     ON_SCOPE_EXIT(unzClose(zfile));
 
-    return TransferUnzipAll(pbox, zfile, fs, base_path, filter);
+    return TransferUnzipAll(pbox, zfile, fs, base_path, filter, mode);
 }
 
 } // namespace::thread
