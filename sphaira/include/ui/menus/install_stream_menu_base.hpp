@@ -34,8 +34,10 @@ private:
     fs::FsPath m_path{};
     std::stop_token m_token{};
     std::vector<u8> m_buffer{};
-    Mutex m_mutex{};
     CondVar m_can_read{};
+
+public:
+    Mutex m_mutex{};
     bool m_active{};
 };
 

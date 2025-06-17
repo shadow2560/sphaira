@@ -191,9 +191,44 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
 bool Menu::OnInstallStart(const char* path) {
     log_write("[Menu::OnInstallStart] inside\n");
-    if (INSTALL_STATE == InstallState::Progress) {
-        log_write("[Menu::OnInstallStart] already in progress\n");
-        return false;
+
+    for (;;) {
+        {
+            SCOPED_MUTEX(&m_mutex);
+
+            if (m_state != State::Progress) {
+                break;
+            }
+
+            if (GetToken().stop_requested()) {
+                return false;
+            }
+        }
+
+        svcSleepThread(1e+6);
+    }
+
+    log_write("[Menu::OnInstallStart] got state: %u\n", (u8)m_state);
+
+    if (m_source) {
+        log_write("[Menu::OnInstallStart] we have source\n");
+        for (;;) {
+            {
+                SCOPED_MUTEX(&m_source->m_mutex);
+
+                if (!m_source->m_active && INSTALL_STATE != InstallState::Progress) {
+                    break;
+                }
+
+                if (GetToken().stop_requested()) {
+                    return false;
+                }
+            }
+
+            svcSleepThread(1e+6);
+        }
+
+        log_write("[Menu::OnInstallStart] stopped polling source\n");
     }
 
     SCOPED_MUTEX(&m_mutex);
