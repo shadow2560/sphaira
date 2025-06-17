@@ -1185,7 +1185,7 @@ void FsView::OnDeleteCallback() {
                 }
             }
 
-            return DeleteAllCollections(pbox, src_fs, selected, collections);
+            return DeleteAllCollectionsWithSelected(pbox, src_fs, selected, collections);
         }, [this](Result rc){
             App::PushErrorBox(rc, "Failed to, TODO: add message here"_i18n);
 
@@ -1319,7 +1319,7 @@ void FsView::OnPasteCallback() {
                 // the folders cannot be deleted until the end as they have to be removed in
                 // reverse order so that the folder can be deleted (it must be empty).
                 if (selected.m_type == SelectedType::Cut) {
-                    R_TRY(DeleteAllCollections(pbox, src_fs, selected, collections, FsDirOpenMode_ReadDirs));
+                    R_TRY(DeleteAllCollectionsWithSelected(pbox, src_fs, selected, collections, FsDirOpenMode_ReadDirs));
                 }
             }
 
@@ -1430,7 +1430,7 @@ auto FsView::get_collections(const fs::FsPath& path, const fs::FsPath& parent_na
     return get_collections(m_fs.get(), path, parent_name, out, inc_size);
 }
 
-static Result DeleteAllCollections(ProgressBox* pbox, fs::Fs* fs, const SelectedStash& selected, const FsDirCollections& collections, u32 mode = FsDirOpenMode_ReadDirs|FsDirOpenMode_ReadFiles) {
+Result FsView::DeleteAllCollections(ProgressBox* pbox, fs::Fs* fs, const FsDirCollections& collections, u32 mode) {
     // delete everything in collections, reversed
     for (const auto& c : std::views::reverse(collections)) {
         const auto delete_func = [&](auto& array) -> Result {
@@ -1458,6 +1458,12 @@ static Result DeleteAllCollections(ProgressBox* pbox, fs::Fs* fs, const Selected
         R_TRY(delete_func(c.files));
         R_TRY(delete_func(c.dirs));
     }
+
+    R_SUCCEED();
+}
+
+static Result DeleteAllCollectionsWithSelected(ProgressBox* pbox, fs::Fs* fs, const SelectedStash& selected, const FsDirCollections& collections, u32 mode = FsDirOpenMode_ReadDirs|FsDirOpenMode_ReadFiles) {
+    R_TRY(FsView::DeleteAllCollections(pbox, fs, collections, mode));
 
     for (const auto& p : selected.m_files) {
         pbox->Yield();

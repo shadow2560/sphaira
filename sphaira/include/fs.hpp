@@ -199,6 +199,7 @@ struct File {
     FsFile m_native{};
     std::FILE* m_stdio{};
     s64 m_stdio_off{};
+    u32 m_mode{};
 };
 
 struct Dir {
@@ -287,6 +288,7 @@ struct Fs {
     virtual Result GetEntryType(const FsPath& path, FsDirEntryType* out) = 0;
     virtual Result GetFileTimeStampRaw(const FsPath& path, FsTimeStampRaw *out) = 0;
     virtual Result SetTimestamp(const FsPath& path, const FsTimeStampRaw* ts) = 0;
+    virtual Result Commit() = 0;
     virtual bool FileExists(const FsPath& path) = 0;
     virtual bool DirExists(const FsPath& path) = 0;
     virtual bool IsNative() const = 0;
@@ -362,6 +364,9 @@ struct FsStdio : Fs {
     Result SetTimestamp(const FsPath& path, const FsTimeStampRaw *ts) override {
         return fs::SetTimestamp(path, ts);
     }
+    Result Commit() override {
+        R_SUCCEED();
+    }
     bool FileExists(const FsPath& path) override {
         return fs::FileExists(path);
     }
@@ -395,10 +400,6 @@ struct FsNative : Fs {
         if (m_own) {
             fsFsClose(&m_fs);
         }
-    }
-
-    Result Commit() {
-        return fsFsCommit(&m_fs);
     }
 
     Result GetFreeSpace(const FsPath& path, s64* out) {
@@ -452,6 +453,9 @@ struct FsNative : Fs {
     }
     Result SetTimestamp(const FsPath& path, const FsTimeStampRaw *ts) override {
         return fs::SetTimestamp(&m_fs, path, ts);
+    }
+    Result Commit() override {
+        return fsFsCommit(&m_fs);
     }
     bool FileExists(const FsPath& path) override {
         return fs::FileExists(&m_fs, path);

@@ -1197,8 +1197,7 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
     ON_SCOPE_EXIT(unzClose(zfile));
     log_write("opened zip\n");
 
-    bool has_meta{};
-    NXSaveMeta meta{};
+    std::optional<NXSaveMeta> meta{};
 
     // get manifest
     if (UNZ_END_OF_LIST_OF_FILE != unzLocateFile(zfile, NX_SAVE_META_NAME, 0)) {
@@ -1207,17 +1206,18 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
             log_write("opened meta file\n");
             ON_SCOPE_EXIT(unzCloseCurrentFile(zfile));
 
-            const auto len = unzReadCurrentFile(zfile, &meta, sizeof(meta));
-            if (len == sizeof(meta) && meta.magic == NX_SAVE_META_MAGIC && meta.version == NX_SAVE_META_VERSION) {
-                has_meta = true;
+            NXSaveMeta temp_meta;
+            const auto len = unzReadCurrentFile(zfile, &temp_meta, sizeof(temp_meta));
+            if (len == sizeof(temp_meta) && temp_meta.magic == NX_SAVE_META_MAGIC && temp_meta.version == NX_SAVE_META_VERSION) {
+                meta = temp_meta;
                 log_write("loaded meta!\n");
             }
         }
     }
 
-    if (has_meta) {
+    if (meta.has_value()) {
         log_write("extending save file\n");
-        R_TRY(fsExtendSaveDataFileSystem(save_data_space_id, e.save_data_id, meta.data_size, meta.journal_size));
+        R_TRY(fsExtendSaveDataFileSystem(save_data_space_id, e.save_data_id, meta->data_size, meta->journal_size));
         log_write("extended save file\n");
     } else {
         log_write("doing manual meta parse\n");
@@ -1267,6 +1267,11 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
     fs::FsNativeSave save_fs{(FsSaveDataType)e.save_data_type, save_data_space_id, &attr, false};
     R_TRY(save_fs.GetFsOpenResult());
 
+    // delete all files in save.
+    filebrowser::FsDirCollections collections;
+    R_TRY(filebrowser::FsView::get_collections(&save_fs, "/", "", collections));
+    R_TRY(filebrowser::FsView::DeleteAllCollections(pbox, &save_fs, collections));
+
     log_write("opened save file\n");
     // restore save data from zip.
     R_TRY(thread::TransferUnzipAll(pbox, zfile, &save_fs, "/", [&](const fs::FsPath& name, fs::FsPath& path) -> bool {
@@ -1278,14 +1283,10 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
 
         // restore everything else.
         log_write("restoring: %s\n", path.s);
-
-        // commit after every save otherwise FsError_MappingTableFull is thrown.
-        R_TRY(save_fs.Commit());
         return true;
     }));
 
-    log_write("finished, doing commit\n");
-    R_TRY(save_fs.Commit());
+    log_write("finished save backup\n");
     R_SUCCEED();
 }
 
