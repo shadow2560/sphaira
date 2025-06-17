@@ -1778,7 +1778,7 @@ void FsView::DisplayAdvancedOptions() {
     options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
         App::PopToMenu();
         SetFs(fs_entries[index_out].root, fs_entries[index_out]);
-    }, m_fs_entry.name));
+    }, i18n::get(m_fs_entry.name)));
 
     options->Add(std::make_shared<SidebarEntryCallback>("Create File"_i18n, [this](){
         std::string out;
