@@ -1333,7 +1333,7 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
     // the save file may be empty, this isn't an error, but we exit early.
     R_UNLESS(!collections.empty(), 0x0);
 
-    const auto t = std::time(NULL);
+    const auto t = (time_t)extra.timestamp;
     const auto tm = std::localtime(&t);
 
     // pre-calculate the time rather than calculate it in the loop.
