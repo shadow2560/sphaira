@@ -50,7 +50,7 @@
 
   "Misc": "Diversos",
   "Misc Options": "Diversos",
-  
+
   "Games": "Softwares",
   "Game Options": "Opções do software",
   "Hide forwarders": "Ocultar atalhos forwarder",
@@ -91,7 +91,7 @@
   "Delete failed!": "Remoção falhou.",
   "Success": "Concluído.",
   "Title cache": "Usar cache de títulos",
-  
+
   "Saves": "Dados salvos",
   "Save Options": "Opções de dados salvos",
   "Account": "Usuário",
@@ -117,7 +117,7 @@
   "Are you sure you want to restore ": "Tem certeza de que quer restaurar os dados salvo de ",
   "Restore successfull!": "Restauração concluída.",
   "Restore failed!": "Restauração falhou.",
-  
+
   "Themezer": "Themezer",
   "Themezer Options": "Opções do Themezer",
   "Nsfw": "Temas 18+ (NSFW)",
@@ -134,7 +134,6 @@
   "Failed to download app!": "falha ao baixar aplicativo.",
 
   "FTP Install": "Instalação via FTP",
-  "FTP Install (EXPERIMENTAL)": "Instalação via FTP (experimental)",
   "Connection Type: WiFi | Strength: ": "Conexão por rede Wi-Fi | Intensidade do sinal: ",
   "Connection Type: Ethernet": "Conexão por cabo Ethernet",
   "Connection Type: None": "Sem conexão",
@@ -144,9 +143,9 @@
   "Password:": "Senha:",
   "SSID:": "SSID:",
   "Passphrase:": "Senha:",
-  "Failed to install via FTP, press B to exit...": "Falha ao instalar via FTP, aperte B para sair.",
-  "Ftp install success!": "Instalação via FTP concluída.",
-  "Ftp install failed!": "Instalação via FTP falhou.",
+  "Failed to install, press B to exit...": "Falha ao instalar via FTP, aperte B para sair.",
+  "Install success!": "Instalação via FTP concluída.",
+  "Install failed!": "Instalação via FTP falhou.",
   "USB Install": "Instalação via USB",
   "USB": "USB",
   "Connected, waiting for file list...": "Conectado, aguardando lista de arquivos...",
@@ -213,7 +212,7 @@
   "Trimming Format": "Formato do recorte",
   "External Light Filter": "Filtro de luz externa",
   "Load Default": "Restaurar padrão",
-  
+
   "Web": "Navegador de internet",
   "Select URL": "Selecione uma URL",
   "Enter custom URL": "Digitar URL",
