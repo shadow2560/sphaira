@@ -115,7 +115,7 @@
   "Password:": "Password:",
   "SSID:": "SSID:",
   "Passphrase:": "Passphrase",
-  "Failed to install, press B to exit...": "Failed to install via FTP, press  to exit...",
+  "Failed to install, press B to exit...": "Failed to install, press  to exit...",
   "Install success!": "Install success!",
   "Install failed!": "Install failed!",
   "USB Install": "USB Install",

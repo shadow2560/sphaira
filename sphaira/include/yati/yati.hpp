@@ -48,6 +48,9 @@ struct Config {
     // if set, it will ignore the distribution bit in the nca header.
     bool ignore_distribution_bit{};
 
+    // converts a personalised ticket to common.
+    bool convert_to_common_ticket{};
+
     // converts titlekey to standard crypto, also known as "ticketless".
     // this will not work with addon (dlc), so, addon tickets will be installed.
     bool convert_to_standard_crypto{};
@@ -69,6 +72,7 @@ struct ConfigOverride {
     std::optional<bool> skip_rsa_header_fixed_key_verify{};
     std::optional<bool> skip_rsa_npdm_fixed_key_verify{};
     std::optional<bool> ignore_distribution_bit{};
+    std::optional<bool> convert_to_common_ticket{};
     std::optional<bool> convert_to_standard_crypto{};
     std::optional<bool> lower_master_key{};
     std::optional<bool> lower_system_version{};

@@ -139,11 +139,12 @@ using MetaEntries = std::vector<NsApplicationContentMetaStatus>;
 struct ContentInfoEntry {
     NsApplicationContentMetaStatus status{};
     std::vector<NcmContentInfo> content_infos{};
-    std::vector<FsRightsId> rights_ids{};
+    std::vector<NcmRightsId> ncm_rights_id{};
 };
 
 struct TikEntry {
     FsRightsId id{};
+    u8 key_gen{};
     std::vector<u8> tik_data{};
     std::vector<u8> cert_data{};
 };
@@ -500,7 +501,6 @@ auto BuildNspPath(const Entry& e, const NsApplicationContentMetaStatus& status) 
     utilsReplaceIllegalCharacters(name_buf, true);
 
     char version[sizeof(NacpStruct::display_version) + 1]{};
-    // status.storageID
     if (status.meta_type == NcmContentMetaType_Patch) {
         u64 program_id;
         fs::FsPath path;
@@ -558,14 +558,13 @@ Result BuildContentEntry(const NsApplicationContentMetaStatus& status, ContentIn
         NcmRightsId ncm_rights_id;
         R_TRY(ncmContentStorageGetRightsIdFromContentId(std::addressof(cs), std::addressof(ncm_rights_id), std::addressof(info_out.content_id), FsContentAttributes_All));
 
-        const auto rights_id = ncm_rights_id.rights_id;
-        if (isRightsIdValid(rights_id)) {
-            const auto it = std::ranges::find_if(out.rights_ids, [&rights_id](auto& e){
-                return !std::memcmp(&e, &rights_id, sizeof(rights_id));
+        if (isRightsIdValid(ncm_rights_id.rights_id)) {
+            const auto it = std::ranges::find_if(out.ncm_rights_id, [&ncm_rights_id](auto& e){
+                return !std::memcmp(&e, &ncm_rights_id, sizeof(ncm_rights_id));
             });
 
-            if (it == out.rights_ids.end()) {
-                out.rights_ids.emplace_back(rights_id);
+            if (it == out.ncm_rights_id.end()) {
+                out.ncm_rights_id.emplace_back(ncm_rights_id);
             }
         }
 
@@ -582,13 +581,27 @@ Result BuildContentEntry(const NsApplicationContentMetaStatus& status, ContentIn
     R_SUCCEED();
 }
 
-Result BuildNspEntry(const Entry& e, const ContentInfoEntry& info, NspEntry& out) {
+Result BuildNspEntry(const Entry& e, const ContentInfoEntry& info, const keys::Keys& keys, NspEntry& out) {
     out.application_name = e.GetName();
     out.path = BuildNspPath(e, info.status);
     s64 offset{};
 
-    for (auto& rights_id : info.rights_ids) {
-        TikEntry entry{rights_id};
+    for (auto& e : info.content_infos) {
+        char nca_name[0x200];
+        std::snprintf(nca_name, sizeof(nca_name), "%s%s", hexIdToStr(e.content_id).str, e.content_type == NcmContentType_Meta ? ".cnmt.nca" : ".nca");
+
+        u64 size;
+        ncmContentInfoSizeToU64(std::addressof(e), std::addressof(size));
+
+        out.collections.emplace_back(nca_name, offset, size);
+        offset += size;
+    }
+
+    for (auto& ncm_rights_id : info.ncm_rights_id) {
+        const auto rights_id = ncm_rights_id.rights_id;
+        const auto key_gen = ncm_rights_id.key_generation;
+
+        TikEntry entry{rights_id, key_gen};
         log_write("rights id is valid, fetching common ticket and cert\n");
 
         u64 tik_size;
@@ -600,6 +613,9 @@ Result BuildNspEntry(const Entry& e, const ContentInfoEntry& info, NspEntry& out
         entry.cert_data.resize(cert_size);
         R_TRY(es::GetCommonTicketAndCertificateData(&tik_size, &cert_size, entry.tik_data.data(), entry.tik_data.size(), entry.cert_data.data(), entry.cert_data.size(), &rights_id));
         log_write("got tik_data: %zu cert_data: %zu\n", tik_size, cert_size);
+
+        // patch fake ticket / convert personalised to common if needed.
+        R_TRY(es::PatchTicket(entry.tik_data, entry.cert_data, key_gen, keys, App::GetApp()->m_dump_convert_to_common_ticket.Get()));
 
         char tik_name[0x200];
         std::snprintf(tik_name, sizeof(tik_name), "%s%s", hexIdToStr(rights_id).str, ".tik");
@@ -616,17 +632,6 @@ Result BuildNspEntry(const Entry& e, const ContentInfoEntry& info, NspEntry& out
         out.tickets.emplace_back(entry);
     }
 
-    for (auto& e : info.content_infos) {
-        char nca_name[0x200];
-        std::snprintf(nca_name, sizeof(nca_name), "%s%s", hexIdToStr(e.content_id).str, e.content_type == NcmContentType_Meta ? ".cnmt.nca" : ".nca");
-
-        u64 size;
-        ncmContentInfoSizeToU64(std::addressof(e), std::addressof(size));
-
-        out.collections.emplace_back(nca_name, offset, size);
-        offset += size;
-    }
-
     out.nsp_data = yati::container::Nsp::Build(out.collections, out.nsp_size);
     out.cs = GetNcmCs(info.status.storageID);
 
@@ -639,12 +644,15 @@ Result BuildNspEntries(Entry& e, u32 flags, std::vector<NspEntry>& out) {
     MetaEntries meta_entries;
     R_TRY(GetMetaEntries(e, meta_entries, flags));
 
+    keys::Keys keys;
+    R_TRY(keys::parse_keys(keys, true));
+
     for (const auto& status : meta_entries) {
         ContentInfoEntry info;
         R_TRY(BuildContentEntry(status, info));
 
         NspEntry nsp;
-        R_TRY(BuildNspEntry(e, info, nsp));
+        R_TRY(BuildNspEntry(e, info, keys, nsp));
         out.emplace_back(nsp).icon = e.image;
     }
 

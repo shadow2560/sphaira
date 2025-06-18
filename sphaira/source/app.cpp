@@ -1333,6 +1333,7 @@ App::App(const char* argv0) {
             else if (app->m_skip_rsa_header_fixed_key_verify.LoadFrom(Key, Value)) {}
             else if (app->m_skip_rsa_npdm_fixed_key_verify.LoadFrom(Key, Value)) {}
             else if (app->m_ignore_distribution_bit.LoadFrom(Key, Value)) {}
+            else if (app->m_convert_to_common_ticket.LoadFrom(Key, Value)) {}
             else if (app->m_convert_to_standard_crypto.LoadFrom(Key, Value)) {}
             else if (app->m_lower_master_key.LoadFrom(Key, Value)) {}
             else if (app->m_lower_system_version.LoadFrom(Key, Value)) {}
@@ -1831,6 +1832,10 @@ void App::DisplayInstallOptions(bool left_side) {
         App::GetApp()->m_ignore_distribution_bit.Set(enable);
     }));
 
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Convert to common ticket"_i18n, App::GetApp()->m_convert_to_common_ticket.Get(), [](bool& enable){
+        App::GetApp()->m_convert_to_common_ticket.Set(enable);
+    }));
+
     options->Add(std::make_shared<ui::SidebarEntryBool>("Convert to standard crypto"_i18n, App::GetApp()->m_convert_to_standard_crypto.Get(), [](bool& enable){
         App::GetApp()->m_convert_to_standard_crypto.Set(enable);
     }));
@@ -1866,6 +1871,10 @@ void App::DisplayDumpOptions(bool left_side) {
 
     options->Add(std::make_shared<ui::SidebarEntryBool>("Multi-threaded USB transfer"_i18n, App::GetApp()->m_dump_usb_transfer_stream.Get(), [](bool& enable){
         App::GetApp()->m_dump_usb_transfer_stream.Set(enable);
+    }));
+
+    options->Add(std::make_shared<ui::SidebarEntryBool>("Convert to common ticket"_i18n, App::GetApp()->m_dump_convert_to_common_ticket.Get(), [](bool& enable){
+        App::GetApp()->m_dump_convert_to_common_ticket.Set(enable);
     }));
 }
 

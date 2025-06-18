@@ -582,6 +582,11 @@ enum class SphairaResult : Result {
     EsFailedDecryptPersonalisedTicket,
     EsBadDecryptedPersonalisedTicketSize,
     EsBadTicketSize,
+    // found ticket has missmatching rights_id from it's name.
+    EsInvalidTicketBadRightsId,
+    EsInvalidTicketFromatVersion,
+    EsInvalidTicketKeyType,
+    EsInvalidTicketKeyRevision,
 
     OwoBadArgs,
 
@@ -630,21 +635,12 @@ enum class SphairaResult : Result {
     YatiTicketNotFound,
     // found ticket has missmatching rights_id from it's name.
     YatiInvalidTicketBadRightsId,
-    YatiInvalidTicketVersion,
-    YatiInvalidTicketKeyType,
-    YatiInvalidTicketKeyRevision,
     // cert not found for the ticket.
     YatiCertNotFound,
     // unable to fetch header from ncm database.
     YatiNcmDbCorruptHeader,
     // unable to total infos from ncm database.
     YatiNcmDbCorruptInfos,
-
-    // found ticket has missmatching rights_id from it's name.
-    TicketInvalidTicketBadRightsId,
-    TicketInvalidTicketVersion,
-    TicketInvalidTicketKeyType,
-    TicketInvalidTicketKeyRevision,
 };
 
 #define MAKE_SPHAIRA_RESULT_ENUM(x) Result_##x =  MAKERESULT(Module_Sphaira, (Result)SphairaResult::x)
@@ -719,6 +715,10 @@ enum : Result {
     MAKE_SPHAIRA_RESULT_ENUM(EsFailedDecryptPersonalisedTicket),
     MAKE_SPHAIRA_RESULT_ENUM(EsBadDecryptedPersonalisedTicketSize),
     MAKE_SPHAIRA_RESULT_ENUM(EsBadTicketSize),
+    MAKE_SPHAIRA_RESULT_ENUM(EsInvalidTicketBadRightsId),
+    MAKE_SPHAIRA_RESULT_ENUM(EsInvalidTicketFromatVersion),
+    MAKE_SPHAIRA_RESULT_ENUM(EsInvalidTicketKeyType),
+    MAKE_SPHAIRA_RESULT_ENUM(EsInvalidTicketKeyRevision),
     MAKE_SPHAIRA_RESULT_ENUM(OwoBadArgs),
     MAKE_SPHAIRA_RESULT_ENUM(UsbCancelled),
     MAKE_SPHAIRA_RESULT_ENUM(UsbBadMagic),
@@ -750,16 +750,9 @@ enum : Result {
     MAKE_SPHAIRA_RESULT_ENUM(YatiInvalidNczZstdError),
     MAKE_SPHAIRA_RESULT_ENUM(YatiTicketNotFound),
     MAKE_SPHAIRA_RESULT_ENUM(YatiInvalidTicketBadRightsId),
-    MAKE_SPHAIRA_RESULT_ENUM(YatiInvalidTicketVersion),
-    MAKE_SPHAIRA_RESULT_ENUM(YatiInvalidTicketKeyType),
-    MAKE_SPHAIRA_RESULT_ENUM(YatiInvalidTicketKeyRevision),
     MAKE_SPHAIRA_RESULT_ENUM(YatiCertNotFound),
     MAKE_SPHAIRA_RESULT_ENUM(YatiNcmDbCorruptHeader),
     MAKE_SPHAIRA_RESULT_ENUM(YatiNcmDbCorruptInfos),
-    MAKE_SPHAIRA_RESULT_ENUM(TicketInvalidTicketBadRightsId),
-    MAKE_SPHAIRA_RESULT_ENUM(TicketInvalidTicketVersion),
-    MAKE_SPHAIRA_RESULT_ENUM(TicketInvalidTicketKeyType),
-    MAKE_SPHAIRA_RESULT_ENUM(TicketInvalidTicketKeyRevision),
 };
 
 #undef MAKE_SPHAIRA_RESULT_ENUM

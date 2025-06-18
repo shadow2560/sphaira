@@ -80,6 +80,10 @@ auto GetCodeMessage(Result rc) -> const char* {
         case Result_EsPersonalisedTicketDeviceIdMissmatch: return "SphairaError_EsPersonalisedTicketDeviceIdMissmatch";
         case Result_EsFailedDecryptPersonalisedTicket: return "SphairaError_EsFailedDecryptPersonalisedTicket";
         case Result_EsBadDecryptedPersonalisedTicketSize: return "SphairaError_EsBadDecryptedPersonalisedTicketSize";
+        case Result_EsInvalidTicketBadRightsId: return "SphairaError_EsInvalidTicketBadRightsId";
+        case Result_EsInvalidTicketFromatVersion: return "SphairaError_EsInvalidTicketFromatVersion";
+        case Result_EsInvalidTicketKeyType: return "SphairaError_EsInvalidTicketKeyType";
+        case Result_EsInvalidTicketKeyRevision: return "SphairaError_EsInvalidTicketKeyRevision";
         case Result_OwoBadArgs: return "SphairaError_OwoBadArgs";
         case Result_UsbCancelled: return "SphairaError_UsbCancelled";
         case Result_UsbBadMagic: return "SphairaError_UsbBadMagic";
@@ -111,16 +115,9 @@ auto GetCodeMessage(Result rc) -> const char* {
         case Result_YatiInvalidNczZstdError: return "SphairaError_YatiInvalidNczZstdError";
         case Result_YatiTicketNotFound: return "SphairaError_YatiTicketNotFound";
         case Result_YatiInvalidTicketBadRightsId: return "SphairaError_YatiInvalidTicketBadRightsId";
-        case Result_YatiInvalidTicketVersion: return "SphairaError_YatiInvalidTicketVersion";
-        case Result_YatiInvalidTicketKeyType: return "SphairaError_YatiInvalidTicketKeyType";
-        case Result_YatiInvalidTicketKeyRevision: return "SphairaError_YatiInvalidTicketKeyRevision";
         case Result_YatiCertNotFound: return "SphairaError_YatiCertNotFound";
         case Result_YatiNcmDbCorruptHeader: return "SphairaError_YatiNcmDbCorruptHeader";
         case Result_YatiNcmDbCorruptInfos: return "SphairaError_YatiNcmDbCorruptInfos";
-        case Result_TicketInvalidTicketBadRightsId: return "SphairaError_TicketInvalidTicketBadRightsId";
-        case Result_TicketInvalidTicketVersion: return "SphairaError_TicketInvalidTicketVersion";
-        case Result_TicketInvalidTicketKeyType: return "SphairaError_TicketInvalidTicketKeyType";
-        case Result_TicketInvalidTicketKeyRevision: return "SphairaError_TicketInvalidTicketKeyRevision";
     }
 
     return "";

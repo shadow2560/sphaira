@@ -78,6 +78,7 @@ bool Stream::Push(const void* buf, s64 size) {
         SCOPED_MUTEX(&m_mutex);
         if (m_active && m_buffer.size() >= MAX_BUFFER_SIZE) {
             // unlock the mutex and wait for 1s to bring transfer speed down to 1MiB/s.
+            log_write("[Stream::Push] buffer is full, delaying\n");
             mutexUnlock(&m_mutex);
             ON_SCOPE_EXIT(mutexLock(&m_mutex));
 
