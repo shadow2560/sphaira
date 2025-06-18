@@ -59,17 +59,19 @@ auto nro_parse_internal(fs::Fs* fs, const fs::FsPath& path, NroEntry& entry) -> 
         std::strncpy(nacp.lang.name, file_name, file_name_len - 4);
         std::strcpy(nacp.lang.author, "Unknown");
         std::strcpy(nacp.display_version, "Unknown");
+
+        entry.icon_offset = entry.icon_size = 0;
         entry.is_nacp_valid = false;
     } else {
         entry.size += sizeof(asset) + asset.icon.size + asset.nacp.size + asset.romfs.size;
         R_TRY(f.Read(data.header.size + asset.nacp.offset, &nacp.lang, sizeof(nacp.lang), FsReadOption_None, &bytes_read));
         R_TRY(f.Read(data.header.size + asset.nacp.offset + offsetof(NacpStruct, display_version), nacp.display_version, sizeof(nacp.display_version), FsReadOption_None, &bytes_read));
+
+        // lazy load the icons
+        entry.icon_size = asset.icon.size;
+        entry.icon_offset = data.header.size + asset.icon.offset;
         entry.is_nacp_valid = true;
     }
-
-    // lazy load the icons
-    entry.icon_size = asset.icon.size;
-    entry.icon_offset = data.header.size + asset.icon.offset;
 
     R_SUCCEED();
 }

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(sphaira_VERSION 0.13.0)
+set(sphaira_VERSION 0.13.1)
 
 project(sphaira
     VERSION ${sphaira_VERSION}
@@ -208,8 +208,8 @@ FetchContent_Declare(libnxtc
 )
 
 FetchContent_Declare(nvjpg
-    GIT_REPOSITORY https://github.com/averne/oss-nvjpg.git
-    GIT_TAG 16c10a3
+    GIT_REPOSITORY https://github.com/ITotalJustice/oss-nvjpg.git
+    GIT_TAG 45680e7
 )
 
 set(USE_NEW_ZSTD ON)
