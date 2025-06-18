@@ -1045,25 +1045,35 @@ Result Menu::DumpGames(u32 flags) {
     bool is_trimmed = false;
     Result trim_rc = 0;
     if ((flags & DumpFileFlag_XCI) && m_storage_trimmed_size < m_storage_total_size) {
-        u8 temp{};
-        if (R_FAILED(trim_rc = GcStorageRead(&temp, m_storage_trimmed_size, sizeof(temp)))) {
-            log_write("[GC] WARNING! GameCard is already trimmed: 0x%X FlashError: %u\n", trim_rc, trim_rc == 0x13D002);
+        const auto start_offset = std::min<s64>(0, m_storage_trimmed_size - 0x4000);
+        // works on fw 1.2.0 and below.
+        std::vector<u8> temp(1024*1024*1);
+        if (R_FAILED(trim_rc = GcStorageRead(temp.data(), m_storage_trimmed_size, std::min<s64>(temp.size(), m_storage_total_size - start_offset)))) {
+            log_write("[GC] WARNING1! GameCard is already trimmed: 0x%X FlashError: %u\n", trim_rc, trim_rc == 0x13D002);
             is_trimmed = true;
+        }
+
+        if (!is_trimmed) {
+            // works on fw 1.2.0 and below.
+            if (R_FAILED(trim_rc = GcStorageRead(temp.data(), m_storage_total_size - temp.size(), temp.size()))) {
+                log_write("[GC] WARNING2! GameCard is already trimmed: 0x%X FlashError: %u\n", trim_rc, trim_rc == 0x13D002);
+                is_trimmed = true;
+            }
         }
     }
 
     // if trimmed and the user wants to dump the full xci, error.
     if ((flags & DumpFileFlag_XCI) && is_trimmed && App::GetApp()->m_dump_trim_xci.Get()) {
-        App::PushErrorBox(trim_rc, "GameCard is already trimmed!"_i18n);
-    } else if ((flags & DumpFileFlag_XCI) && is_trimmed) {
         App::Push(std::make_shared<ui::OptionBox>(
             "WARNING: GameCard is already trimmed!"_i18n,
             "Back"_i18n, "Continue"_i18n, 0, [&](auto op_index){
                 if (op_index && *op_index) {
                     do_dump(flags);
                 }
-            }
+            }, m_icon
         ));
+    } else if ((flags & DumpFileFlag_XCI) && is_trimmed) {
+        App::PushErrorBox(trim_rc, "GameCard is trimmed, full dump is not possible!"_i18n);
     } else {
         do_dump(flags);
     }

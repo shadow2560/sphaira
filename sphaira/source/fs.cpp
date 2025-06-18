@@ -185,7 +185,6 @@ Result CreateDirectoryRecursivelyWithPath(FsFileSystem* fs, const FsPath& _path,
     FsPath new_path{};
     std::snprintf(new_path, sizeof(new_path), "%.*s", (int)(last_slash - _path.s), _path.s);
     R_TRY(CreateDirectoryRecursively(fs, new_path, ignore_read_only));
-    fsFsCommit(fs);
     R_SUCCEED();
 }
 
