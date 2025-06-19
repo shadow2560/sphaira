@@ -815,6 +815,9 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
 
     if (it != m_accounts.end()) {
         m_account_index = std::distance(m_accounts.begin(), it);
+        log_write("[SAVE] found account uid at: %zu\n", m_account_index);
+    } else {
+        log_write("[SAVE] account uid is not found: 0x%016lX%016lX\n", uid.uid[0], uid.uid[1]);
     }
 
     for (auto& e : ncm_entries) {
@@ -936,10 +939,26 @@ void Menu::SetIndex(s64 index) {
         m_list->SetYoff(0);
     }
 
+    if (m_accounts.empty()) {
+        return;
+    }
+
+    u64 id{};
+    if (!m_entries.empty()) {
+        if (m_data_type == FsSaveDataType_System || m_data_type == FsSaveDataType_SystemBcat) {
+            id = m_entries[m_index].system_save_data_id;
+        } else {
+            id = m_entries[m_index].application_id;
+        }
+
+        this->SetSubHeading(std::to_string(m_index + 1) + " / " + std::to_string(m_entries.size()));
+    } else {
+        this->SetSubHeading("0 / 0");
+    }
+
     char title[0x40];
-    std::snprintf(title, sizeof(title), "%s | %016lX", m_accounts[m_account_index].nickname, m_entries[m_index].application_id);
+    std::snprintf(title, sizeof(title), "%s | %016lX", m_accounts[m_account_index].nickname, id);
     SetTitleSubHeading(title);
-    this->SetSubHeading(std::to_string(m_index + 1) + " / " + std::to_string(m_entries.size()));
 }
 
 void Menu::ScanHomebrew() {
@@ -947,7 +966,10 @@ void Menu::ScanHomebrew() {
     TimeStamp ts;
 
     FreeEntries();
+    ClearSelection();
     m_entries.reserve(ENTRY_CHUNK_COUNT);
+    m_is_reversed = false;
+    m_dirty = false;
 
     if (m_accounts.empty()) {
         return;
@@ -958,7 +980,9 @@ void Menu::ScanHomebrew() {
     GetFsSaveAttr(m_accounts[m_account_index], m_data_type, space_id, filter);
 
     FsSaveDataInfoReader reader;
-    fsOpenSaveDataInfoReaderWithFilter(&reader, space_id, &filter);
+    if (R_FAILED(fsOpenSaveDataInfoReaderWithFilter(&reader, space_id, &filter))) {
+        log_write("[SAVE] failed to open reader\n");
+    }
     ON_SCOPE_EXIT(fsSaveDataInfoReaderClose(&reader));
 
     std::vector<FsSaveDataInfo> info_list(ENTRY_CHUNK_COUNT);
@@ -979,8 +1003,6 @@ void Menu::ScanHomebrew() {
         }
     }
 
-    m_is_reversed = false;
-    m_dirty = false;
     log_write("games found: %zu time_taken: %.2f seconds %zu ms %zu ns\n", m_entries.size(), ts.GetSecondsD(), ts.GetMs(), ts.GetNs());
     this->Sort();
     SetIndex(0);

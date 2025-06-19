@@ -227,6 +227,10 @@ public:
 
                     AccountProfileBase base;
                     if (R_SUCCEEDED(accountProfileGet(&profile, nullptr, &base))) {
+                        // sometimes the uid for the acc can differ to the base.
+                        base.uid = uids[i];
+                        log_write("[ACC] found uid: 0x%016lX%016lX\n", uids[i].uid[0], uids[i].uid[1]);
+                        log_write("[ACC] base  uid: 0x%016lX%016lX\n", base.uid.uid[0], base.uid.uid[1]);
                         out.emplace_back(base);
                     }
                 }
