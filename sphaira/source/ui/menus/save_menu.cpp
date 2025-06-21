@@ -274,10 +274,12 @@ auto BuildSaveName(const Entry& e) -> fs::FsPath {
     return name_buf;
 }
 
-auto BuildSaveBasePath(const Entry& e) -> fs::FsPath {
+auto BuildSaveBasePath(const Entry& e, bool force_id_path = false) -> fs::FsPath {
     fs::FsPath name;
     if (e.save_data_type == FsSaveDataType_System || e.save_data_type == FsSaveDataType_SystemBcat) {
         std::snprintf(name, sizeof(name), "%016lX", e.system_save_data_id);
+    } else if (force_id_path || !strcasecmp(e.GetName(), "corrupted")) {
+        std::snprintf(name, sizeof(name), "%016lX", e.application_id);
     } else {
         name = BuildSaveName(e);
     }
@@ -708,28 +710,33 @@ void Menu::RestoreSave() {
             fs = std::make_unique<fs::FsNativeSd>();
         }
 
-        const auto save_path = fs::AppendPath(fs->Root(), BuildSaveBasePath(m_entries[m_index]));
-        filebrowser::FsDirCollection collection;
-        filebrowser::FsView::get_collection(fs.get(), save_path, "", collection, true, false, false);
-
-        // reverse as they will be sorted in oldest -> newest.
-        std::ranges::reverse(collection.files);
+        // get saves in /Saves/Name and /Saves/app_id
+        filebrowser::FsDirCollection collections[2]{};
+        for (auto i = 0; i < std::size(collections); i++) {
+            const auto save_path = fs::AppendPath(fs->Root(), BuildSaveBasePath(m_entries[m_index], i != 0));
+            filebrowser::FsView::get_collection(fs.get(), save_path, "", collections[i], true, false, false);
+            // reverse as they will be sorted in oldest -> newest.
+            // todo: better impl when both id and normal app folders are used.
+            std::ranges::reverse(collections[i].files);
+        }
 
         std::vector<fs::FsPath> paths;
         PopupList::Items items;
-        for (const auto&p : collection.files) {
-            const auto view = std::string_view{p.name};
-            if (view.starts_with("BCAT") || !view.ends_with(".zip")) {
-                continue;
-            }
+        for (const auto& collection : collections) {
+            for (const auto&p : collection.files) {
+                const auto view = std::string_view{p.name};
+                if (view.starts_with("BCAT") || !view.ends_with(".zip")) {
+                    continue;
+                }
 
-            items.emplace_back(p.name);
-            paths.emplace_back(fs::AppendPath(collection.path, p.name));
+                items.emplace_back(p.name);
+                paths.emplace_back(fs::AppendPath(collection.path, p.name));
+            }
         }
 
         if (paths.empty()) {
             App::Push(std::make_shared<ui::OptionBox>(
-                "No saves found in "_i18n + save_path.toString(),
+                "No saves found in "_i18n + fs::AppendPath(fs->Root(), BuildSaveBasePath(m_entries[m_index])).toString(),
                 "OK"_i18n
             ));
             return;
