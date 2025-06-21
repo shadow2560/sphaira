@@ -83,6 +83,7 @@ add_executable(sphaira
     source/ftpsrv_helper.cpp
     source/haze_helper.cpp
     source/threaded_file_transfer.cpp
+    source/title_info.cpp
     source/minizip_helper.cpp
 
     source/usb/base.cpp
