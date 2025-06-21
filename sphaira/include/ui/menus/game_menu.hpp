@@ -17,8 +17,7 @@ struct Entry {
     int image{};
     bool selected{};
 
-    std::shared_ptr<NsApplicationControlData> control{};
-    u64 jpeg_size{};
+    std::shared_ptr<title::ThreadResultData> info{};
     title::NacpLoadStatus status{title::NacpLoadStatus::None};
 
     auto GetName() const -> const char* {
@@ -83,6 +82,7 @@ private:
 
     void DeleteGames();
     void DumpGames(u32 flags);
+    void CreateSaves(AccountUid uid);
 
 private:
     static constexpr inline const char* INI_SECTION = "games";

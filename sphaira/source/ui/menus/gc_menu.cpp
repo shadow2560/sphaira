@@ -863,12 +863,11 @@ void Menu::FreeImage() {
 }
 
 Result Menu::LoadControlData(ApplicationEntry& e) {
-    const auto data = title::LoadControlEntry(e.app_id);
-    R_UNLESS(data.status == title::NacpLoadStatus::Loaded, 0x1);
+    const auto data = title::Get(e.app_id);
+    R_UNLESS(data->status == title::NacpLoadStatus::Loaded, 0x1);
 
-    e.control = data.control;
-    e.jpeg_size = data.jpeg_size;
-    e.lang_entry = data.lang;
+    e.icon = data->icon;
+    e.lang_entry = data->lang;
     R_SUCCEED();
 }
 
@@ -883,10 +882,9 @@ void Menu::OnChangeIndex(s64 new_index) {
         this->SetSubHeading(std::to_string(index) + " / " + std::to_string(m_entries.size()));
 
         const auto& e = m_entries[m_entry_index];
-        const auto jpeg_size = e.jpeg_size;
 
         TimeStamp ts;
-        const auto image = ImageLoadFromMemory({e.control->icon, jpeg_size}, ImageFlag_JPEG);
+        const auto image = ImageLoadFromMemory(e.icon, ImageFlag_JPEG);
         if (!image.data.empty()) {
             m_icon = nvgCreateImageRGBA(App::GetVg(), image.w, image.h, 0, image.data.data());
             log_write("\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());

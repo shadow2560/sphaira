@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include <nxtc.h>
+#include <minIni.h>
 
 namespace sphaira::title {
 namespace {
@@ -25,17 +26,9 @@ struct ThreadData {
     void Run();
     void Close();
 
-    void Push(u64 id);
-    void Push(std::span<const u64> app_ids);
-
-    #if 0
-    auto Pop(u64 app_id) -> std::optional<ThreadResultData>;
-    void Pop(std::span<const u64> app_ids, std::vector<ThreadResultData>& out);
-    void PopAll(std::vector<ThreadResultData>& out);
-    #endif
-
-    auto Get(u64 app_id) -> std::optional<ThreadResultData>;
-    void Get(std::span<const u64> app_ids, std::vector<ThreadResultData>& out);
+    void PushAsync(u64 id);
+    auto GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData>;
+    auto Get(u64 app_id, bool* cached = nullptr) -> std::shared_ptr<ThreadResultData>;
 
     auto IsRunning() const -> bool {
         return m_running;
@@ -46,6 +39,7 @@ struct ThreadData {
     }
 
 private:
+    fs::FsNativeSd m_fs{};
     UEvent m_uevent{};
     Mutex m_mutex_id{};
     Mutex m_mutex_result{};
@@ -54,7 +48,7 @@ private:
     // app_ids pushed to the queue, signal uevent when pushed.
     std::vector<u64> m_ids{};
     // control data pushed to the queue.
-    std::vector<ThreadResultData> m_result{};
+    std::vector<std::shared_ptr<ThreadResultData>> m_result{};
 
     std::atomic_bool m_running{};
 };
@@ -113,44 +107,15 @@ auto& GetNcmEntry(u8 storage_id) {
     return *it;
 }
 
-// taken from nxtc
-constexpr u8 g_nacpLangTable[SetLanguage_Total] = {
-    [SetLanguage_JA]     =  2,
-    [SetLanguage_ENUS]   =  0,
-    [SetLanguage_FR]     =  3,
-    [SetLanguage_DE]     =  4,
-    [SetLanguage_IT]     =  7,
-    [SetLanguage_ES]     =  6,
-    [SetLanguage_ZHCN]   = 14,
-    [SetLanguage_KO]     = 12,
-    [SetLanguage_NL]     =  8,
-    [SetLanguage_PT]     = 10,
-    [SetLanguage_RU]     = 11,
-    [SetLanguage_ZHTW]   = 13,
-    [SetLanguage_ENGB]   =  1,
-    [SetLanguage_FRCA]   =  9,
-    [SetLanguage_ES419]  =  5,
-    [SetLanguage_ZHHANS] = 14,
-    [SetLanguage_ZHHANT] = 13,
-    [SetLanguage_PTBR]   = 15
-};
-
-auto GetNacpLangEntryIndex() -> u8 {
-    SetLanguage lang{SetLanguage_ENUS};
-    nxtcGetCacheLanguage(&lang);
-    return g_nacpLangTable[lang];
-}
-
 // also sets the status to error.
-void FakeNacpEntry(ThreadResultData& e) {
-    e.status = NacpLoadStatus::Error;
+void FakeNacpEntry(std::shared_ptr<ThreadResultData>& e) {
+    e->status = NacpLoadStatus::Error;
     // fake the nacp entry
-    std::strcpy(e.lang.name, "Corrupted");
-    std::strcpy(e.lang.author, "Corrupted");
-    e.control.reset();
+    std::strcpy(e->lang.name, "Corrupted");
+    std::strcpy(e->lang.author, "Corrupted");
 }
 
-Result LoadControlManual(u64 id, ThreadResultData& data) {
+Result LoadControlManual(u64 id, NacpStruct& nacp, std::shared_ptr<ThreadResultData>& data) {
     TimeStamp ts;
 
     MetaEntries entries;
@@ -160,14 +125,9 @@ Result LoadControlManual(u64 id, ThreadResultData& data) {
     u64 program_id;
     fs::FsPath path;
     R_TRY(GetControlPathFromStatus(entries.back(), &program_id, &path));
+    R_TRY(nca::ParseControl(path, program_id, &nacp, sizeof(nacp), &data->icon));
 
-    std::vector<u8> icon;
-    R_TRY(nca::ParseControl(path, program_id, &data.control->nacp.lang[GetNacpLangEntryIndex()], sizeof(NacpLanguageEntry), &icon));
-    std::memcpy(data.control->icon, icon.data(), icon.size());
-
-    data.jpeg_size = icon.size();
     log_write("\t\t[manual control] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
-
     R_SUCCEED();
 }
 
@@ -179,7 +139,10 @@ ThreadData::ThreadData(bool title_cache) : m_title_cache{title_cache} {
 }
 
 void ThreadData::Run() {
+    TimeStamp ts{};
+    bool cached{true};
     const auto waiter = waiterForUEvent(&m_uevent);
+
     while (IsRunning()) {
         const auto rc = waitSingle(waiter, 3e+9);
 
@@ -204,16 +167,15 @@ void ThreadData::Run() {
                 return;
             }
 
-            bool cached{};
-            const auto result = LoadControlEntry(ids[i], &cached);
-
-            if (!cached) {
-                // sleep after every other entry loaded.
-                svcSleepThread(2e+6); // 2ms
+            // sleep after every other entry loaded.
+            const auto elapsed = (s64)2e+6 - (s64)ts.GetNs();
+            if (!cached && elapsed > 0) {
+                svcSleepThread(elapsed);
             }
 
-            SCOPED_MUTEX(&m_mutex_result);
-            m_result.emplace_back(result);
+            // loads new entry into cache.
+            std::ignore = Get(ids[i], &cached);
+            ts.Update();
         }
     }
 }
@@ -223,13 +185,13 @@ void ThreadData::Close() {
     ueventSignal(&m_uevent);
 }
 
-void ThreadData::Push(u64 id) {
+void ThreadData::PushAsync(u64 id) {
     SCOPED_MUTEX(&m_mutex_id);
     SCOPED_MUTEX(&m_mutex_result);
 
     const auto it_id = std::ranges::find(m_ids, id);
     const auto it_result = std::ranges::find_if(m_result, [id](auto& e){
-        return id == e.id;
+        return id == e->id;
     });
 
     if (it_id == m_ids.end() && it_result == m_result.end()) {
@@ -238,61 +200,150 @@ void ThreadData::Push(u64 id) {
     }
 }
 
-void ThreadData::Push(std::span<const u64> app_ids) {
-    for (auto& e : app_ids) {
-        Push(e);
-    }
-}
-
-#if 0
-auto ThreadData::Pop(u64 app_id) -> std::optional<ThreadResultData> {
+auto ThreadData::GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData> {
     SCOPED_MUTEX(&m_mutex_result);
 
     for (s64 i = 0; i < std::size(m_result); i++) {
-        if (app_id == m_result[i].id) {
-            const auto result = m_result[i];
-            m_result.erase(m_result.begin() + i);
-            return result;
-        }
-    }
-
-    return std::nullopt;
-}
-
-void ThreadData::Pop(std::span<const u64> app_ids, std::vector<ThreadResultData>& out) {
-    for (auto& e : app_ids) {
-        if (const auto result = Pop(e)) {
-            out.emplace_back(*result);
-        }
-    }
-}
-
-void ThreadData::PopAll(std::vector<ThreadResultData>& out) {
-    SCOPED_MUTEX(&m_mutex_result);
-
-    std::swap(out, m_result);
-    m_result.clear();
-}
-#endif
-
-auto ThreadData::Get(u64 app_id) -> std::optional<ThreadResultData> {
-    SCOPED_MUTEX(&m_mutex_result);
-
-    for (s64 i = 0; i < std::size(m_result); i++) {
-        if (app_id == m_result[i].id) {
+        if (app_id == m_result[i]->id) {
             return m_result[i];
         }
     }
 
-    return std::nullopt;
+    return {};
 }
 
-void ThreadData::Get(std::span<const u64> app_ids, std::vector<ThreadResultData>& out) {
-    for (auto& e : app_ids) {
-        if (const auto result = Get(e)) {
-            out.emplace_back(*result);
+auto ThreadData::Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultData> {
+    // try and fetch from results first, before manually loading.
+    if (auto data = GetAsync(app_id)) {
+        if (cached) {
+            *cached = true;
+        }
+        return data;
+    }
+
+    TimeStamp ts;
+    auto result = std::make_shared<ThreadResultData>(app_id);
+    result->status = NacpLoadStatus::Error;
+
+    if (auto data = nxtcGetApplicationMetadataEntryById(app_id)) {
+        log_write("[NXTC] loaded from cache time taken: %.2fs %zums %zuns\n", ts.GetSecondsD(), ts.GetMs(), ts.GetNs());
+        ON_SCOPE_EXIT(nxtcFreeApplicationMetadata(&data));
+
+        if (cached) {
+            *cached = true;
+        }
+
+        result->status = NacpLoadStatus::Loaded;
+        std::strcpy(result->lang.name, data->name);
+        std::strcpy(result->lang.author, data->publisher);
+        result->icon.resize(data->icon_size);
+        std::memcpy(result->icon.data(), data->icon_data, result->icon.size());
+    } else {
+        if (cached) {
+            *cached = false;
+        }
+
+        bool manual_load = true;
+        u64 actual_size{};
+        auto control = std::make_unique<NsApplicationControlData>();
+
+        if (hosversionBefore(20,0,0)) {
+            TimeStamp ts;
+            if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, app_id, control.get(), sizeof(NsApplicationControlData), &actual_size))) {
+                manual_load = false;
+                log_write("\t\t[ns control cache] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+            }
+        }
+
+        if (manual_load) {
+            manual_load = R_SUCCEEDED(LoadControlManual(app_id, control->nacp, result));
+        }
+
+        Result rc{};
+        if (!manual_load) {
+            TimeStamp ts;
+            if (R_SUCCEEDED(rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, app_id, control.get(), sizeof(NsApplicationControlData), &actual_size))) {
+                log_write("\t\t[ns control storage] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
+            }
+        }
+
+        if (R_FAILED(rc)) {
+            FakeNacpEntry(result);
+        } else {
+            bool valid = true;
+            NacpLanguageEntry* lang;
+            if (R_SUCCEEDED(nsGetApplicationDesiredLanguage(&control->nacp, &lang))) {
+                result->lang = *lang;
+            } else {
+                FakeNacpEntry(result);
+                valid = false;
+            }
+
+            if (!manual_load) {
+                const auto jpeg_size = actual_size - sizeof(NacpStruct);
+                result->icon.resize(jpeg_size);
+                std::memcpy(result->icon.data(), control->icon, result->icon.size());
+            }
+
+            // add new entry to cache, if valid.
+            if (valid) {
+                nxtcAddEntry(app_id, &control->nacp, result->icon.size(), result->icon.data(), true);
+            }
+
+            result->status = NacpLoadStatus::Loaded;
         }
     }
+
+    // load override from sys-tweek.
+    if (result->status == NacpLoadStatus::Loaded) {
+        const auto tweek_path = GetContentsPath(app_id);
+        if (m_fs.DirExists(tweek_path)) {
+            log_write("[TITLE] found contents path: %s\n", tweek_path.s);
+
+            std::vector<u8> icon;
+            m_fs.read_entire_file(fs::AppendPath(tweek_path, "icon.jpg"), icon);
+
+            struct Overrides {
+                std::string name;
+                std::string author;
+            } overrides;
+
+            static const auto cb = [](const mTCHAR *Section, const mTCHAR *Key, const mTCHAR *Value, void *UserData) -> int {
+                auto e = static_cast<Overrides*>(UserData);
+
+                if (!std::strcmp(Section, "override_nacp")) {
+                    if (!std::strcmp(Key, "name")) {
+                        e->name = Value;
+                    } else if (!std::strcmp(Key, "author")) {
+                        e->author = Value;
+                    }
+                }
+
+                return 1;
+            };
+
+            ini_browse(cb, &overrides, fs::AppendPath(tweek_path, "config.ini"));
+
+            if (!icon.empty() && icon.size() < sizeof(NsApplicationControlData::icon)) {
+                log_write("[TITLE] overriding icon: %zu -> %zu\n", result->icon.size(), icon.size());
+                result->icon = icon;
+            }
+
+            if (!overrides.name.empty() && overrides.name.length() < sizeof(result->lang.name)) {
+                log_write("[TITLE] overriding name: %s -> %s\n", result->lang.name, overrides.name.c_str());
+                std::strcpy(result->lang.name, overrides.name.c_str());
+            }
+
+            if (!overrides.author.empty() && overrides.author.length() < sizeof(result->lang.author)) {
+                log_write("[TITLE] overriding author: %s -> %s\n", result->lang.author, overrides.author.c_str());
+                std::strcpy(result->lang.author, overrides.author.c_str());
+            }
+        }
+    }
+
+    SCOPED_MUTEX(&m_mutex_result);
+    m_result.emplace_back(result);
+    return result;
 }
 
 void ThreadFunc(void* user) {
@@ -313,10 +364,6 @@ void ThreadFunc(void* user) {
 // starts background thread.
 Result Init() {
     SCOPED_MUTEX(&g_mutex);
-
-    if (g_ref_count) {
-        R_SUCCEED();
-    }
 
     if (!g_ref_count) {
         R_TRY(nsInitialize());
@@ -347,50 +394,40 @@ void Exit() {
     if (!g_ref_count) {
         g_thread_data->Close();
 
-        for (auto& e : ncm_entries) {
-            e.Close();
-        }
-
         threadWaitForExit(&g_thread);
         threadClose(&g_thread);
         g_thread_data.reset();
+
+        for (auto& e : ncm_entries) {
+            e.Close();
+        }
 
         nsExit();
         ncmExit();
     }
 }
 
-// adds new entry to queue.
-void Push(u64 app_id) {
+void PushAsync(u64 app_id) {
     SCOPED_MUTEX(&g_mutex);
     if (g_thread_data) {
-        g_thread_data->Push(app_id);
+        g_thread_data->PushAsync(app_id);
     }
 }
 
-// adds array of entries to queue.
-void Push(std::span<const u64> app_ids) {
+auto GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData> {
     SCOPED_MUTEX(&g_mutex);
     if (g_thread_data) {
-        g_thread_data->Push(app_ids);
-    }
-}
-
-// gets entry without removing it from the queue.
-auto Get(u64 app_id) -> std::optional<ThreadResultData> {
-    SCOPED_MUTEX(&g_mutex);
-    if (g_thread_data) {
-        return g_thread_data->Get(app_id);
+        return g_thread_data->GetAsync(app_id);
     }
     return {};
 }
 
-// gets array of entries without removing it from the queue.
-void Get(std::span<const u64> app_ids, std::vector<ThreadResultData>& out) {
+auto Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultData> {
     SCOPED_MUTEX(&g_mutex);
     if (g_thread_data) {
-        g_thread_data->Get(app_ids, out);
+        return g_thread_data->Get(app_id, cached);
     }
+    return {};
 }
 
 auto GetNcmCs(u8 storage_id) -> NcmContentStorage& {
@@ -440,80 +477,6 @@ Result GetControlPathFromStatus(const NsApplicationContentMetaStatus& status, u6
     R_SUCCEED();
 }
 
-auto LoadControlEntry(u64 id, bool* cached) -> ThreadResultData {
-    // try and fetch from results first, before manually loading.
-    if (auto data = Get(id)) {
-        return *data;
-    }
-
-    TimeStamp ts;
-    ThreadResultData result{id};
-    result.control = std::make_shared<NsApplicationControlData>();
-    result.status = NacpLoadStatus::Error;
-
-    if (auto data = nxtcGetApplicationMetadataEntryById(id)) {
-        log_write("[NXTC] loaded from cache time taken: %.2fs %zums %zuns\n", ts.GetSecondsD(), ts.GetMs(), ts.GetNs());
-        ON_SCOPE_EXIT(nxtcFreeApplicationMetadata(&data));
-
-        if (cached) {
-            *cached = true;
-        }
-
-        result.status = NacpLoadStatus::Loaded;
-        std::strcpy(result.lang.name, data->name);
-        std::strcpy(result.lang.author, data->publisher);
-        std::memcpy(result.control->icon, data->icon_data, data->icon_size);
-        result.jpeg_size = data->icon_size;
-    } else {
-        if (cached) {
-            *cached = false;
-        }
-
-        bool manual_load = true;
-        if (hosversionBefore(20,0,0)) {
-            TimeStamp ts;
-            u64 actual_size;
-            if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, id, result.control.get(), sizeof(NsApplicationControlData), &actual_size))) {
-                manual_load = false;
-                result.jpeg_size = actual_size - sizeof(NacpStruct);
-                log_write("\t\t[ns control cache] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
-            }
-        }
-
-        if (manual_load) {
-            manual_load = R_SUCCEEDED(LoadControlManual(id, result));
-        }
-
-        Result rc{};
-        if (!manual_load) {
-            TimeStamp ts;
-            u64 actual_size;
-            if (R_SUCCEEDED(rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, id, result.control.get(), sizeof(NsApplicationControlData), &actual_size))) {
-                result.jpeg_size = actual_size - sizeof(NacpStruct);
-                log_write("\t\t[ns control storage] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
-            }
-        }
-
-        if (R_FAILED(rc)) {
-            FakeNacpEntry(result);
-        } else {
-            if (!manual_load) {
-                NacpLanguageEntry* lang;
-                if (R_SUCCEEDED(nsGetApplicationDesiredLanguage(&result.control->nacp, &lang))) {
-                    result.lang = *lang;
-                }
-            } else {
-                result.lang = result.control->nacp.lang[GetNacpLangEntryIndex()];
-            }
-
-            nxtcAddEntry(id, &result.control->nacp, result.jpeg_size, result.control->icon, true);
-            result.status = NacpLoadStatus::Loaded;
-        }
-    }
-
-    return result;
-}
-
 // taken from nxdumptool.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
 {
@@ -552,6 +515,12 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
     }
 
     *ptr2 = '\0';
+}
+
+auto GetContentsPath(u64 app_id) -> fs::FsPath {
+    fs::FsPath path;
+    std::snprintf(path, sizeof(path), "/atmosphere/contents/%016lX", app_id);
+    return path;
 }
 
 } // namespace sphaira::title

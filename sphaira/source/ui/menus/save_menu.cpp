@@ -216,15 +216,15 @@ void FakeNacpEntryForSystem(Entry& e) {
     // fake the nacp entry
     std::snprintf(e.lang.name, sizeof(e.lang.name), "%s | %016lX", GetSystemSaveName(e.system_save_data_id), e.system_save_data_id);
     std::strcpy(e.lang.author, "Nintendo");
-    e.control.reset();
+    e.info.reset();
 }
 
 bool LoadControlImage(Entry& e) {
-    if (!e.image && e.control) {
-        ON_SCOPE_EXIT(e.control.reset());
+    if (!e.image && e.info && !e.info->icon.empty()) {
+        ON_SCOPE_EXIT(e.info.reset());
 
         TimeStamp ts;
-        const auto image = ImageLoadFromMemory({e.control->icon, e.jpeg_size}, ImageFlag_JPEG);
+        const auto image = ImageLoadFromMemory(e.info->icon, ImageFlag_JPEG);
         if (!image.data.empty()) {
             e.image = nvgCreateImageRGBA(App::GetVg(), image.w, image.h, 0, image.data.data());
             log_write("\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
@@ -235,12 +235,11 @@ bool LoadControlImage(Entry& e) {
     return false;
 }
 
-void LoadResultIntoEntry(Entry& e, const title::ThreadResultData& result) {
-    e.status = result.status;
-    e.control = result.control;
-    e.jpeg_size= result.jpeg_size;
-    e.lang = result.lang;
-    e.status = result.status;
+void LoadResultIntoEntry(Entry& e, const std::shared_ptr<title::ThreadResultData>& result) {
+    e.info = result;
+    e.status = result->status;
+    e.lang = result->lang;
+    e.status = result->status;
 }
 
 void LoadControlEntry(Entry& e, bool force_image_load = false) {
@@ -248,8 +247,7 @@ void LoadControlEntry(Entry& e, bool force_image_load = false) {
         if (e.save_data_type == FsSaveDataType_System || e.save_data_type == FsSaveDataType_SystemBcat) {
             FakeNacpEntryForSystem(e);
         } else {
-            const auto result = title::LoadControlEntry(e.application_id);
-            LoadResultIntoEntry(e, result);
+            LoadResultIntoEntry(e, title::Get(e.application_id));
         }
     }
 
@@ -502,14 +500,14 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
         if (e.status == title::NacpLoadStatus::None) {
             if (m_data_type != FsSaveDataType_System && m_data_type != FsSaveDataType_SystemBcat) {
-                title::Push(e.application_id);
+                title::PushAsync(e.application_id);
                 e.status = title::NacpLoadStatus::Progress;
             } else {
                 FakeNacpEntryForSystem(e);
             }
         } else if (e.status == title::NacpLoadStatus::Progress) {
-            if (const auto data = title::Get(e.application_id)) {
-                LoadResultIntoEntry(e, *data);
+            if (const auto data = title::GetAsync(e.application_id)) {
+                LoadResultIntoEntry(e, data);
             }
         }
 
@@ -577,6 +575,7 @@ void Menu::ScanHomebrew() {
 
     FreeEntries();
     ClearSelection();
+    ueventClear(&g_change_uevent);
     m_entries.reserve(ENTRY_CHUNK_COUNT);
     m_is_reversed = false;
     m_dirty = false;
@@ -808,8 +807,8 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
     pbox->SetTitle(e.GetName());
     if (e.image) {
         pbox->SetImage(e.image);
-    } else if (e.control && e.jpeg_size) {
-        pbox->SetImageDataConst({e.control->icon, e.jpeg_size});
+    } else if (e.info && !e.info->icon.empty()) {
+        pbox->SetImageDataConst(e.info->icon);
     } else {
         pbox->SetImage(0);
     }
@@ -935,8 +934,8 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
     pbox->SetTitle(e.GetName());
     if (e.image) {
         pbox->SetImage(e.image);
-    } else if (e.control && e.jpeg_size) {
-        pbox->SetImageDataConst({e.control->icon, e.jpeg_size});
+    } else if (e.info && !e.info->icon.empty()) {
+        pbox->SetImageDataConst(e.info->icon);
     } else {
         pbox->SetImage(0);
     }

@@ -8,6 +8,7 @@
 #include "swkbd.hpp"
 
 #include "ui/menus/game_menu.hpp"
+#include "ui/menus/save_menu.hpp"
 #include "ui/sidebar.hpp"
 #include "ui/error_box.hpp"
 #include "ui/option_box.hpp"
@@ -186,11 +187,11 @@ Result GetMetaEntries(const Entry& e, title::MetaEntries& out, u32 flags = title
 }
 
 bool LoadControlImage(Entry& e) {
-    if (!e.image && e.control) {
-        ON_SCOPE_EXIT(e.control.reset());
+    if (!e.image && e.info && !e.info->icon.empty()) {
+        ON_SCOPE_EXIT(e.info.reset());
 
         TimeStamp ts;
-        const auto image = ImageLoadFromMemory({e.control->icon, e.jpeg_size}, ImageFlag_JPEG);
+        const auto image = ImageLoadFromMemory(e.info->icon, ImageFlag_JPEG);
         if (!image.data.empty()) {
             e.image = nvgCreateImageRGBA(App::GetVg(), image.w, image.h, 0, image.data.data());
             log_write("\t[image load] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
@@ -201,18 +202,16 @@ bool LoadControlImage(Entry& e) {
     return false;
 }
 
-void LoadResultIntoEntry(Entry& e, const title::ThreadResultData& result) {
-    e.status = result.status;
-    e.control = result.control;
-    e.jpeg_size= result.jpeg_size;
-    e.lang = result.lang;
-    e.status = result.status;
+void LoadResultIntoEntry(Entry& e, const std::shared_ptr<title::ThreadResultData>& result) {
+    e.info = result;
+    e.status = result->status;
+    e.lang = result->lang;
+    e.status = result->status;
 }
 
 void LoadControlEntry(Entry& e, bool force_image_load = false) {
     if (e.status == title::NacpLoadStatus::None) {
-        const auto result = title::LoadControlEntry(e.app_id);
-        LoadResultIntoEntry(e, result);
+        LoadResultIntoEntry(e, title::Get(e.app_id));
     }
 
     if (force_image_load && e.status == title::NacpLoadStatus::Loaded) {
@@ -411,6 +410,30 @@ void LaunchEntry(const Entry& e) {
     Notify(rc, "Failed to launch application");
 }
 
+Result CreateSave(u64 app_id, AccountUid uid) {
+    u64 actual_size;
+    auto data = std::make_unique<NsApplicationControlData>();
+    R_TRY(nsGetApplicationControlData(NsApplicationControlSource_Storage, app_id, data.get(), sizeof(NsApplicationControlData), &actual_size));
+
+    FsSaveDataAttribute attr{};
+    attr.application_id = app_id;
+    attr.uid = uid;
+    attr.save_data_type = FsSaveDataType_Account;
+
+    FsSaveDataCreationInfo info{};
+    info.save_data_size = data->nacp.user_account_save_data_size;
+    info.journal_size = data->nacp.user_account_save_data_journal_size;
+    info.available_size = data->nacp.user_account_save_data_size; // todo: check what this should be.
+    info.owner_id = data->nacp.save_data_owner_id;
+    info.save_data_space_id = FsSaveDataSpaceId_User;
+
+    // what is this???
+    FsSaveDataMetaInfo meta{};
+    R_TRY(fsCreateSaveDataFileSystem(&attr, &info, &meta));
+
+    R_SUCCEED();
+}
+
 } // namespace
 
 Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
@@ -586,36 +609,57 @@ Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
                 }, true));
             }
 
-            options->Add(std::make_shared<SidebarEntryBool>("Title cache"_i18n, m_title_cache.Get(), [this](bool& v_out){
-                m_title_cache.Set(v_out);
-            }));
+            options->Add(std::make_shared<SidebarEntryCallback>("Advanced options"_i18n, [this](){
+                auto options = std::make_shared<Sidebar>("Advanced Options"_i18n, Sidebar::Side::RIGHT);
+                ON_SCOPE_EXIT(App::Push(options));
 
-            // todo: impl this.
-            #if 0
-            options->Add(std::make_shared<SidebarEntryCallback>("Create save"_i18n, [this](){
-                ui::PopupList::Items items{};
-                const auto accounts = App::GetAccountList();
-                for (auto& p : accounts) {
-                    items.emplace_back(p.nickname);
-                }
+                options->Add(std::make_shared<SidebarEntryCallback>("Refresh"_i18n, [this](){
+                    m_dirty = true;
+                    App::PopToMenu();
+                }));
 
-                fsCreateSaveDataFileSystem;
+                options->Add(std::make_shared<SidebarEntryCallback>("Create contents folder"_i18n, [this](){
+                    const auto rc = fs::FsNativeSd().CreateDirectory(title::GetContentsPath(m_entries[m_index].app_id));
+                    App::PushErrorBox(rc, "Folder create failed!"_i18n);
 
-                App::Push(std::make_shared<ui::PopupList>(
-                    "Select user to create save for"_i18n, items, [accounts](auto op_index){
-                        if (op_index) {
-                            s64 out;
-                            if (R_SUCCEEDED(swkbd::ShowNumPad(out, "Enter the save size"_i18n.c_str()))) {
+                    if (R_SUCCEEDED(rc)) {
+                        App::Notify("Folder created!"_i18n);
+                    }
+                }));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Create save"_i18n, [this](){
+                    ui::PopupList::Items items{};
+                    const auto accounts = App::GetAccountList();
+                    for (auto& p : accounts) {
+                        items.emplace_back(p.nickname);
+                    }
+
+                    App::Push(std::make_shared<ui::PopupList>(
+                        "Select user to create save for"_i18n, items, [this, accounts](auto op_index){
+                            if (op_index) {
+                                CreateSaves(accounts[*op_index].uid);
                             }
                         }
-                    }
-                ));
+                    ));
+                }));
 
-                // 1. Select user to create save for.
-                // 2. Enter the save size.
-                // 3. Enter the journal size (0 for default).
+                options->Add(std::make_shared<SidebarEntryBool>("Title cache"_i18n, m_title_cache.Get(), [this](bool& v_out){
+                    m_title_cache.Set(v_out);
+                }));
+
+                options->Add(std::make_shared<SidebarEntryCallback>("Delete title cache"_i18n, [this](){
+                    App::Push(std::make_shared<OptionBox>(
+                        "Are you sure you want to delete the title cache?"_i18n,
+                        "Back"_i18n, "Delete"_i18n, 0, [this](auto op_index){
+                            if (op_index && *op_index) {
+                                m_dirty = true;
+                                nxtcWipeCache();
+                                App::PopToMenu();
+                            }
+                        }
+                    ));
+                }));
             }));
-            #endif
         }})
     );
 
@@ -668,11 +712,11 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         auto& e = m_entries[pos];
 
         if (e.status == title::NacpLoadStatus::None) {
-            title::Push(e.app_id);
+            title::PushAsync(e.app_id);
             e.status = title::NacpLoadStatus::Progress;
         } else if (e.status == title::NacpLoadStatus::Progress) {
-            if (const auto data = title::Get(e.app_id)) {
-                LoadResultIntoEntry(e, *data);
+            if (const auto data = title::GetAsync(e.app_id)) {
+                LoadResultIntoEntry(e, data);
             }
         }
 
@@ -878,6 +922,37 @@ void Menu::DumpGames(u32 flags) {
     dump::Dump(source, paths, [this](Result rc){
         ClearSelection();
     });
+}
+
+void Menu::CreateSaves(AccountUid uid) {
+    App::Push(std::make_shared<ProgressBox>(0, "Creating"_i18n, "", [this, uid](auto pbox) -> Result {
+        auto targets = GetSelectedEntries();
+
+        for (s64 i = 0; i < std::size(targets); i++) {
+            auto& e = targets[i];
+
+            LoadControlEntry(e);
+            pbox->SetTitle(e.GetName());
+            pbox->UpdateTransfer(i + 1, std::size(targets));
+            const auto rc = CreateSave(e.app_id, uid);
+
+            // don't error if the save already exists.
+            if (R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
+                R_THROW(rc);
+            }
+        }
+
+        R_SUCCEED();
+    }, [this](Result rc){
+        App::PushErrorBox(rc, "Save create failed!"_i18n);
+
+        ClearSelection();
+        save::SignalChange();
+
+        if (R_SUCCEEDED(rc)) {
+            App::Notify("Save create successfull!"_i18n);
+        }
+    }));
 }
 
 } // namespace sphaira::ui::menu::game

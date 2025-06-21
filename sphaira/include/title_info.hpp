@@ -1,9 +1,5 @@
 #pragma once
 
-// #include <optional>
-// #include <variant>
-// #include <list>
-// #include <string>
 #include "fs.hpp"
 #include <optional>
 #include <span>
@@ -47,8 +43,7 @@ enum class NacpLoadStatus {
 
 struct ThreadResultData {
     u64 id{};
-    std::shared_ptr<NsApplicationControlData> control{};
-    u64 jpeg_size{};
+    std::vector<u8> icon;
     NacpLanguageEntry lang{};
     NacpLoadStatus status{NacpLoadStatus::None};
 };
@@ -60,23 +55,11 @@ Result Init();
 void Exit();
 
 // adds new entry to queue.
-void Push(u64 app_id);
-// adds array of entries to queue.
-void Push(std::span<const u64> app_ids);
-
-#if 0
-// removes entry from the queue into out.
-void Pop(u64 app_id, std::vector<ThreadResultData>& out);
-// removes array of entries from the queue into out.
-void Pop(std::span<const u64> app_ids, std::vector<ThreadResultData>& out);
-// removes all entries from the queue into out.
-void Pop(std::vector<ThreadResultData>& out);
-#endif
-
+void PushAsync(u64 app_id);
 // gets entry without removing it from the queue.
-auto Get(u64 app_id) -> std::optional<ThreadResultData>;
-// gets array of entries without removing it from the queue.
-void Get(std::span<const u64> app_ids, std::vector<ThreadResultData>& out);
+auto GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData>;
+// single threaded title info fetch.
+auto Get(u64 app_id, bool* cached = nullptr) -> std::shared_ptr<ThreadResultData>;
 
 auto GetNcmCs(u8 storage_id) -> NcmContentStorage&;
 auto GetNcmDb(u8 storage_id) -> NcmContentMetaDatabase&;
@@ -87,10 +70,10 @@ Result GetMetaEntries(u64 id, MetaEntries& out, u32 flags = ContentFlag_All);
 // returns the nca path of a control nca.
 Result GetControlPathFromStatus(const NsApplicationContentMetaStatus& status, u64* out_program_id, fs::FsPath* out_path);
 
-// single threaded title info fetch.
-auto LoadControlEntry(u64 id, bool* cached = nullptr) -> ThreadResultData;
-
 // taken from nxdumptool.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
+
+// /atmosphere/contents/xxx
+auto GetContentsPath(u64 app_id) -> fs::FsPath;
 
 } // namespace sphaira::title

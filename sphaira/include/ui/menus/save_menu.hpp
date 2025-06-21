@@ -17,8 +17,7 @@ struct Entry final : FsSaveDataInfo {
     int image{};
     bool selected{};
 
-    std::shared_ptr<NsApplicationControlData> control{};
-    u64 jpeg_size{};
+    std::shared_ptr<title::ThreadResultData> info{};
     title::NacpLoadStatus status{title::NacpLoadStatus::None};
 
     auto GetName() const -> const char* {
