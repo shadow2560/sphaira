@@ -26,7 +26,6 @@
 #include <cstring>
 #include <algorithm>
 #include <minIni.h>
-#include <nxtc.h>
 
 namespace sphaira::ui::menu::game {
 namespace {
@@ -653,7 +652,7 @@ Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
                         "Back"_i18n, "Delete"_i18n, 0, [this](auto op_index){
                             if (op_index && *op_index) {
                                 m_dirty = true;
-                                nxtcWipeCache();
+                                title::Clear();
                                 App::PopToMenu();
                             }
                         }

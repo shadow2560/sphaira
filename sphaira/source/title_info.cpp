@@ -25,6 +25,7 @@ struct ThreadData {
 
     void Run();
     void Close();
+    void Clear();
 
     void PushAsync(u64 id);
     auto GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData>;
@@ -185,6 +186,13 @@ void ThreadData::Close() {
     ueventSignal(&m_uevent);
 }
 
+void ThreadData::Clear() {
+    SCOPED_MUTEX(&m_mutex_id);
+    SCOPED_MUTEX(&m_mutex_result);
+    m_result.clear();
+    nxtcWipeCache();
+}
+
 void ThreadData::PushAsync(u64 id) {
     SCOPED_MUTEX(&m_mutex_id);
     SCOPED_MUTEX(&m_mutex_result);
@@ -294,14 +302,14 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultDa
         }
     }
 
-    // load override from sys-tweek.
+    // load override from sys-tweak.
     if (result->status == NacpLoadStatus::Loaded) {
-        const auto tweek_path = GetContentsPath(app_id);
-        if (m_fs.DirExists(tweek_path)) {
-            log_write("[TITLE] found contents path: %s\n", tweek_path.s);
+        const auto tweak_path = GetContentsPath(app_id);
+        if (m_fs.DirExists(tweak_path)) {
+            log_write("[TITLE] found contents path: %s\n", tweak_path.s);
 
             std::vector<u8> icon;
-            m_fs.read_entire_file(fs::AppendPath(tweek_path, "icon.jpg"), icon);
+            m_fs.read_entire_file(fs::AppendPath(tweak_path, "icon.jpg"), icon);
 
             struct Overrides {
                 std::string name;
@@ -322,7 +330,7 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultDa
                 return 1;
             };
 
-            ini_browse(cb, &overrides, fs::AppendPath(tweek_path, "config.ini"));
+            ini_browse(cb, &overrides, fs::AppendPath(tweak_path, "config.ini"));
 
             if (!icon.empty() && icon.size() < sizeof(NsApplicationControlData::icon)) {
                 log_write("[TITLE] overriding icon: %zu -> %zu\n", result->icon.size(), icon.size());
@@ -404,6 +412,13 @@ void Exit() {
 
         nsExit();
         ncmExit();
+    }
+}
+
+void Clear() {
+    SCOPED_MUTEX(&g_mutex);
+    if (g_thread_data) {
+        g_thread_data->Clear();
     }
 }
 

@@ -29,7 +29,6 @@
 #include <minIni.h>
 #include <minizip/unzip.h>
 #include <minizip/zip.h>
-#include <nxtc.h>
 
 namespace sphaira::ui::menu::save {
 namespace {

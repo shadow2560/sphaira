@@ -50,9 +50,12 @@ struct ThreadResultData {
 
 using MetaEntries = std::vector<NsApplicationContentMetaStatus>;
 
-// starts background thread.
+// starts background thread (ref counted).
 Result Init();
+// closes the background thread.
 void Exit();
+// clears cache and empties the result array.
+void Clear();
 
 // adds new entry to queue.
 void PushAsync(u64 app_id);
