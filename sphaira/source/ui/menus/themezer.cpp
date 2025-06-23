@@ -13,6 +13,7 @@
 #include "i18n.hpp"
 #include "threaded_file_transfer.hpp"
 #include "image.hpp"
+#include "title_info.hpp"
 
 #include <minIni.h>
 #include <stb_image.h>
@@ -260,9 +261,17 @@ auto InstallTheme(ProgressBox* pbox, const PackListEntry& entry) -> Result {
 
     ON_SCOPE_EXIT(fs.DeleteFile(zip_out));
 
-    // create directories
+    // replace invalid characters in the name.
+    fs::FsPath name_buf{entry.details.name};
+    title::utilsReplaceIllegalCharacters(name_buf, false);
+
+    // replace invalid characters in the author.
+    fs::FsPath author_buf{entry.creator.display_name};
+    title::utilsReplaceIllegalCharacters(author_buf, false);
+
+    // create directories.
     fs::FsPath dir_path;
-    std::snprintf(dir_path, sizeof(dir_path), "%s/%s - By %s", THEME_FOLDER.s, entry.details.name.c_str(), entry.creator.display_name.c_str());
+    std::snprintf(dir_path, sizeof(dir_path), "%s/%s - By %s", THEME_FOLDER.s, name_buf.s, author_buf.s);
     fs.CreateDirectoryRecursively(dir_path);
 
     // 3. extract the zip
