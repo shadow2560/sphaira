@@ -16,8 +16,6 @@ struct Entry {
     NacpLanguageEntry lang{};
     int image{};
     bool selected{};
-
-    std::shared_ptr<title::ThreadResultData> info{};
     title::NacpLoadStatus status{title::NacpLoadStatus::None};
 
     auto GetName() const -> const char* {

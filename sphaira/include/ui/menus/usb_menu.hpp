@@ -31,7 +31,7 @@ struct Menu final : MenuBase {
 
 // this should be private
 // private:
-    std::shared_ptr<yati::source::Usb> m_usb_source{};
+    std::unique_ptr<yati::source::Usb> m_usb_source{};
     bool m_was_mtp_enabled{};
 
     Thread m_thread{};

@@ -58,7 +58,7 @@ public:
     static void Exit();
     static void ExitRestart();
     static auto GetVg() -> NVGcontext*;
-    static void Push(std::shared_ptr<ui::Widget>);
+    static void Push(std::unique_ptr<ui::Widget>&&);
     // pops all widgets above a menu
     static void PopToMenu();
 
@@ -260,7 +260,7 @@ public:
 
     Vec2 m_scale{1, 1};
 
-    std::vector<std::shared_ptr<ui::Widget>> m_widgets;
+    std::vector<std::unique_ptr<ui::Widget>> m_widgets;
     u32 m_pop_count{};
     ui::NotifMananger m_notif_manager{};
 

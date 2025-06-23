@@ -166,7 +166,7 @@ Menu::Menu(u32 flags) : MenuBase{"GitHub"_i18n, flags} {
             static GhApiEntry gh_entry;
             gh_entry = {};
 
-            App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, GetEntry().repo, [this](auto pbox) -> Result {
+            App::Push(std::make_unique<ProgressBox>(0, "Downloading "_i18n, GetEntry().repo, [this](auto pbox) -> Result {
                 return DownloadAssetJson(pbox, GenerateApiUrl(GetEntry()), gh_entry);
             }, [this](Result rc){
                 App::PushErrorBox(rc, "Failed to download json"_i18n);
@@ -199,7 +199,7 @@ Menu::Menu(u32 flags) : MenuBase{"GitHub"_i18n, flags} {
                         }
                     }
 
-                    App::Push(std::make_shared<PopupList>("Select asset to download for "_i18n + GetEntry().repo, asset_items, [this, api_assets, asset_ptr](auto op_index){
+                    App::Push(std::make_unique<PopupList>("Select asset to download for "_i18n + GetEntry().repo, asset_items, [this, api_assets, asset_ptr](auto op_index){
                         if (!op_index) {
                             return;
                         }
@@ -216,7 +216,7 @@ Menu::Menu(u32 flags) : MenuBase{"GitHub"_i18n, flags} {
                         }
 
                         const auto func = [this, &asset_entry, ptr](){
-                            App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, GetEntry().repo, [this, &asset_entry, ptr](auto pbox) -> Result {
+                            App::Push(std::make_unique<ProgressBox>(0, "Downloading "_i18n, GetEntry().repo, [this, &asset_entry, ptr](auto pbox) -> Result {
                                 return DownloadApp(pbox, asset_entry, ptr);
                             }, [this, ptr](Result rc){
                                 homebrew::SignalChange();
@@ -230,14 +230,14 @@ Menu::Menu(u32 flags) : MenuBase{"GitHub"_i18n, flags} {
                                     }
 
                                     if (!post_install_message.empty()) {
-                                        App::Push(std::make_shared<OptionBox>(post_install_message, "OK"_i18n));
+                                        App::Push(std::make_unique<OptionBox>(post_install_message, "OK"_i18n));
                                     }
                                 }
                             }));
                         };
 
                         if (!pre_install_message.empty()) {
-                            App::Push(std::make_shared<OptionBox>(
+                            App::Push(std::make_unique<OptionBox>(
                                 pre_install_message,
                                 "Back"_i18n, "Download"_i18n, 1, [this, func](auto op_index){
                                     if (op_index && *op_index) {

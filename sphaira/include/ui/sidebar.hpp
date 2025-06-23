@@ -95,7 +95,7 @@ private:
 class Sidebar final : public Widget {
 public:
     enum class Side { LEFT, RIGHT };
-    using Items = std::vector<std::shared_ptr<SidebarEntryBase>>;
+    using Items = std::vector<std::unique_ptr<SidebarEntryBase>>;
 
 public:
     Sidebar(std::string title, Side side, Items&& items);
@@ -108,7 +108,18 @@ public:
     auto OnFocusGained() noexcept -> void override;
     auto OnFocusLost() noexcept -> void override;
 
-    void Add(std::shared_ptr<SidebarEntryBase> entry);
+    void Add(std::unique_ptr<SidebarEntryBase>&& entry);
+
+    template<typename T>
+    void AddMove(T entry) {
+        Add(std::move(entry));
+    }
+
+    // template<typename _Tp>
+    // [[nodiscrad,gnu::always_inline]]
+    // constexpr typename std::remove_reference<_Tp>::type&&
+    // move(_Tp&& t) noexcept
+    // { return static_cast<typename std::remove_reference<_Tp>::type&&>(t); }
 
 private:
     void SetIndex(s64 index);

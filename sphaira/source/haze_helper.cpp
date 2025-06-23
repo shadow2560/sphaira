@@ -87,8 +87,9 @@ protected:
 };
 
 struct FsProxy final : FsProxyBase {
-    FsProxy(std::shared_ptr<fs::Fs> fs, const char* name, const char* display_name) : FsProxyBase{name, display_name} {
-        m_fs = fs;
+    FsProxy(std::unique_ptr<fs::Fs>&& fs, const char* name, const char* display_name)
+    : FsProxyBase{name, display_name}
+    , m_fs{std::forward<decltype(fs)>(fs)} {
     }
 
     ~FsProxy() {
@@ -229,7 +230,7 @@ struct FsProxy final : FsProxyBase {
     }
 
 private:
-    std::shared_ptr<fs::Fs> m_fs{};
+    std::unique_ptr<fs::Fs> m_fs{};
 };
 
 // fake fs that allows for files to create r/w on the root.
@@ -558,9 +559,9 @@ bool Init() {
         return false;
     }
 
-    g_fs_entries.emplace_back(std::make_shared<FsProxy>(std::make_shared<fs::FsNativeSd>(), "", "microSD card"));
-    g_fs_entries.emplace_back(std::make_shared<FsProxy>(std::make_shared<fs::FsNativeImage>(FsImageDirectoryId_Nand), "image_nand", "Image nand"));
-    g_fs_entries.emplace_back(std::make_shared<FsProxy>(std::make_shared<fs::FsNativeImage>(FsImageDirectoryId_Sd), "image_sd", "Image sd"));
+    g_fs_entries.emplace_back(std::make_shared<FsProxy>(std::make_unique<fs::FsNativeSd>(), "", "microSD card"));
+    g_fs_entries.emplace_back(std::make_shared<FsProxy>(std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Nand), "image_nand", "Image nand"));
+    g_fs_entries.emplace_back(std::make_shared<FsProxy>(std::make_unique<fs::FsNativeImage>(FsImageDirectoryId_Sd), "image_sd", "Image sd"));
     g_fs_entries.emplace_back(std::make_shared<FsDevNullProxy>("DevNull", "DevNull (Speed Test)"));
     g_fs_entries.emplace_back(std::make_shared<FsInstallProxy>("install", "Install (NSP, XCI, NSZ, XCZ)"));
 

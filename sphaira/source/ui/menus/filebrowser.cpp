@@ -332,7 +332,7 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
             }
 
             if (IsSd() && m_is_update_folder && m_daybreak_path.has_value()) {
-                App::Push(std::make_shared<OptionBox>("Open with DayBreak?"_i18n, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
+                App::Push(std::make_unique<OptionBox>("Open with DayBreak?"_i18n, "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
                     if (op_index && *op_index) {
                         // daybreak uses native fs so do not use nro_add_arg_file
                         // otherwise it'll fail to open the folder...
@@ -349,7 +349,7 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
             } else {
                 // special case for nro
                 if (IsSd() && entry.GetExtension() == "nro") {
-                    App::Push(std::make_shared<OptionBox>("Launch "_i18n + entry.GetName() + '?',
+                    App::Push(std::make_unique<OptionBox>("Launch "_i18n + entry.GetName() + '?',
                         "No"_i18n, "Launch"_i18n, 1, [this](auto op_index){
                             if (op_index && *op_index) {
                                 nro_launch(GetNewPathCurrent());
@@ -370,7 +370,7 @@ FsView::FsView(Menu* menu, const fs::FsPath& path, const FsEntry& entry, ViewSid
                         }
 
                         const auto title = "Launch option for: "_i18n + GetEntry().name;
-                        App::Push(std::make_shared<PopupList>(
+                        App::Push(std::make_unique<PopupList>(
                             title, items, [this, assoc_list](auto op_index){
                                 if (op_index) {
                                     log_write("selected: %s\n", assoc_list[*op_index].name.c_str());
@@ -642,12 +642,12 @@ void FsView::InstallForwarder() {
     }
 
     const auto title = std::string{"Select launcher for: "_i18n} + GetEntry().name;
-    App::Push(std::make_shared<PopupList>(
+    App::Push(std::make_unique<PopupList>(
         title, items, [this, assoc_list](auto op_index){
             if (op_index) {
                 const auto assoc = assoc_list[*op_index];
                 log_write("pushing it\n");
-                App::Push(std::make_shared<ProgressBox>(0, "Installing Forwarder"_i18n, GetEntry().name, [assoc, this](auto pbox) -> Result {
+                App::Push(std::make_unique<ProgressBox>(0, "Installing Forwarder"_i18n, GetEntry().name, [assoc, this](auto pbox) -> Result {
                     log_write("inside callback\n");
 
                     NroEntry nro{};
@@ -701,11 +701,11 @@ void FsView::InstallForwarder() {
 void FsView::InstallFiles() {
     const auto targets = GetSelectedEntries();
 
-    App::Push(std::make_shared<OptionBox>("Install Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this, targets](auto op_index){
+    App::Push(std::make_unique<OptionBox>("Install Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this, targets](auto op_index){
         if (op_index && *op_index) {
             App::PopToMenu();
 
-            App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this, targets](auto pbox) -> Result {
+            App::Push(std::make_unique<ui::ProgressBox>(0, "Installing "_i18n, "", [this, targets](auto pbox) -> Result {
                 for (auto& e : targets) {
                     R_TRY(yati::InstallFromFile(pbox, m_fs.get(), GetNewPath(e)));
                     App::Notify("Installed "_i18n + e.GetName());
@@ -727,7 +727,7 @@ void FsView::UnzipFiles(fs::FsPath dir_path) {
         dir_path = m_path;
     }
 
-    App::Push(std::make_shared<ui::ProgressBox>(0, "Extracting "_i18n, "", [this, dir_path, targets](auto pbox) -> Result {
+    App::Push(std::make_unique<ui::ProgressBox>(0, "Extracting "_i18n, "", [this, dir_path, targets](auto pbox) -> Result {
         const auto is_hdd_fs = m_fs->Root().starts_with("ums");
 
         for (auto& e : targets) {
@@ -785,7 +785,7 @@ void FsView::ZipFiles(fs::FsPath zip_out) {
         }
     }
 
-    App::Push(std::make_shared<ui::ProgressBox>(0, "Compressing "_i18n, "", [this, zip_out, targets](auto pbox) -> Result {
+    App::Push(std::make_unique<ui::ProgressBox>(0, "Compressing "_i18n, "", [this, zip_out, targets](auto pbox) -> Result {
         const auto t = std::time(NULL);
         const auto tm = std::localtime(&t);
         const auto is_hdd_fs = m_fs->Root().starts_with("ums");
@@ -876,14 +876,14 @@ void FsView::UploadFiles() {
         items.emplace_back(p.name);
     }
 
-    App::Push(std::make_shared<PopupList>(
+    App::Push(std::make_unique<PopupList>(
         "Select upload location"_i18n, items, [this, network_locations](auto op_index){
             if (!op_index) {
                 return;
             }
 
             const auto loc = network_locations[*op_index];
-            App::Push(std::make_shared<ProgressBox>(0, "Uploading"_i18n, "", [this, loc](auto pbox) -> Result {
+            App::Push(std::make_unique<ProgressBox>(0, "Uploading"_i18n, "", [this, loc](auto pbox) -> Result {
                 auto targets = GetSelectedEntries();
                 const auto is_file_based_emummc = App::IsFileBaseEmummc();
 
@@ -1166,7 +1166,7 @@ void FsView::OnDeleteCallback() {
         m_menu->RefreshViews();
         log_write("did delete\n");
     } else {
-        App::Push(std::make_shared<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox) -> Result {
+        App::Push(std::make_unique<ProgressBox>(0, "Deleting"_i18n, "", [this](auto pbox) -> Result {
             FsDirCollections collections;
             auto& selected = m_menu->m_selected;
             auto src_fs = selected.m_view->GetFs();
@@ -1207,7 +1207,7 @@ void FsView::OnPasteCallback() {
 
         m_menu->RefreshViews();
     } else {
-        App::Push(std::make_shared<ProgressBox>(0, "Pasting"_i18n, "", [this](auto pbox) -> Result {
+        App::Push(std::make_unique<ProgressBox>(0, "Pasting"_i18n, "", [this](auto pbox) -> Result {
             auto& selected = m_menu->m_selected;
             auto src_fs = selected.m_view->GetFs();
             const auto is_same_fs = selected.SameFs(this);
@@ -1530,7 +1530,7 @@ void FsView::DisplayHash(hash::Type type) {
     static std::string hash_out;
     hash_out.clear();
 
-    App::Push(std::make_shared<ProgressBox>(0, "Hashing"_i18n, GetEntry().name, [this, type](auto pbox) -> Result {
+    App::Push(std::make_unique<ProgressBox>(0, "Hashing"_i18n, GetEntry().name, [this, type](auto pbox) -> Result {
         const auto full_path = GetNewPathCurrent();
         pbox->NewTransfer(full_path);
         R_TRY(hash::Hash(pbox, type, m_fs.get(), full_path, hash_out));
@@ -1543,18 +1543,18 @@ void FsView::DisplayHash(hash::Type type) {
             char buf[0x100];
             // std::snprintf(buf, sizeof(buf), "%s\n%s\n%s", hash::GetTypeStr(type), hash_out.c_str(), GetEntry().GetName());
             std::snprintf(buf, sizeof(buf), "%s\n%s", hash::GetTypeStr(type), hash_out.c_str());
-            App::Push(std::make_shared<OptionBox>(buf, "OK"_i18n));
+            App::Push(std::make_unique<OptionBox>(buf, "OK"_i18n));
         }
     }));
 }
 
 void FsView::DisplayOptions() {
-    auto options = std::make_shared<Sidebar>("File Options"_i18n, Sidebar::Side::RIGHT);
-    ON_SCOPE_EXIT(App::Push(options));
+    auto options = std::make_unique<Sidebar>("File Options"_i18n, Sidebar::Side::RIGHT);
+    ON_SCOPE_EXIT(App::Push(std::move(options)));
 
-    options->Add(std::make_shared<SidebarEntryCallback>("Sort By"_i18n, [this](){
-        auto options = std::make_shared<Sidebar>("Sort Options"_i18n, Sidebar::Side::RIGHT);
-        ON_SCOPE_EXIT(App::Push(options));
+    options->Add(std::make_unique<SidebarEntryCallback>("Sort By"_i18n, [this](){
+        auto options = std::make_unique<Sidebar>("Sort Options"_i18n, Sidebar::Side::RIGHT);
+        ON_SCOPE_EXIT(App::Push(std::move(options)));
 
         SidebarEntryArray::Items sort_items;
         sort_items.push_back("Size"_i18n);
@@ -1564,46 +1564,46 @@ void FsView::DisplayOptions() {
         order_items.push_back("Descending"_i18n);
         order_items.push_back("Ascending"_i18n);
 
-        options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
+        options->Add(std::make_unique<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
             m_menu->m_sort.Set(index_out);
             SortAndFindLastFile();
         }, m_menu->m_sort.Get()));
 
-        options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
+        options->Add(std::make_unique<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
             m_menu->m_order.Set(index_out);
             SortAndFindLastFile();
         }, m_menu->m_order.Get()));
 
-        options->Add(std::make_shared<SidebarEntryBool>("Show Hidden"_i18n, m_menu->m_show_hidden.Get(), [this](bool& v_out){
+        options->Add(std::make_unique<SidebarEntryBool>("Show Hidden"_i18n, m_menu->m_show_hidden.Get(), [this](bool& v_out){
             m_menu->m_show_hidden.Set(v_out);
             SortAndFindLastFile();
         }));
 
-        options->Add(std::make_shared<SidebarEntryBool>("Folders First"_i18n, m_menu->m_folders_first.Get(), [this](bool& v_out){
+        options->Add(std::make_unique<SidebarEntryBool>("Folders First"_i18n, m_menu->m_folders_first.Get(), [this](bool& v_out){
             m_menu->m_folders_first.Set(v_out);
             SortAndFindLastFile();
         }));
 
-        options->Add(std::make_shared<SidebarEntryBool>("Hidden Last"_i18n, m_menu->m_hidden_last.Get(), [this](bool& v_out){
+        options->Add(std::make_unique<SidebarEntryBool>("Hidden Last"_i18n, m_menu->m_hidden_last.Get(), [this](bool& v_out){
             m_menu->m_hidden_last.Set(v_out);
             SortAndFindLastFile();
         }));
     }));
 
     if (m_entries_current.size()) {
-        options->Add(std::make_shared<SidebarEntryCallback>("Cut"_i18n, [this](){
+        options->Add(std::make_unique<SidebarEntryCallback>("Cut"_i18n, [this](){
             m_menu->AddSelectedEntries(SelectedType::Cut);
         }, true));
 
-        options->Add(std::make_shared<SidebarEntryCallback>("Copy"_i18n, [this](){
+        options->Add(std::make_unique<SidebarEntryCallback>("Copy"_i18n, [this](){
             m_menu->AddSelectedEntries(SelectedType::Copy);
         }, true));
     }
 
     if (!m_menu->m_selected.Empty() && (m_menu->m_selected.Type() == SelectedType::Cut || m_menu->m_selected.Type() == SelectedType::Copy)) {
-        options->Add(std::make_shared<SidebarEntryCallback>("Paste"_i18n, [this](){
+        options->Add(std::make_unique<SidebarEntryCallback>("Paste"_i18n, [this](){
             const std::string buf = "Paste file(s)?"_i18n;
-            App::Push(std::make_shared<OptionBox>(
+            App::Push(std::make_unique<OptionBox>(
                 buf, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
                 if (op_index && *op_index) {
                     App::PopToMenu();
@@ -1615,7 +1615,7 @@ void FsView::DisplayOptions() {
 
     // can't rename more than 1 file
     if (m_entries_current.size() && !m_selected_count) {
-        options->Add(std::make_shared<SidebarEntryCallback>("Rename"_i18n, [this](){
+        options->Add(std::make_unique<SidebarEntryCallback>("Rename"_i18n, [this](){
             std::string out;
             const auto& entry = GetEntry();
             const auto name = entry.GetName();
@@ -1643,11 +1643,11 @@ void FsView::DisplayOptions() {
     }
 
     if (m_entries_current.size()) {
-        options->Add(std::make_shared<SidebarEntryCallback>("Delete"_i18n, [this](){
+        options->Add(std::make_unique<SidebarEntryCallback>("Delete"_i18n, [this](){
             m_menu->AddSelectedEntries(SelectedType::Delete);
 
             log_write("clicked on delete\n");
-            App::Push(std::make_shared<OptionBox>(
+            App::Push(std::make_unique<OptionBox>(
                 "Delete Selected files?"_i18n, "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
                     if (op_index && *op_index) {
                         App::PopToMenu();
@@ -1673,7 +1673,7 @@ void FsView::DisplayOptions() {
     // if install is enabled, check if all currently selected files are installable.
     if (m_entries_current.size() && App::GetInstallEnable()) {
         if (check_all_ext(INSTALL_EXTENSIONS)) {
-            options->Add(std::make_shared<SidebarEntryCallback>("Install"_i18n, [this](){
+            options->Add(std::make_unique<SidebarEntryCallback>("Install"_i18n, [this](){
                 InstallFiles();
             }));
         }
@@ -1681,9 +1681,9 @@ void FsView::DisplayOptions() {
 
     if (IsSd() && m_entries_current.size() && !m_selected_count) {
         if (App::GetInstallEnable() && GetEntry().IsFile() && (GetEntry().GetExtension() == "nro" || !m_menu->FindFileAssocFor().empty())) {
-            options->Add(std::make_shared<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
+            options->Add(std::make_unique<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
                 if (App::GetInstallPrompt()) {
-                    App::Push(std::make_shared<OptionBox>(
+                    App::Push(std::make_unique<OptionBox>(
                         "WARNING: Installing forwarders will lead to a ban!"_i18n,
                         "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
                             if (op_index && *op_index) {
@@ -1700,16 +1700,16 @@ void FsView::DisplayOptions() {
 
     if (m_entries_current.size()) {
         if (check_all_ext(ZIP_EXTENSIONS)) {
-            options->Add(std::make_shared<SidebarEntryCallback>("Extract zip"_i18n, [this](){
-                auto options = std::make_shared<Sidebar>("Extract Options"_i18n, Sidebar::Side::RIGHT);
-                ON_SCOPE_EXIT(App::Push(options));
+            options->Add(std::make_unique<SidebarEntryCallback>("Extract zip"_i18n, [this](){
+                auto options = std::make_unique<Sidebar>("Extract Options"_i18n, Sidebar::Side::RIGHT);
+                ON_SCOPE_EXIT(App::Push(std::move(options)));
 
-                options->Add(std::make_shared<SidebarEntryCallback>("Extract here"_i18n, [this](){
+                options->Add(std::make_unique<SidebarEntryCallback>("Extract here"_i18n, [this](){
                     UnzipFiles("");
                 }));
 
-                options->Add(std::make_shared<SidebarEntryCallback>("Extract to root"_i18n, [this](){
-                    App::Push(std::make_shared<OptionBox>("Are you sure you want to extract to root?"_i18n,
+                options->Add(std::make_unique<SidebarEntryCallback>("Extract to root"_i18n, [this](){
+                    App::Push(std::make_unique<OptionBox>("Are you sure you want to extract to root?"_i18n,
                         "No"_i18n, "Yes"_i18n, 0, [this](auto op_index){
                         if (op_index && *op_index) {
                             UnzipFiles(m_fs->Root());
@@ -1717,7 +1717,7 @@ void FsView::DisplayOptions() {
                     }));
                 }));
 
-                options->Add(std::make_shared<SidebarEntryCallback>("Extract to..."_i18n, [this](){
+                options->Add(std::make_unique<SidebarEntryCallback>("Extract to..."_i18n, [this](){
                     std::string out;
                     if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into", fs::AppendPath(m_path, ""))) && !out.empty()) {
                         UnzipFiles(out);
@@ -1727,15 +1727,15 @@ void FsView::DisplayOptions() {
         }
 
         if (!check_all_ext(ZIP_EXTENSIONS) || m_selected_count) {
-            options->Add(std::make_shared<SidebarEntryCallback>("Compress to zip"_i18n, [this](){
-                auto options = std::make_shared<Sidebar>("Compress Options"_i18n, Sidebar::Side::RIGHT);
-                ON_SCOPE_EXIT(App::Push(options));
+            options->Add(std::make_unique<SidebarEntryCallback>("Compress to zip"_i18n, [this](){
+                auto options = std::make_unique<Sidebar>("Compress Options"_i18n, Sidebar::Side::RIGHT);
+                ON_SCOPE_EXIT(App::Push(std::move(options)));
 
-                options->Add(std::make_shared<SidebarEntryCallback>("Compress"_i18n, [this](){
+                options->Add(std::make_unique<SidebarEntryCallback>("Compress"_i18n, [this](){
                     ZipFiles("");
                 }));
 
-                options->Add(std::make_shared<SidebarEntryCallback>("Compress to..."_i18n, [this](){
+                options->Add(std::make_unique<SidebarEntryCallback>("Compress to..."_i18n, [this](){
                     std::string out;
                     if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into", m_path)) && !out.empty()) {
                         ZipFiles(out);
@@ -1745,14 +1745,14 @@ void FsView::DisplayOptions() {
         }
     }
 
-    options->Add(std::make_shared<SidebarEntryCallback>("Advanced"_i18n, [this](){
+    options->Add(std::make_unique<SidebarEntryCallback>("Advanced"_i18n, [this](){
         DisplayAdvancedOptions();
     }));
 }
 
 void FsView::DisplayAdvancedOptions() {
-    auto options = std::make_shared<Sidebar>("Advanced Options"_i18n, Sidebar::Side::RIGHT);
-    ON_SCOPE_EXIT(App::Push(options));
+    auto options = std::make_unique<Sidebar>("Advanced Options"_i18n, Sidebar::Side::RIGHT);
+    ON_SCOPE_EXIT(App::Push(std::move(options)));
 
     SidebarEntryArray::Items mount_items;
     std::vector<FsEntry> fs_entries;
@@ -1773,12 +1773,12 @@ void FsView::DisplayAdvancedOptions() {
         mount_items.push_back(i18n::get(e.name));
     }
 
-    options->Add(std::make_shared<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
+    options->Add(std::make_unique<SidebarEntryArray>("Mount"_i18n, mount_items, [this, fs_entries](s64& index_out){
         App::PopToMenu();
         SetFs(fs_entries[index_out].root, fs_entries[index_out]);
     }, i18n::get(m_fs_entry.name)));
 
-    options->Add(std::make_shared<SidebarEntryCallback>("Create File"_i18n, [this](){
+    options->Add(std::make_unique<SidebarEntryCallback>("Create File"_i18n, [this](){
         std::string out;
         if (R_SUCCEEDED(swkbd::ShowText(out, "Set File Name"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
             App::PopToMenu();
@@ -1800,7 +1800,7 @@ void FsView::DisplayAdvancedOptions() {
         }
     }));
 
-    options->Add(std::make_shared<SidebarEntryCallback>("Create Folder"_i18n, [this](){
+    options->Add(std::make_unique<SidebarEntryCallback>("Create Folder"_i18n, [this](){
         std::string out;
         if (R_SUCCEEDED(swkbd::ShowText(out, "Set Folder Name"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
             App::PopToMenu();
@@ -1822,38 +1822,38 @@ void FsView::DisplayAdvancedOptions() {
     }));
 
     if (IsSd() && m_entries_current.size() && !m_selected_count && GetEntry().IsFile() && GetEntry().file_size < 1024*64) {
-        options->Add(std::make_shared<SidebarEntryCallback>("View as text (unfinished)"_i18n, [this](){
-            App::Push(std::make_shared<fileview::Menu>(GetNewPathCurrent()));
+        options->Add(std::make_unique<SidebarEntryCallback>("View as text (unfinished)"_i18n, [this](){
+            App::Push(std::make_unique<fileview::Menu>(GetNewPathCurrent()));
         }));
     }
 
     if (m_entries_current.size()) {
-        options->Add(std::make_shared<SidebarEntryCallback>("Upload"_i18n, [this](){
+        options->Add(std::make_unique<SidebarEntryCallback>("Upload"_i18n, [this](){
             UploadFiles();
         }));
     }
 
     if (m_entries_current.size() && !m_selected_count && GetEntry().IsFile()) {
-        options->Add(std::make_shared<SidebarEntryCallback>("Hash"_i18n, [this](){
-            auto options = std::make_shared<Sidebar>("Hash Options"_i18n, Sidebar::Side::RIGHT);
-            ON_SCOPE_EXIT(App::Push(options));
+        options->Add(std::make_unique<SidebarEntryCallback>("Hash"_i18n, [this](){
+            auto options = std::make_unique<Sidebar>("Hash Options"_i18n, Sidebar::Side::RIGHT);
+            ON_SCOPE_EXIT(App::Push(std::move(options)));
 
-            options->Add(std::make_shared<SidebarEntryCallback>("CRC32"_i18n, [this](){
+            options->Add(std::make_unique<SidebarEntryCallback>("CRC32"_i18n, [this](){
                 DisplayHash(hash::Type::Crc32);
             }));
-            options->Add(std::make_shared<SidebarEntryCallback>("MD5"_i18n, [this](){
+            options->Add(std::make_unique<SidebarEntryCallback>("MD5"_i18n, [this](){
                 DisplayHash(hash::Type::Md5);
             }));
-            options->Add(std::make_shared<SidebarEntryCallback>("SHA1"_i18n, [this](){
+            options->Add(std::make_unique<SidebarEntryCallback>("SHA1"_i18n, [this](){
                 DisplayHash(hash::Type::Sha1);
             }));
-            options->Add(std::make_shared<SidebarEntryCallback>("SHA256"_i18n, [this](){
+            options->Add(std::make_unique<SidebarEntryCallback>("SHA256"_i18n, [this](){
                 DisplayHash(hash::Type::Sha256);
             }));
         }));
     }
 
-    options->Add(std::make_shared<SidebarEntryBool>("Ignore read only"_i18n, m_menu->m_ignore_read_only.Get(), [this](bool& v_out){
+    options->Add(std::make_unique<SidebarEntryBool>("Ignore read only"_i18n, m_menu->m_ignore_read_only.Get(), [this](bool& v_out){
         m_menu->m_ignore_read_only.Set(v_out);
         m_fs->SetIgnoreReadOnly(v_out);
     }));
@@ -1870,7 +1870,8 @@ Menu::Menu(u32 flags) : MenuBase{"FileBrowser"_i18n, flags} {
         }});
     }
 
-    view = view_left = std::make_shared<FsView>(this, ViewSide::Left);
+    view_left = std::make_unique<FsView>(this, ViewSide::Left);
+    view = view_left.get();
     ueventCreate(&g_change_uevent, true);
 }
 
@@ -1910,7 +1911,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         view_left->Draw(vg, theme);
         view_right->Draw(vg, theme);
 
-        if (view == view_left) {
+        if (view == view_left.get()) {
             gfx::drawRect(vg, view_right->GetPos(), theme->GetColour(ThemeEntryID_FOCUS), 5);
         } else {
             gfx::drawRect(vg, view_left->GetPos(), theme->GetColour(ThemeEntryID_FOCUS), 5);
@@ -2102,7 +2103,7 @@ void Menu::SetSplitScreen(bool enable) {
         m_split_screen = enable;
 
         if (m_split_screen) {
-            const auto change_view = [this](auto new_view){
+            const auto change_view = [this](FsView* new_view){
                 if (view != new_view) {
                     view->OnFocusLost();
                     view = new_view;
@@ -2114,19 +2115,22 @@ void Menu::SetSplitScreen(bool enable) {
 
             // load second screen as a copy of the left side.
             view->SetSide(ViewSide::Left);
-            view_right = std::make_shared<FsView>(this, view->m_path, view->GetFsEntry(), ViewSide::Right);
-            change_view(view_right);
+            view_right = std::make_unique<FsView>(this, view->m_path, view->GetFsEntry(), ViewSide::Right);
+            change_view(view_right.get());
 
             SetAction(Button::LEFT, Action{[this, change_view](){
-                change_view(view_left);
+                change_view(view_left.get());
             }});
             SetAction(Button::RIGHT, Action{[this, change_view](){
-                change_view(view_right);
+                change_view(view_right.get());
             }});
         } else {
-            view_left = {};
+            if (view == view_right.get()) {
+                view_left = std::move(view_right);
+            }
+
             view_right = {};
-            view_left = view;
+            view = view_left.get();
             view->SetSide(ViewSide::Left);
 
             RemoveAction(Button::LEFT);
@@ -2152,7 +2156,7 @@ void Menu::PromptIfShouldExit() {
         return;
     }
 
-    App::Push(std::make_shared<ui::OptionBox>(
+    App::Push(std::make_unique<ui::OptionBox>(
         "Close FileBrowser?"_i18n,
         "No"_i18n, "Yes"_i18n, 1, [this](auto op_index){
             if (op_index && *op_index) {

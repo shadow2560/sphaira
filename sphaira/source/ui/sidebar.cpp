@@ -26,7 +26,7 @@ auto DistanceBetweenY(Vec4 va, Vec4 vb) -> Vec4 {
 } // namespace
 
 SidebarEntryBase::SidebarEntryBase(std::string&& title)
-: m_title{std::forward<std::string>(title)} {
+: m_title{std::forward<decltype(title)>(title)} {
 
 }
 
@@ -114,13 +114,13 @@ SidebarEntryArray::SidebarEntryArray(std::string title, Items items, std::string
     }
 
     m_list_callback = [&index, this]() {
-        App::Push(std::make_shared<PopupList>(
+        App::Push(std::make_unique<PopupList>(
             m_title, m_items, index, m_index
         ));
     };
 
     // m_callback = [&index, this](auto& idx) {
-    //     App::Push(std::make_shared<PopupList>(
+    //     App::Push(std::make_unique<PopupList>(
     //         m_title, m_items, index, idx
     //     ));
     // };
@@ -136,13 +136,13 @@ SidebarEntryArray::SidebarEntryArray(std::string title, Items items, Callback cb
 }
 
 SidebarEntryArray::SidebarEntryArray(std::string title, Items items, Callback cb, s64 index)
-: SidebarEntryBase{std::forward<std::string>(title)}
+: SidebarEntryBase{std::forward<decltype(title)>(title)}
 , m_items{std::move(items)}
 , m_callback{cb}
 , m_index{index} {
 
     m_list_callback = [this]() {
-        App::Push(std::make_shared<PopupList>(
+        App::Push(std::make_unique<PopupList>(
             m_title, m_items, [this](auto op_idx){
                 if (op_idx) {
                     m_index = *op_idx;
@@ -219,7 +219,7 @@ auto SidebarEntryArray::OnFocusLost() noexcept -> void {
 }
 
 Sidebar::Sidebar(std::string title, Side side, Items&& items)
-: Sidebar{std::move(title), "", side, std::forward<Items>(items)} {
+: Sidebar{std::move(title), "", side, std::forward<decltype(items)>(items)} {
 }
 
 Sidebar::Sidebar(std::string title, Side side)
@@ -230,7 +230,7 @@ Sidebar::Sidebar(std::string title, std::string sub, Side side, Items&& items)
 : m_title{std::move(title)}
 , m_sub{std::move(sub)}
 , m_side{side}
-, m_items{std::forward<Items>(items)} {
+, m_items{std::forward<decltype(items)>(items)} {
     switch (m_side) {
         case Side::LEFT:
             SetPos(Vec4{0.f, 0.f, 450.f, 720.f});
@@ -313,8 +313,8 @@ auto Sidebar::OnFocusLost() noexcept -> void {
     SetHidden(true);
 }
 
-void Sidebar::Add(std::shared_ptr<SidebarEntryBase> entry) {
-    m_items.emplace_back(entry);
+void Sidebar::Add(std::unique_ptr<SidebarEntryBase>&& entry) {
+    m_items.emplace_back(std::forward<decltype(entry)>(entry));
     m_items.back()->SetPos(m_base_pos);
 
     // give focus to first entry.

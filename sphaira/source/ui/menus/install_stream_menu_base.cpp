@@ -142,9 +142,9 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
 
     if (m_state == State::Connected) {
         m_state = State::Progress;
-        App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, m_source->GetPath(), [this](auto pbox) -> Result {
+        App::Push(std::make_unique<ui::ProgressBox>(0, "Installing "_i18n, m_source->GetPath(), [this](auto pbox) -> Result {
             INSTALL_STATE = InstallState::Progress;
-            const auto rc = yati::InstallFromSource(pbox, m_source, m_source->GetPath());
+            const auto rc = yati::InstallFromSource(pbox, m_source.get(), m_source->GetPath());
             INSTALL_STATE = InstallState::Finished;
 
             if (R_FAILED(rc)) {
@@ -234,7 +234,7 @@ bool Menu::OnInstallStart(const char* path) {
 
     SCOPED_MUTEX(&m_mutex);
 
-    m_source = std::make_shared<Stream>(path, GetToken());
+    m_source = std::make_unique<Stream>(path, GetToken());
     INSTALL_STATE = InstallState::None;
     m_state = State::Connected;
     log_write("[Menu::OnInstallStart] exiting\n");

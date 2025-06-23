@@ -252,7 +252,7 @@ struct ThreadData {
 };
 
 struct Yati {
-    Yati(ui::ProgressBox*, std::shared_ptr<source::Base>);
+    Yati(ui::ProgressBox*, source::Base*);
     ~Yati();
 
     Result Setup(const ConfigOverride& override);
@@ -274,7 +274,7 @@ struct Yati {
 
 // private:
     ui::ProgressBox* pbox{};
-    std::shared_ptr<source::Base> source{};
+    source::Base* source{};
 
     // for all content storages
     NcmContentStorage ncm_cs[2]{};
@@ -793,7 +793,7 @@ struct BufHelper {
     u64 offset{};
 };
 
-Yati::Yati(ui::ProgressBox* _pbox, std::shared_ptr<source::Base> _source) : pbox{_pbox}, source{_source} {
+Yati::Yati(ui::ProgressBox* _pbox, source::Base* _source) : pbox{_pbox}, source{_source} {
     App::SetAutoSleepDisabled(true);
 }
 
@@ -1293,7 +1293,7 @@ Result Yati::RegisterNcasAndPushRecord(const CnmtCollection& cnmt, u32 latest_ve
     R_SUCCEED();
 }
 
-Result InstallInternal(ui::ProgressBox* pbox, std::shared_ptr<source::Base> source, const container::Collections& collections, const ConfigOverride& override) {
+Result InstallInternal(ui::ProgressBox* pbox, source::Base* source, const container::Collections& collections, const ConfigOverride& override) {
     auto yati = std::make_unique<Yati>(pbox, source);
     R_TRY(yati->Setup(override));
 
@@ -1343,7 +1343,7 @@ Result InstallInternal(ui::ProgressBox* pbox, std::shared_ptr<source::Base> sour
     R_SUCCEED();
 }
 
-Result InstallInternalStream(ui::ProgressBox* pbox, std::shared_ptr<source::Base> source, container::Collections collections, const ConfigOverride& override) {
+Result InstallInternalStream(ui::ProgressBox* pbox, source::Base* source, container::Collections collections, const ConfigOverride& override) {
     auto yati = std::make_unique<Yati>(pbox, source);
     R_TRY(yati->Setup(override));
 
@@ -1442,30 +1442,33 @@ Result InstallInternalStream(ui::ProgressBox* pbox, std::shared_ptr<source::Base
 } // namespace
 
 Result InstallFromFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& path, const ConfigOverride& override) {
-    return InstallFromSource(pbox, std::make_shared<source::File>(fs, path), path, override);
-    // return InstallFromSource(pbox, std::make_shared<source::StreamFile>(fs, path), path, override);
+    auto source = std::make_unique<source::File>(fs, path);
+    // auto source = std::make_unique<source::StreamFile>(fs, path); // enable for testing.
+    return InstallFromSource(pbox, source.get(), path, override);
 }
 
-Result InstallFromSource(ui::ProgressBox* pbox, std::shared_ptr<source::Base> source, const fs::FsPath& path, const ConfigOverride& override) {
+Result InstallFromSource(ui::ProgressBox* pbox, source::Base* source, const fs::FsPath& path, const ConfigOverride& override) {
     const auto ext = std::strrchr(path.s, '.');
     R_UNLESS(ext, Result_YatiContainerNotFound);
 
+    std::unique_ptr<container::Base> container;
     if (!strcasecmp(ext, ".nsp") || !strcasecmp(ext, ".nsz")) {
-        return InstallFromContainer(pbox, std::make_unique<container::Nsp>(source), override);
+        container = std::make_unique<container::Nsp>(source);
     } else if (!strcasecmp(ext, ".xci") || !strcasecmp(ext, ".xcz")) {
-        return InstallFromContainer(pbox, std::make_unique<container::Xci>(source), override);
+        container = std::make_unique<container::Xci>(source);
     }
 
-    R_THROW(Result_YatiContainerNotFound);
+    R_UNLESS(container, Result_YatiContainerNotFound);
+    return InstallFromContainer(pbox, container.get(), override);
 }
 
-Result InstallFromContainer(ui::ProgressBox* pbox, std::shared_ptr<container::Base> container, const ConfigOverride& override) {
+Result InstallFromContainer(ui::ProgressBox* pbox, container::Base* container, const ConfigOverride& override) {
     container::Collections collections;
     R_TRY(container->GetCollections(collections));
     return InstallFromCollections(pbox, container->GetSource(), collections);
 }
 
-Result InstallFromCollections(ui::ProgressBox* pbox, std::shared_ptr<source::Base> source, const container::Collections& collections, const ConfigOverride& override) {
+Result InstallFromCollections(ui::ProgressBox* pbox, source::Base* source, const container::Collections& collections, const ConfigOverride& override) {
     if (source->IsStream()) {
         return InstallInternalStream(pbox, source, collections, override);
     } else {

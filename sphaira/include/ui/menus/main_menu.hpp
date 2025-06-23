@@ -17,7 +17,7 @@ enum class UpdateState {
     Error,
 };
 
-using MiscMenuFunction = std::function<std::shared_ptr<ui::menu::MenuBase>(u32 flags)>;
+using MiscMenuFunction = std::function<std::unique_ptr<MenuBase>(u32 flags)>;
 
 enum MiscMenuFlag : u8 {
     // can be set as the rightside menu.
@@ -58,14 +58,14 @@ struct MainMenu final : Widget {
     }
 
 private:
-    void OnLRPress(std::shared_ptr<MenuBase> menu, Button b);
+    void OnLRPress(MenuBase* menu, Button b);
     void AddOnLRPress();
 
 private:
-    std::shared_ptr<MenuBase> m_centre_menu{};
-    std::shared_ptr<MenuBase> m_left_menu{};
-    std::shared_ptr<MenuBase> m_right_menu{};
-    std::shared_ptr<MenuBase> m_current_menu{};
+    std::unique_ptr<MenuBase> m_centre_menu{};
+    std::unique_ptr<MenuBase> m_left_menu{};
+    std::unique_ptr<MenuBase> m_right_menu{};
+    MenuBase* m_current_menu{};
 
     std::string m_update_url{};
     std::string m_update_version{};

@@ -60,9 +60,9 @@ void Clear();
 // adds new entry to queue.
 void PushAsync(u64 app_id);
 // gets entry without removing it from the queue.
-auto GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData>;
+auto GetAsync(u64 app_id) -> ThreadResultData*;
 // single threaded title info fetch.
-auto Get(u64 app_id, bool* cached = nullptr) -> std::shared_ptr<ThreadResultData>;
+auto Get(u64 app_id, bool* cached = nullptr) -> ThreadResultData*;
 
 auto GetNcmCs(u8 storage_id) -> NcmContentStorage&;
 auto GetNcmDb(u8 storage_id) -> NcmContentMetaDatabase&;

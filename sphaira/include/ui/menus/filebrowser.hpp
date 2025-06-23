@@ -300,7 +300,7 @@ private:
 
 // contains all selected files for a command, such as copy, delete, cut etc.
 struct SelectedStash {
-    void Add(std::shared_ptr<FsView> view, SelectedType type, const std::vector<FileEntry>& files, const fs::FsPath& path) {
+    void Add(FsView* view, SelectedType type, const std::vector<FileEntry>& files, const fs::FsPath& path) {
         if (files.empty()) {
             Reset();
         } else {
@@ -335,7 +335,7 @@ struct SelectedStash {
     }
 
 // private:
-    std::shared_ptr<FsView> m_view{};
+    FsView* m_view{};
     std::vector<FileEntry> m_files{};
     fs::FsPath m_path{};
     SelectedType m_type{SelectedType::None};
@@ -389,9 +389,9 @@ private:
 private:
     static constexpr inline const char* INI_SECTION = "filebrowser";
 
-    std::shared_ptr<FsView> view{};
-    std::shared_ptr<FsView> view_left{};
-    std::shared_ptr<FsView> view_right{};
+    FsView* view{};
+    std::unique_ptr<FsView> view_left{};
+    std::unique_ptr<FsView> view_right{};
 
     std::vector<FileAssocEntry> m_assoc_entries{};
     SelectedStash m_selected{};

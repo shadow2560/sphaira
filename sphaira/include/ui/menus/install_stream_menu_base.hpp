@@ -55,7 +55,7 @@ protected:
     void OnInstallClose();
 
 private:
-    std::shared_ptr<Stream> m_source{};
+    std::unique_ptr<Stream> m_source{};
     Thread m_thread{};
     Mutex m_mutex{};
     State m_state{State::None};

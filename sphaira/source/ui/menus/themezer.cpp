@@ -306,7 +306,7 @@ Menu::Menu(u32 flags) : MenuBase{"Themezer"_i18n, flags} {
 
     this->SetActions(
         std::make_pair(Button::A, Action{"Download"_i18n, [this](){
-            App::Push(std::make_shared<OptionBox>(
+            App::Push(std::make_unique<OptionBox>(
                 "Download theme?"_i18n,
                 "Back"_i18n, "Download"_i18n, 1, [this](auto op_index){
                     if (op_index && *op_index) {
@@ -315,7 +315,7 @@ Menu::Menu(u32 flags) : MenuBase{"Themezer"_i18n, flags} {
                             const auto& entry = page.m_packList[m_index];
                             const auto url = apiBuildUrlDownloadPack(entry);
 
-                            App::Push(std::make_shared<ProgressBox>(entry.themes[0].preview.lazy_image.image, "Downloading "_i18n, entry.details.name, [this, &entry](auto pbox) -> Result {
+                            App::Push(std::make_unique<ProgressBox>(entry.themes[0].preview.lazy_image.image, "Downloading "_i18n, entry.details.name, [this, &entry](auto pbox) -> Result {
                                 return InstallTheme(pbox, entry);
                             }, [this, &entry](Result rc){
                                 App::PushErrorBox(rc, "Failed to download theme"_i18n);
@@ -330,8 +330,8 @@ Menu::Menu(u32 flags) : MenuBase{"Themezer"_i18n, flags} {
             ));
         }}),
         std::make_pair(Button::X, Action{"Options"_i18n, [this](){
-            auto options = std::make_shared<Sidebar>("Themezer Options"_i18n, Sidebar::Side::RIGHT);
-            ON_SCOPE_EXIT(App::Push(options));
+            auto options = std::make_unique<Sidebar>("Themezer Options"_i18n, Sidebar::Side::RIGHT);
+            ON_SCOPE_EXIT(App::Push(std::move(options)));
 
             SidebarEntryArray::Items sort_items;
             sort_items.push_back("Downloads"_i18n);
@@ -343,26 +343,26 @@ Menu::Menu(u32 flags) : MenuBase{"Themezer"_i18n, flags} {
             order_items.push_back("Descending (down)"_i18n);
             order_items.push_back("Ascending (Up)"_i18n);
 
-            options->Add(std::make_shared<SidebarEntryBool>("Nsfw"_i18n, m_nsfw.Get(), [this](bool& v_out){
+            options->Add(std::make_unique<SidebarEntryBool>("Nsfw"_i18n, m_nsfw.Get(), [this](bool& v_out){
                 m_nsfw.Set(v_out);
                 InvalidateAllPages();
             }));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
+            options->Add(std::make_unique<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
                 if (m_sort.Get() != index_out) {
                     m_sort.Set(index_out);
                     InvalidateAllPages();
                 }
             }, m_sort.Get()));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
+            options->Add(std::make_unique<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
                 if (m_order.Get() != index_out) {
                     m_order.Set(index_out);
                     InvalidateAllPages();
                 }
             }, m_order.Get()));
 
-            options->Add(std::make_shared<SidebarEntryCallback>("Page"_i18n, [this](){
+            options->Add(std::make_unique<SidebarEntryCallback>("Page"_i18n, [this](){
                 s64 out;
                 if (R_SUCCEEDED(swkbd::ShowNumPad(out, "Enter Page Number"_i18n.c_str(), nullptr, -1, 3))) {
                     if (out < m_page_index_max) {
@@ -375,7 +375,7 @@ Menu::Menu(u32 flags) : MenuBase{"Themezer"_i18n, flags} {
                 }
             }));
 
-            options->Add(std::make_shared<SidebarEntryCallback>("Search"_i18n, [this](){
+            options->Add(std::make_unique<SidebarEntryCallback>("Search"_i18n, [this](){
                 std::string out;
                 if (R_SUCCEEDED(swkbd::ShowText(out)) && !out.empty()) {
                     m_search = out;

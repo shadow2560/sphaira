@@ -150,6 +150,7 @@ target_compile_options(sphaira PRIVATE
     -Wimplicit-fallthrough=5
     -Wsuggest-final-types
     -Wuninitialized
+    -fdiagnostics-all-candidates
 )
 
 include(FetchContent)

@@ -44,7 +44,7 @@ constexpr const fs::FsPath SPHAIRA_PATHS[]{
 
 template<typename T>
 auto MiscMenuFuncGenerator(u32 flags) {
-    return std::make_shared<T>(flags);
+    return std::make_unique<T>(flags);
 }
 
 const MiscMenuEntry MISC_MENU_ENTRIES[] = {
@@ -122,7 +122,7 @@ auto InstallUpdate(ProgressBox* pbox, const std::string url, const std::string v
     R_SUCCEED();
 }
 
-auto CreateLeftSideMenu(std::string& name_out) -> std::shared_ptr<MenuBase> {
+auto CreateLeftSideMenu(std::string& name_out) -> std::unique_ptr<MenuBase> {
     const auto name = App::GetApp()->m_left_menu.Get();
 
     for (auto& e : GetMiscMenuEntries()) {
@@ -133,20 +133,20 @@ auto CreateLeftSideMenu(std::string& name_out) -> std::shared_ptr<MenuBase> {
     }
 
     name_out = "FileBrowser";
-    return std::make_shared<ui::menu::filebrowser::Menu>(MenuFlag_Tab);
+    return std::make_unique<ui::menu::filebrowser::Menu>(MenuFlag_Tab);
 }
 
-auto CreateRightSideMenu(std::string_view left_name) -> std::shared_ptr<MenuBase> {
+auto CreateRightSideMenu(std::string_view left_name) -> std::unique_ptr<MenuBase> {
     const auto name = App::GetApp()->m_right_menu.Get();
 
     // handle if the user tries to mount the same menu twice.
     if (name == left_name) {
         // check if we can mount the default.
         if (left_name != "AppStore") {
-            return std::make_shared<ui::menu::appstore::Menu>(MenuFlag_Tab);
+            return std::make_unique<ui::menu::appstore::Menu>(MenuFlag_Tab);
         } else {
             // otherwise, fallback to left side default.
-            return std::make_shared<ui::menu::filebrowser::Menu>(MenuFlag_Tab);
+            return std::make_unique<ui::menu::filebrowser::Menu>(MenuFlag_Tab);
         }
     }
 
@@ -156,7 +156,7 @@ auto CreateRightSideMenu(std::string_view left_name) -> std::shared_ptr<MenuBase
         }
     }
 
-    return std::make_shared<ui::menu::appstore::Menu>(MenuFlag_Tab);
+    return std::make_unique<ui::menu::appstore::Menu>(MenuFlag_Tab);
 }
 
 } // namespace
@@ -235,8 +235,8 @@ MainMenu::MainMenu() {
         std::make_pair(Button::START, Action{App::Exit}),
         std::make_pair(Button::SELECT, Action{App::DisplayMiscOptions}),
         std::make_pair(Button::Y, Action{"Menu"_i18n, [this](){
-            auto options = std::make_shared<Sidebar>("Menu Options"_i18n, "v" APP_VERSION_HASH, Sidebar::Side::LEFT);
-            ON_SCOPE_EXIT(App::Push(options));
+            auto options = std::make_unique<Sidebar>("Menu Options"_i18n, "v" APP_VERSION_HASH, Sidebar::Side::LEFT);
+            ON_SCOPE_EXIT(App::Push(std::move(options)));
 
             SidebarEntryArray::Items language_items;
             language_items.push_back("Auto"_i18n);
@@ -255,17 +255,17 @@ MainMenu::MainMenu() {
             language_items.push_back("Vietnamese"_i18n);
             language_items.push_back("Ukrainian"_i18n);
 
-            options->Add(std::make_shared<SidebarEntryCallback>("Theme"_i18n, [](){
+            options->Add(std::make_unique<SidebarEntryCallback>("Theme"_i18n, [](){
                 App::DisplayThemeOptions();
             }));
 
-            options->Add(std::make_shared<SidebarEntryCallback>("Network"_i18n, [this](){
-                auto options = std::make_shared<Sidebar>("Network Options"_i18n, Sidebar::Side::LEFT);
-                ON_SCOPE_EXIT(App::Push(options));
+            options->Add(std::make_unique<SidebarEntryCallback>("Network"_i18n, [this](){
+                auto options = std::make_unique<Sidebar>("Network Options"_i18n, Sidebar::Side::LEFT);
+                ON_SCOPE_EXIT(App::Push(std::move(options)));
 
                 if (m_update_state == UpdateState::Update) {
-                    options->Add(std::make_shared<SidebarEntryCallback>("Download update: "_i18n + m_update_version, [this](){
-                        App::Push(std::make_shared<ProgressBox>(0, "Downloading "_i18n, "Sphaira v" + m_update_version, [this](auto pbox) -> Result {
+                    options->Add(std::make_unique<SidebarEntryCallback>("Download update: "_i18n + m_update_version, [this](){
+                        App::Push(std::make_unique<ProgressBox>(0, "Downloading "_i18n, "Sphaira v" + m_update_version, [this](auto pbox) -> Result {
                             return InstallUpdate(pbox, m_update_url, m_update_version);
                         }, [this](Result rc){
                             App::PushErrorBox(rc, "Failed to download update"_i18n);
@@ -273,7 +273,7 @@ MainMenu::MainMenu() {
                             if (R_SUCCEEDED(rc)) {
                                 m_update_state = UpdateState::None;
                                 App::Notify("Updated to "_i18n + m_update_version);
-                                App::Push(std::make_shared<OptionBox>(
+                                App::Push(std::make_unique<OptionBox>(
                                     "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
                                         App::ExitRestart();
                                     }
@@ -283,44 +283,43 @@ MainMenu::MainMenu() {
                     }));
                 }
 
-                options->Add(std::make_shared<SidebarEntryBool>("Ftp"_i18n, App::GetFtpEnable(), [](bool& enable){
+                options->Add(std::make_unique<SidebarEntryBool>("Ftp"_i18n, App::GetFtpEnable(), [](bool& enable){
                     App::SetFtpEnable(enable);
                 }));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Mtp"_i18n, App::GetMtpEnable(), [](bool& enable){
+                options->Add(std::make_unique<SidebarEntryBool>("Mtp"_i18n, App::GetMtpEnable(), [](bool& enable){
                     App::SetMtpEnable(enable);
                 }));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Nxlink"_i18n, App::GetNxlinkEnable(), [](bool& enable){
+                options->Add(std::make_unique<SidebarEntryBool>("Nxlink"_i18n, App::GetNxlinkEnable(), [](bool& enable){
                     App::SetNxlinkEnable(enable);
                 }));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Hdd"_i18n, App::GetHddEnable(), [](bool& enable){
+                options->Add(std::make_unique<SidebarEntryBool>("Hdd"_i18n, App::GetHddEnable(), [](bool& enable){
                     App::SetHddEnable(enable);
                 }));
 
-                options->Add(std::make_shared<SidebarEntryBool>("Hdd write protect"_i18n, App::GetWriteProtect(), [](bool& enable){
+                options->Add(std::make_unique<SidebarEntryBool>("Hdd write protect"_i18n, App::GetWriteProtect(), [](bool& enable){
                     App::SetWriteProtect(enable);
                 }));
             }));
 
-            options->Add(std::make_shared<SidebarEntryArray>("Language"_i18n, language_items, [](s64& index_out){
+            options->Add(std::make_unique<SidebarEntryArray>("Language"_i18n, language_items, [](s64& index_out){
                 App::SetLanguage(index_out);
             }, (s64)App::GetLanguage()));
 
-            options->Add(std::make_shared<SidebarEntryCallback>("Misc"_i18n, [](){
+            options->Add(std::make_unique<SidebarEntryCallback>("Misc"_i18n, [](){
                 App::DisplayMiscOptions();
             }));
 
-            options->Add(std::make_shared<SidebarEntryCallback>("Advanced"_i18n, [](){
+            options->Add(std::make_unique<SidebarEntryCallback>("Advanced"_i18n, [](){
                 App::DisplayAdvancedOptions();
             }));
         }})
     );
 
-    m_centre_menu = std::make_shared<homebrew::Menu>();
-    m_current_menu = m_centre_menu;
-
+    m_centre_menu = std::make_unique<homebrew::Menu>();
+    m_current_menu = m_centre_menu.get();
 
     std::string left_side_name;
     m_left_menu = CreateLeftSideMenu(left_side_name);
@@ -355,13 +354,13 @@ void MainMenu::OnFocusLost() {
     m_current_menu->OnFocusLost();
 }
 
-void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
+void MainMenu::OnLRPress(MenuBase* menu, Button b) {
     m_current_menu->OnFocusLost();
-    if (m_current_menu == m_centre_menu) {
+    if (m_current_menu == m_centre_menu.get()) {
         m_current_menu = menu;
         RemoveAction(b);
     } else {
-        m_current_menu = m_centre_menu;
+        m_current_menu = m_centre_menu.get();
     }
 
     AddOnLRPress();
@@ -373,17 +372,17 @@ void MainMenu::OnLRPress(std::shared_ptr<MenuBase> menu, Button b) {
 }
 
 void MainMenu::AddOnLRPress() {
-    if (m_current_menu != m_left_menu) {
-        const auto label = m_current_menu == m_centre_menu ? m_left_menu->GetShortTitle() : m_centre_menu->GetShortTitle();
+    if (m_current_menu != m_left_menu.get()) {
+        const auto label = m_current_menu == m_centre_menu.get() ? m_left_menu->GetShortTitle() : m_centre_menu->GetShortTitle();
         SetAction(Button::L, Action{i18n::get(label), [this]{
-            OnLRPress(m_left_menu, Button::L);
+            OnLRPress(m_left_menu.get(), Button::L);
         }});
     }
 
-    if (m_current_menu != m_right_menu) {
-        const auto label = m_current_menu == m_centre_menu ? m_right_menu->GetShortTitle() : m_centre_menu->GetShortTitle();
+    if (m_current_menu != m_right_menu.get()) {
+        const auto label = m_current_menu == m_centre_menu.get() ? m_right_menu->GetShortTitle() : m_centre_menu->GetShortTitle();
         SetAction(Button::R, Action{i18n::get(label), [this]{
-            OnLRPress(m_right_menu, Button::R);
+            OnLRPress(m_right_menu.get(), Button::R);
         }});
     }
 }

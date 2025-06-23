@@ -314,7 +314,7 @@ Result DumpToNetwork(ui::ProgressBox* pbox, const location::Entry& loc, BaseSour
 
 } // namespace
 
-void DumpGetLocation(const std::string& title, u32 location_flags, OnLocation on_loc) {
+void DumpGetLocation(const std::string& title, u32 location_flags, const OnLocation& on_loc) {
     DumpLocation out;
     ui::PopupList::Items items;
     std::vector<DumpEntry> dump_entries;
@@ -342,7 +342,7 @@ void DumpGetLocation(const std::string& title, u32 location_flags, OnLocation on
         }
     }
 
-    App::Push(std::make_shared<ui::PopupList>(
+    App::Push(std::make_unique<ui::PopupList>(
         title, items, [dump_entries, out, on_loc](auto op_index) mutable {
             out.entry = dump_entries[*op_index];
             on_loc(out);
@@ -350,8 +350,8 @@ void DumpGetLocation(const std::string& title, u32 location_flags, OnLocation on
     ));
 }
 
-void Dump(std::shared_ptr<BaseSource> source, const DumpLocation& location, const std::vector<fs::FsPath>& paths, OnExit on_exit) {
-    App::Push(std::make_shared<ui::ProgressBox>(0, "Dumping"_i18n, "", [source, paths, location](auto pbox) -> Result {
+void Dump(const std::shared_ptr<BaseSource>& source, const DumpLocation& location, const std::vector<fs::FsPath>& paths, const OnExit& on_exit) {
+    App::Push(std::make_unique<ui::ProgressBox>(0, "Dumping"_i18n, "", [source, paths, location](auto pbox) -> Result {
         if (location.entry.type == DumpLocationType_Network) {
             R_TRY(DumpToNetwork(pbox, location.network[location.entry.index], source.get(), paths));
         } else if (location.entry.type == DumpLocationType_Stdio) {
@@ -377,8 +377,8 @@ void Dump(std::shared_ptr<BaseSource> source, const DumpLocation& location, cons
     }));
 }
 
-void Dump(std::shared_ptr<BaseSource> source, const std::vector<fs::FsPath>& paths, OnExit on_exit, u32 location_flags) {
-    DumpGetLocation("Select dump location"_i18n, location_flags, [source, paths, on_exit](const DumpLocation& loc){
+void Dump(const std::shared_ptr<BaseSource>& source, const std::vector<fs::FsPath>& paths, const OnExit& on_exit, u32 location_flags) {
+    DumpGetLocation("Select dump location"_i18n, location_flags, [source, paths, on_exit](const DumpLocation& loc) {
         Dump(source, loc, paths, on_exit);
     });
 }

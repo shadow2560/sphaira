@@ -28,8 +28,8 @@ struct ThreadData {
     void Clear();
 
     void PushAsync(u64 id);
-    auto GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData>;
-    auto Get(u64 app_id, bool* cached = nullptr) -> std::shared_ptr<ThreadResultData>;
+    auto GetAsync(u64 app_id) -> ThreadResultData*;
+    auto Get(u64 app_id, bool* cached = nullptr) -> ThreadResultData*;
 
     auto IsRunning() const -> bool {
         return m_running;
@@ -49,7 +49,7 @@ private:
     // app_ids pushed to the queue, signal uevent when pushed.
     std::vector<u64> m_ids{};
     // control data pushed to the queue.
-    std::vector<std::shared_ptr<ThreadResultData>> m_result{};
+    std::vector<std::unique_ptr<ThreadResultData>> m_result{};
 
     std::atomic_bool m_running{};
 };
@@ -109,14 +109,14 @@ auto& GetNcmEntry(u8 storage_id) {
 }
 
 // also sets the status to error.
-void FakeNacpEntry(std::shared_ptr<ThreadResultData>& e) {
+void FakeNacpEntry(ThreadResultData* e) {
     e->status = NacpLoadStatus::Error;
     // fake the nacp entry
     std::strcpy(e->lang.name, "Corrupted");
     std::strcpy(e->lang.author, "Corrupted");
 }
 
-Result LoadControlManual(u64 id, NacpStruct& nacp, std::shared_ptr<ThreadResultData>& data) {
+Result LoadControlManual(u64 id, NacpStruct& nacp, ThreadResultData* data) {
     TimeStamp ts;
 
     MetaEntries entries;
@@ -208,19 +208,19 @@ void ThreadData::PushAsync(u64 id) {
     }
 }
 
-auto ThreadData::GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData> {
+auto ThreadData::GetAsync(u64 app_id) -> ThreadResultData* {
     SCOPED_MUTEX(&m_mutex_result);
 
     for (s64 i = 0; i < std::size(m_result); i++) {
         if (app_id == m_result[i]->id) {
-            return m_result[i];
+            return m_result[i].get();
         }
     }
 
     return {};
 }
 
-auto ThreadData::Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultData> {
+auto ThreadData::Get(u64 app_id, bool* cached) -> ThreadResultData* {
     // try and fetch from results first, before manually loading.
     if (auto data = GetAsync(app_id)) {
         if (cached) {
@@ -230,7 +230,7 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultDa
     }
 
     TimeStamp ts;
-    auto result = std::make_shared<ThreadResultData>(app_id);
+    auto result = std::make_unique<ThreadResultData>(app_id);
     result->status = NacpLoadStatus::Error;
 
     if (auto data = nxtcGetApplicationMetadataEntryById(app_id)) {
@@ -264,7 +264,7 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultDa
         }
 
         if (manual_load) {
-            manual_load = R_SUCCEEDED(LoadControlManual(app_id, control->nacp, result));
+            manual_load = R_SUCCEEDED(LoadControlManual(app_id, control->nacp, result.get()));
         }
 
         Result rc{};
@@ -276,14 +276,14 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultDa
         }
 
         if (R_FAILED(rc)) {
-            FakeNacpEntry(result);
+            FakeNacpEntry(result.get());
         } else {
             bool valid = true;
             NacpLanguageEntry* lang;
             if (R_SUCCEEDED(nsGetApplicationDesiredLanguage(&control->nacp, &lang))) {
                 result->lang = *lang;
             } else {
-                FakeNacpEntry(result);
+                FakeNacpEntry(result.get());
                 valid = false;
             }
 
@@ -350,8 +350,7 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultDa
     }
 
     SCOPED_MUTEX(&m_mutex_result);
-    m_result.emplace_back(result);
-    return result;
+    return m_result.emplace_back(std::move(result)).get();
 }
 
 void ThreadFunc(void* user) {
@@ -429,7 +428,7 @@ void PushAsync(u64 app_id) {
     }
 }
 
-auto GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData> {
+auto GetAsync(u64 app_id) -> ThreadResultData* {
     SCOPED_MUTEX(&g_mutex);
     if (g_thread_data) {
         return g_thread_data->GetAsync(app_id);
@@ -437,7 +436,7 @@ auto GetAsync(u64 app_id) -> std::shared_ptr<ThreadResultData> {
     return {};
 }
 
-auto Get(u64 app_id, bool* cached) -> std::shared_ptr<ThreadResultData> {
+auto Get(u64 app_id, bool* cached) -> ThreadResultData* {
     SCOPED_MUTEX(&g_mutex);
     if (g_thread_data) {
         return g_thread_data->Get(app_id, cached);

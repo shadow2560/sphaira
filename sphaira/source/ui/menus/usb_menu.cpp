@@ -68,7 +68,7 @@ Menu::Menu(u32 flags) : MenuBase{"USB"_i18n, flags} {
     }
 
     // 3 second timeout for transfers.
-    m_usb_source = std::make_shared<yati::source::Usb>(TRANSFER_TIMEOUT);
+    m_usb_source = std::make_unique<yati::source::Usb>(TRANSFER_TIMEOUT);
     if (R_FAILED(m_usb_source->GetOpenResult())) {
         log_write("usb init open\n");
         m_state = State::Failed;
@@ -109,13 +109,13 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
         log_write("set to progress\n");
         m_state = State::Progress;
         log_write("got connection\n");
-        App::Push(std::make_shared<ui::ProgressBox>(0, "Installing "_i18n, "", [this](auto pbox) -> Result {
+        App::Push(std::make_unique<ui::ProgressBox>(0, "Installing "_i18n, "", [this](auto pbox) -> Result {
             ON_SCOPE_EXIT(m_usb_source->Finished(FINISHED_TIMEOUT));
 
             log_write("inside progress box\n");
             for (const auto& file_name : m_names) {
                 m_usb_source->SetFileNameForTranfser(file_name);
-                const auto rc = yati::InstallFromSource(pbox, m_usb_source, file_name);
+                const auto rc = yati::InstallFromSource(pbox, m_usb_source.get(), file_name);
                 if (R_FAILED(rc)) {
                     m_usb_source->SignalCancel();
                     log_write("exiting usb install\n");
