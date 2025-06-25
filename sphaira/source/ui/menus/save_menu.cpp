@@ -232,9 +232,11 @@ bool LoadControlImage(Entry& e, title::ThreadResultData* result) {
 }
 
 void LoadResultIntoEntry(Entry& e, title::ThreadResultData* result) {
-    e.status = result->status;
-    e.lang = result->lang;
-    e.status = result->status;
+    if (result) {
+        e.status = result->status;
+        e.lang = result->lang;
+        e.status = result->status;
+    }
 }
 
 void LoadControlEntry(Entry& e, bool force_image_load = false) {
