@@ -260,7 +260,6 @@ Result read_entire_file(FsFileSystem* _fs, const FsPath& path, std::vector<u8>& 
 
     File f;
     R_TRY(fs.OpenFile(path, FsOpenMode_Read, &f));
-    ON_SCOPE_EXIT(f.Close());
 
     s64 size;
     R_TRY(f.GetSize(&size));
@@ -278,7 +277,6 @@ Result write_entire_file(FsFileSystem* _fs, const FsPath& path, const std::vecto
 
     FsNative fs{_fs, false, ignore_read_only};
     R_TRY(fs.GetFsOpenResult());
-    ON_SCOPE_EXIT(fs.Commit());
 
     if (auto rc = fs.CreateFile(path, in.size(), 0); R_FAILED(rc) && rc != FsError_PathAlreadyExists) {
         return rc;
@@ -286,8 +284,6 @@ Result write_entire_file(FsFileSystem* _fs, const FsPath& path, const std::vecto
 
     File f;
     R_TRY(fs.OpenFile(path, FsOpenMode_Write, &f));
-    ON_SCOPE_EXIT(f.Close());
-
     R_TRY(f.SetSize(in.size()));
     R_TRY(f.Write(0, in.data(), in.size(), FsWriteOption_None));
 
@@ -824,8 +820,6 @@ Result FileGetSizeAndTimestamp(fs::Fs* m_fs, const FsPath& path, FsTimeStampRaw*
 
         File f;
         R_TRY(m_fs->OpenFile(path, FsOpenMode_Read, &f));
-        ON_SCOPE_EXIT(f.Close());
-
         R_TRY(f.GetSize(size));
     } else {
         struct stat st;

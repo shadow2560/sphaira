@@ -1225,7 +1225,28 @@ void Menu::ScanHomebrew() {
                 // if we get here, this means that we have the file, but not the .info file
                 // report the file as locally installed to match hb-appstore.
                 if (e.status == EntryStatus::Get) {
-                    e.status = EntryStatus::Local;
+                    // filter out some apps.
+                    bool filtered{};
+
+                    // ignore hbmenu if it was replaced with sphaira.
+                    if (e.name == "hbmenu") {
+                        NacpStruct nacp;
+                        if (R_SUCCEEDED(nro_get_nacp(e.binary, nacp))) {
+                            filtered = std::strcmp(nacp.lang[0].name, "nx-hbmenu");
+                        }
+                    }
+                    // ignore single retroarch core.
+                    else if (e.name == "snes9x_2010") {
+                        filtered = true;
+                    }
+                    // todo: filter
+                    // - sys-clk
+
+                    if (!filtered) {
+                        e.status = EntryStatus::Local;
+                    } else {
+                        log_write("filtered: %s path: %s\n", e.name.c_str(), e.binary.c_str());
+                    }
                 }
             }
         }
