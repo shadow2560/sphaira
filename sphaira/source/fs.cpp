@@ -112,6 +112,10 @@ FsPath AppendPath(const FsPath& root_path, const FsPath& _file_path) {
 Result CreateFile(FsFileSystem* fs, const FsPath& path, u64 size, u32 option, bool ignore_read_only) {
     R_UNLESS(ignore_read_only || !is_read_only_root(path), Result_FsReadOnly);
 
+    if (size >= 1024ULL*1024ULL*1024ULL*4ULL) {
+        option |= FsCreateOption_BigFile;
+    }
+
     R_TRY(fsFsCreateFile(fs, path, size, option));
     fsFsCommit(fs);
     R_SUCCEED();

@@ -99,7 +99,6 @@ private:
 };
 
 Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, BaseSource* source, std::span<const fs::FsPath> paths) {
-    constexpr s64 BIG_FILE_SIZE = 1024ULL*1024ULL*1024ULL*4ULL;
     const auto is_file_based_emummc = App::IsFileBaseEmummc();
 
     for (const auto& path : paths) {
@@ -113,8 +112,7 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
         fs->CreateDirectoryRecursivelyWithPath(temp_path);
         fs->DeleteFile(temp_path);
 
-        const auto flags = file_size >= BIG_FILE_SIZE ? FsCreateOption_BigFile : 0;
-        R_TRY(fs->CreateFile(temp_path, file_size, flags));
+        R_TRY(fs->CreateFile(temp_path, file_size));
         ON_SCOPE_EXIT(fs->DeleteFile(temp_path));
 
         {
