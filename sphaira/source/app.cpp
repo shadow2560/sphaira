@@ -1758,6 +1758,25 @@ void App::DisplayAdvancedOptions(bool left_side) {
     options->Add(std::make_unique<ui::SidebarEntryCallback>("Dump options"_i18n, [left_side](){
         App::DisplayDumpOptions(left_side);
     }));
+
+    static const char* erpt_path = "/atmosphere/erpt_reports";
+    options->Add(std::make_unique<ui::SidebarEntryBool>("Disable erpt_reports"_i18n, fs::FsNativeSd().FileExists(erpt_path), [](bool& enable){
+        fs::FsNativeSd fs;
+        if (enable) {
+            Result rc;
+            // it's possible for erpt to generate a report in between deleting the folder and creating the file.
+            for (int i = 0; i < 10; i++) {
+                fs.DeleteDirectoryRecursively(erpt_path);
+                if (R_SUCCEEDED(rc = fs.CreateFile(erpt_path))) {
+                    break;
+                }
+            }
+            enable = R_SUCCEEDED(rc);
+        } else {
+            fs.DeleteFile(erpt_path);
+            fs.CreateDirectory(erpt_path);
+        }
+    }));
 }
 
 void App::DisplayInstallOptions(bool left_side) {
