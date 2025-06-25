@@ -342,16 +342,16 @@ void DumpGetLocation(const std::string& title, u32 location_flags, const OnLocat
         }
     }
 
-    App::Push(std::make_unique<ui::PopupList>(
+    App::Push<ui::PopupList>(
         title, items, [dump_entries, out, on_loc](auto op_index) mutable {
             out.entry = dump_entries[*op_index];
             on_loc(out);
         }
-    ));
+    );
 }
 
 void Dump(const std::shared_ptr<BaseSource>& source, const DumpLocation& location, const std::vector<fs::FsPath>& paths, const OnExit& on_exit) {
-    App::Push(std::make_unique<ui::ProgressBox>(0, "Dumping"_i18n, "", [source, paths, location](auto pbox) -> Result {
+    App::Push<ui::ProgressBox>(0, "Dumping"_i18n, "", [source, paths, location](auto pbox) -> Result {
         if (location.entry.type == DumpLocationType_Network) {
             R_TRY(DumpToNetwork(pbox, location.network[location.entry.index], source.get(), paths));
         } else if (location.entry.type == DumpLocationType_Stdio) {
@@ -374,7 +374,7 @@ void Dump(const std::shared_ptr<BaseSource>& source, const DumpLocation& locatio
         }
 
         on_exit(rc);
-    }));
+    });
 }
 
 void Dump(const std::shared_ptr<BaseSource>& source, const std::vector<fs::FsPath>& paths, const OnExit& on_exit, u32 location_flags) {

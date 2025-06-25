@@ -109,7 +109,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
         log_write("set to progress\n");
         m_state = State::Progress;
         log_write("got connection\n");
-        App::Push(std::make_unique<ui::ProgressBox>(0, "Installing "_i18n, "", [this](auto pbox) -> Result {
+        App::Push<ui::ProgressBox>(0, "Installing "_i18n, "", [this](auto pbox) -> Result {
             ON_SCOPE_EXIT(m_usb_source->Finished(FINISHED_TIMEOUT));
 
             log_write("inside progress box\n");
@@ -136,7 +136,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
             } else {
                 m_state = State::Failed;
             }
-        }));
+        });
     }
 }
 

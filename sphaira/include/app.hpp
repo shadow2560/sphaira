@@ -18,6 +18,7 @@
 #include <string>
 #include <span>
 #include <optional>
+#include <utility>
 
 namespace sphaira {
 
@@ -58,7 +59,14 @@ public:
     static void Exit();
     static void ExitRestart();
     static auto GetVg() -> NVGcontext*;
+
     static void Push(std::unique_ptr<ui::Widget>&&);
+
+    template<ui::DerivedFromWidget T, typename... Args>
+    static void Push(Args&&... args) {
+        Push(std::make_unique<T>(std::forward<Args>(args)...));
+    }
+
     // pops all widgets above a menu
     static void PopToMenu();
 

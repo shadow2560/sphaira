@@ -3,6 +3,8 @@
 #include "ui/widget.hpp"
 #include "ui/list.hpp"
 #include <memory>
+#include <concepts>
+#include <utility>
 
 namespace sphaira::ui {
 
@@ -14,6 +16,9 @@ public:
 protected:
     std::string m_title;
 };
+
+template<typename T>
+concept DerivedFromSidebarBase = std::is_base_of_v<SidebarEntryBase, T>;
 
 class SidebarEntryBool final : public SidebarEntryBase {
 public:
@@ -110,16 +115,10 @@ public:
 
     void Add(std::unique_ptr<SidebarEntryBase>&& entry);
 
-    template<typename T>
-    void AddMove(T entry) {
-        Add(std::move(entry));
+    template<DerivedFromSidebarBase T, typename... Args>
+    void Add(Args&&... args) {
+        Add(std::make_unique<T>(std::forward<Args>(args)...));
     }
-
-    // template<typename _Tp>
-    // [[nodiscrad,gnu::always_inline]]
-    // constexpr typename std::remove_reference<_Tp>::type&&
-    // move(_Tp&& t) noexcept
-    // { return static_cast<typename std::remove_reference<_Tp>::type&&>(t); }
 
 private:
     void SetIndex(s64 index);

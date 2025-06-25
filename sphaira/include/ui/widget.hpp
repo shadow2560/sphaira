@@ -5,6 +5,7 @@
 #include <memory>
 #include <map>
 #include <unordered_map>
+#include <concepts>
 
 namespace sphaira::ui {
 
@@ -89,5 +90,8 @@ struct Widget : public Object {
     bool m_focus{false};
     bool m_pop{false};
 };
+
+template<typename T>
+concept DerivedFromWidget = std::is_base_of_v<Widget, T>;
 
 } // namespace sphaira::ui

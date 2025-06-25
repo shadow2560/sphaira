@@ -60,7 +60,7 @@ Menu::Menu() : grid::Menu{"Homebrew"_i18n, MenuFlag_Tab} {
             ON_SCOPE_EXIT(App::Push(std::move(options)));
 
             if (m_entries.size()) {
-                options->Add(std::make_unique<SidebarEntryCallback>("Sort By"_i18n, [this](){
+                options->Add<SidebarEntryCallback>("Sort By"_i18n, [this](){
                     auto options = std::make_unique<Sidebar>("Sort Options"_i18n, Sidebar::Side::RIGHT);
                     ON_SCOPE_EXIT(App::Push(std::move(options)));
 
@@ -81,35 +81,35 @@ Menu::Menu() : grid::Menu{"Homebrew"_i18n, MenuFlag_Tab} {
                     layout_items.push_back("Icon"_i18n);
                     layout_items.push_back("Grid"_i18n);
 
-                    options->Add(std::make_unique<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
+                    options->Add<SidebarEntryArray>("Sort"_i18n, sort_items, [this, sort_items](s64& index_out){
                         m_sort.Set(index_out);
                         SortAndFindLastFile();
-                    }, m_sort.Get()));
+                    }, m_sort.Get());
 
-                    options->Add(std::make_unique<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
+                    options->Add<SidebarEntryArray>("Order"_i18n, order_items, [this, order_items](s64& index_out){
                         m_order.Set(index_out);
                         SortAndFindLastFile();
-                    }, m_order.Get()));
+                    }, m_order.Get());
 
-                    options->Add(std::make_unique<SidebarEntryArray>("Layout"_i18n, layout_items, [this](s64& index_out){
+                    options->Add<SidebarEntryArray>("Layout"_i18n, layout_items, [this](s64& index_out){
                         m_layout.Set(index_out);
                         OnLayoutChange();
-                    }, m_layout.Get()));
+                    }, m_layout.Get());
 
-                    options->Add(std::make_unique<SidebarEntryBool>("Hide Sphaira"_i18n, m_hide_sphaira.Get(), [this](bool& enable){
+                    options->Add<SidebarEntryBool>("Hide Sphaira"_i18n, m_hide_sphaira.Get(), [this](bool& enable){
                         m_hide_sphaira.Set(enable);
-                    }));
-                }));
+                    });
+                });
 
                 #if 0
-                options->Add(std::make_unique<SidebarEntryCallback>("Info"_i18n, [this](){
+                options->Add<SidebarEntryCallback>("Info"_i18n, [this](){
 
-                }));
+                });
                 #endif
 
-                options->Add(std::make_unique<SidebarEntryCallback>("Delete"_i18n, [this](){
+                options->Add<SidebarEntryCallback>("Delete"_i18n, [this](){
                     const auto buf = "Are you sure you want to delete "_i18n + m_entries[m_index].path.toString() + "?";
-                    App::Push(std::make_unique<OptionBox>(
+                    App::Push<OptionBox>(
                         buf,
                         "Back"_i18n, "Delete"_i18n, 1, [this](auto op_index){
                             if (op_index && *op_index) {
@@ -120,24 +120,24 @@ Menu::Menu() : grid::Menu{"Homebrew"_i18n, MenuFlag_Tab} {
                                 }
                             }
                         }, m_entries[m_index].image
-                    ));
-                }, true));
+                    );
+                }, true);
 
                 if (App::GetInstallEnable()) {
-                    options->Add(std::make_unique<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){
+                    options->Add<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){
                         if (App::GetInstallPrompt()) {
-                            App::Push(std::make_unique<OptionBox>(
+                            App::Push<OptionBox>(
                                 "WARNING: Installing forwarders will lead to a ban!"_i18n,
                                 "Back"_i18n, "Install"_i18n, 0, [this](auto op_index){
                                     if (op_index && *op_index) {
                                         InstallHomebrew();
                                     }
                                 }, m_entries[m_index].image
-                            ));
+                            );
                         } else {
                             InstallHomebrew();
                         }
-                    }, true));
+                    }, true);
                 }
             }
         }})

@@ -343,7 +343,7 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
             data_type_items.emplace_back("Cache"_i18n);
             data_type_items.emplace_back("System BCAT"_i18n);
 
-            options->Add(std::make_unique<SidebarEntryCallback>("Sort By"_i18n, [this](){
+            options->Add<SidebarEntryCallback>("Sort By"_i18n, [this](){
                 auto options = std::make_unique<Sidebar>("Sort Options"_i18n, Sidebar::Side::RIGHT);
                 ON_SCOPE_EXIT(App::Push(std::move(options)));
 
@@ -359,36 +359,36 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
                 layout_items.push_back("Icon"_i18n);
                 layout_items.push_back("Grid"_i18n);
 
-                options->Add(std::make_unique<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
+                options->Add<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
                     m_sort.Set(index_out);
                     SortAndFindLastFile(false);
-                }, m_sort.Get()));
+                }, m_sort.Get());
 
-                options->Add(std::make_unique<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
+                options->Add<SidebarEntryArray>("Order"_i18n, order_items, [this](s64& index_out){
                     m_order.Set(index_out);
                     SortAndFindLastFile(false);
-                }, m_order.Get()));
+                }, m_order.Get());
 
-                options->Add(std::make_unique<SidebarEntryArray>("Layout"_i18n, layout_items, [this](s64& index_out){
+                options->Add<SidebarEntryArray>("Layout"_i18n, layout_items, [this](s64& index_out){
                     m_layout.Set(index_out);
                     OnLayoutChange();
-                }, m_layout.Get()));
-            }));
+                }, m_layout.Get());
+            });
 
-            options->Add(std::make_unique<SidebarEntryArray>("Account"_i18n, account_items, [this](s64& index_out){
+            options->Add<SidebarEntryArray>("Account"_i18n, account_items, [this](s64& index_out){
                 m_account_index = index_out;
                 m_dirty = true;
                 App::PopToMenu();
-            }, m_account_index));
+            }, m_account_index);
 
-            options->Add(std::make_unique<SidebarEntryArray>("Data Type"_i18n, data_type_items, [this](s64& index_out){
+            options->Add<SidebarEntryArray>("Data Type"_i18n, data_type_items, [this](s64& index_out){
                 m_data_type = index_out;
                 m_dirty = true;
                 App::PopToMenu();
-            }, m_data_type));
+            }, m_data_type);
 
             if (m_entries.size()) {
-                options->Add(std::make_unique<SidebarEntryCallback>("Backup"_i18n, [this](){
+                options->Add<SidebarEntryCallback>("Backup"_i18n, [this](){
                     std::vector<std::reference_wrapper<Entry>> entries;
                     if (m_selected_count) {
                         for (auto& e : m_entries) {
@@ -401,27 +401,27 @@ Menu::Menu(u32 flags) : grid::Menu{"Saves"_i18n, flags} {
                     }
 
                     BackupSaves(entries);
-                }, true));
+                }, true);
 
                 if (m_entries[m_index].save_data_type == FsSaveDataType_Account || m_entries[m_index].save_data_type == FsSaveDataType_Bcat) {
-                    options->Add(std::make_unique<SidebarEntryCallback>("Restore"_i18n, [this](){
+                    options->Add<SidebarEntryCallback>("Restore"_i18n, [this](){
                         RestoreSave();
-                    }, true));
+                    }, true);
                 }
             }
 
-            options->Add(std::make_unique<SidebarEntryCallback>("Advanced"_i18n, [this](){
+            options->Add<SidebarEntryCallback>("Advanced"_i18n, [this](){
                 auto options = std::make_unique<Sidebar>("Advanced Options"_i18n, Sidebar::Side::RIGHT);
                 ON_SCOPE_EXIT(App::Push(std::move(options)));
 
-                options->Add(std::make_unique<SidebarEntryBool>("Auto backup on restore"_i18n, m_auto_backup_on_restore.Get(), [this](bool& v_out){
+                options->Add<SidebarEntryBool>("Auto backup on restore"_i18n, m_auto_backup_on_restore.Get(), [this](bool& v_out){
                     m_auto_backup_on_restore.Set(v_out);
-                }));
+                });
 
-                options->Add(std::make_unique<SidebarEntryBool>("Compress backup"_i18n, m_compress_save_backup.Get(), [this](bool& v_out){
+                options->Add<SidebarEntryBool>("Compress backup"_i18n, m_compress_save_backup.Get(), [this](bool& v_out){
                     m_compress_save_backup.Set(v_out);
-                }));
-            }));
+                });
+            });
         }})
     );
 
@@ -677,7 +677,7 @@ void Menu::OnLayoutChange() {
 
 void Menu::BackupSaves(std::vector<std::reference_wrapper<Entry>>& entries) {
     dump::DumpGetLocation("Select backup location"_i18n, dump::DumpLocationFlag_SdCard|dump::DumpLocationFlag_Stdio, [this, entries](const dump::DumpLocation& location){
-        App::Push(std::make_unique<ProgressBox>(0, "Backup"_i18n, "", [this, entries, location](auto pbox) -> Result {
+        App::Push<ProgressBox>(0, "Backup"_i18n, "", [this, entries, location](auto pbox) -> Result {
             for (auto& e : entries) {
                 // the entry may not have loaded yet.
                 LoadControlEntry(e);
@@ -690,7 +690,7 @@ void Menu::BackupSaves(std::vector<std::reference_wrapper<Entry>>& entries) {
             if (R_SUCCEEDED(rc)) {
                 App::Notify("Backup successfull!"_i18n);
             }
-        }));
+        });
     });
 }
 
@@ -728,15 +728,15 @@ void Menu::RestoreSave() {
         }
 
         if (paths.empty()) {
-            App::Push(std::make_unique<ui::OptionBox>(
+            App::Push<ui::OptionBox>(
                 "No saves found in "_i18n + fs::AppendPath(fs->Root(), BuildSaveBasePath(m_entries[m_index])).toString(),
                 "OK"_i18n
-            ));
+            );
             return;
         }
 
         const auto title = "Restore save for: "_i18n + m_entries[m_index].GetName();
-        App::Push(std::make_unique<PopupList>(
+        App::Push<PopupList>(
             title, items, [this, paths, items, location](auto op_index){
                 if (!op_index) {
                     return;
@@ -745,11 +745,11 @@ void Menu::RestoreSave() {
                 const auto file_name = items[*op_index];
                 const auto file_path = paths[*op_index];
 
-                App::Push(std::make_unique<OptionBox>(
+                App::Push<OptionBox>(
                     "Are you sure you want to restore "_i18n + file_name + "?",
                     "Back"_i18n, "Restore"_i18n, 0, [this, file_path, location](auto op_index){
                         if (op_index && *op_index) {
-                            App::Push(std::make_unique<ProgressBox>(0, "Restore"_i18n, "", [this, file_path, location](auto pbox) -> Result {
+                            App::Push<ProgressBox>(0, "Restore"_i18n, "", [this, file_path, location](auto pbox) -> Result {
                                 // the entry may not have loaded yet.
                                 LoadControlEntry(m_entries[m_index]);
 
@@ -766,12 +766,12 @@ void Menu::RestoreSave() {
                                 if (R_SUCCEEDED(rc)) {
                                     App::Notify("Restore successfull!"_i18n);
                                 }
-                            }));
+                            });
                         }
                     }, m_entries[m_index].image
-                ));
+                );
             }
-        ));
+        );
     });
 }
 

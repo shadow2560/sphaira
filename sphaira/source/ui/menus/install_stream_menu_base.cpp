@@ -142,7 +142,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
 
     if (m_state == State::Connected) {
         m_state = State::Progress;
-        App::Push(std::make_unique<ui::ProgressBox>(0, "Installing "_i18n, m_source->GetPath(), [this](auto pbox) -> Result {
+        App::Push<ui::ProgressBox>(0, "Installing "_i18n, m_source->GetPath(), [this](auto pbox) -> Result {
             INSTALL_STATE = InstallState::Progress;
             const auto rc = yati::InstallFromSource(pbox, m_source.get(), m_source->GetPath());
             INSTALL_STATE = InstallState::Finished;
@@ -165,7 +165,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
                 m_state = State::Failed;
                 OnDisableInstallMode();
             }
-        }));
+        });
     }
 }
 

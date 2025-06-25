@@ -376,14 +376,14 @@ Menu::Menu(u32 flags) : MenuBase{"GameCard"_i18n, flags} {
 
                 if (m_option_index == 0) {
                     if (!App::GetInstallEnable()) {
-                        App::Push(std::make_unique<ui::OptionBox>(
+                        App::Push<ui::OptionBox>(
                             "Install disabled...\n"
                             "Please enable installing via the install options."_i18n,
                             "OK"_i18n
-                        ));
+                        );
                     } else {
                         log_write("[GC] doing install A\n");
-                        App::Push(std::make_unique<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) -> Result {
+                        App::Push<ui::ProgressBox>(m_icon, "Installing "_i18n, m_entries[m_entry_index].lang_entry.name, [this](auto pbox) -> Result {
                             auto source = std::make_unique<GcSource>(m_entries[m_entry_index], m_fs.get());
                             return yati::InstallFromCollections(pbox, source.get(), source->m_collections, source->m_config);
                         }, [this](Result rc){
@@ -392,17 +392,17 @@ Menu::Menu(u32 flags) : MenuBase{"GameCard"_i18n, flags} {
                             if (R_SUCCEEDED(rc)) {
                                 App::Notify("Gc install success!"_i18n);
                             }
-                        }));
+                        });
                     }
                 } else {
                     auto options = std::make_unique<Sidebar>("Select content to dump"_i18n, Sidebar::Side::RIGHT);
                     ON_SCOPE_EXIT(App::Push(std::move(options)));
 
                     const auto add = [&](const std::string& name, u32 flags){
-                        options->Add(std::make_unique<SidebarEntryCallback>(name, [this, flags](){
+                        options->Add<SidebarEntryCallback>(name, [this, flags](){
                             DumpGames(flags);
                             m_dirty = true;
-                        }, true));
+                        }, true);
                     };
 
                     add("Dump All"_i18n, DumpFileFlag_All);
@@ -422,13 +422,13 @@ Menu::Menu(u32 flags) : MenuBase{"GameCard"_i18n, flags} {
             auto options = std::make_unique<Sidebar>("Game Options"_i18n, Sidebar::Side::RIGHT);
             ON_SCOPE_EXIT(App::Push(std::move(options)));
 
-            options->Add(std::make_unique<SidebarEntryCallback>("Install options"_i18n, [this](){
+            options->Add<SidebarEntryCallback>("Install options"_i18n, [this](){
                 App::DisplayInstallOptions(false);
-            }));
+            });
 
-            options->Add(std::make_unique<SidebarEntryCallback>("Dump options"_i18n, [this](){
+            options->Add<SidebarEntryCallback>("Dump options"_i18n, [this](){
                 App::DisplayDumpOptions(false);
-            }));
+            });
         }})
     );
 
@@ -982,14 +982,14 @@ Result Menu::DumpGames(u32 flags) {
 
     // if trimmed and the user wants to dump the full xci, error.
     if ((flags & DumpFileFlag_XCI) && is_trimmed && App::GetApp()->m_dump_trim_xci.Get()) {
-        App::Push(std::make_unique<ui::OptionBox>(
+        App::Push<ui::OptionBox>(
             "WARNING: GameCard is already trimmed!"_i18n,
             "Back"_i18n, "Continue"_i18n, 0, [&](auto op_index){
                 if (op_index && *op_index) {
                     do_dump(flags);
                 }
             }, m_icon
-        ));
+        );
     } else if ((flags & DumpFileFlag_XCI) && is_trimmed) {
         App::PushErrorBox(trim_rc, "GameCard is trimmed, full dump is not possible!"_i18n);
     } else {

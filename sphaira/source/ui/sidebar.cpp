@@ -114,16 +114,10 @@ SidebarEntryArray::SidebarEntryArray(std::string title, Items items, std::string
     }
 
     m_list_callback = [&index, this]() {
-        App::Push(std::make_unique<PopupList>(
+        App::Push<PopupList>(
             m_title, m_items, index, m_index
-        ));
+        );
     };
-
-    // m_callback = [&index, this](auto& idx) {
-    //     App::Push(std::make_unique<PopupList>(
-    //         m_title, m_items, index, idx
-    //     ));
-    // };
 }
 
 SidebarEntryArray::SidebarEntryArray(std::string title, Items items, Callback cb, std::string index)
@@ -142,14 +136,14 @@ SidebarEntryArray::SidebarEntryArray(std::string title, Items items, Callback cb
 , m_index{index} {
 
     m_list_callback = [this]() {
-        App::Push(std::make_unique<PopupList>(
+        App::Push<PopupList>(
             m_title, m_items, [this](auto op_idx){
                 if (op_idx) {
                     m_index = *op_idx;
                     m_callback(m_index);
                 }
             }, m_index
-        ));
+        );
     };
 
     SetAction(Button::A, Action{"OK"_i18n, [this](){

@@ -255,17 +255,17 @@ MainMenu::MainMenu() {
             language_items.push_back("Vietnamese"_i18n);
             language_items.push_back("Ukrainian"_i18n);
 
-            options->Add(std::make_unique<SidebarEntryCallback>("Theme"_i18n, [](){
+            options->Add<SidebarEntryCallback>("Theme"_i18n, [](){
                 App::DisplayThemeOptions();
-            }));
+            });
 
-            options->Add(std::make_unique<SidebarEntryCallback>("Network"_i18n, [this](){
+            options->Add<SidebarEntryCallback>("Network"_i18n, [this](){
                 auto options = std::make_unique<Sidebar>("Network Options"_i18n, Sidebar::Side::LEFT);
                 ON_SCOPE_EXIT(App::Push(std::move(options)));
 
                 if (m_update_state == UpdateState::Update) {
-                    options->Add(std::make_unique<SidebarEntryCallback>("Download update: "_i18n + m_update_version, [this](){
-                        App::Push(std::make_unique<ProgressBox>(0, "Downloading "_i18n, "Sphaira v" + m_update_version, [this](auto pbox) -> Result {
+                    options->Add<SidebarEntryCallback>("Download update: "_i18n + m_update_version, [this](){
+                        App::Push<ProgressBox>(0, "Downloading "_i18n, "Sphaira v" + m_update_version, [this](auto pbox) -> Result {
                             return InstallUpdate(pbox, m_update_url, m_update_version);
                         }, [this](Result rc){
                             App::PushErrorBox(rc, "Failed to download update"_i18n);
@@ -273,50 +273,50 @@ MainMenu::MainMenu() {
                             if (R_SUCCEEDED(rc)) {
                                 m_update_state = UpdateState::None;
                                 App::Notify("Updated to "_i18n + m_update_version);
-                                App::Push(std::make_unique<OptionBox>(
+                                App::Push<OptionBox>(
                                     "Press OK to restart Sphaira"_i18n, "OK"_i18n, [](auto){
                                         App::ExitRestart();
                                     }
-                                ));
+                                );
                             }
-                        }));
-                    }));
+                        });
+                    });
                 }
 
-                options->Add(std::make_unique<SidebarEntryBool>("Ftp"_i18n, App::GetFtpEnable(), [](bool& enable){
+                options->Add<SidebarEntryBool>("Ftp"_i18n, App::GetFtpEnable(), [](bool& enable){
                     App::SetFtpEnable(enable);
-                }));
+                });
 
-                options->Add(std::make_unique<SidebarEntryBool>("Mtp"_i18n, App::GetMtpEnable(), [](bool& enable){
+                options->Add<SidebarEntryBool>("Mtp"_i18n, App::GetMtpEnable(), [](bool& enable){
                     App::SetMtpEnable(enable);
-                }));
+                });
 
-                options->Add(std::make_unique<SidebarEntryBool>("Nxlink"_i18n, App::GetNxlinkEnable(), [](bool& enable){
+                options->Add<SidebarEntryBool>("Nxlink"_i18n, App::GetNxlinkEnable(), [](bool& enable){
                     App::SetNxlinkEnable(enable);
-                }));
+                });
 
-                options->Add(std::make_unique<SidebarEntryBool>("Hdd"_i18n, App::GetHddEnable(), [](bool& enable){
+                options->Add<SidebarEntryBool>("Hdd"_i18n, App::GetHddEnable(), [](bool& enable){
                     App::SetHddEnable(enable);
-                }));
+                });
 
-                options->Add(std::make_unique<SidebarEntryBool>("Hdd write protect"_i18n, App::GetWriteProtect(), [](bool& enable){
+                options->Add<SidebarEntryBool>("Hdd write protect"_i18n, App::GetWriteProtect(), [](bool& enable){
                     App::SetWriteProtect(enable);
-                }));
-            }));
+                });
+            });
 
-            options->Add(std::make_unique<SidebarEntryArray>("Language"_i18n, language_items, [](s64& index_out){
+            options->Add<SidebarEntryArray>("Language"_i18n, language_items, [](s64& index_out){
                 App::SetLanguage(index_out);
-            }, (s64)App::GetLanguage()));
+            }, (s64)App::GetLanguage());
 
-            options->Add(std::make_unique<SidebarEntryCallback>("Misc"_i18n, [](){
+            options->Add<SidebarEntryCallback>("Misc"_i18n, [](){
                 App::DisplayMiscOptions();
-            }));
+            });
 
-            options->Add(std::make_unique<SidebarEntryCallback>("Advanced"_i18n, [](){
+            options->Add<SidebarEntryCallback>("Advanced"_i18n, [](){
                 App::DisplayAdvancedOptions();
-            }));
-        }})
-    );
+            });
+        }}
+    ));
 
     m_centre_menu = std::make_unique<homebrew::Menu>();
     m_current_menu = m_centre_menu.get();
