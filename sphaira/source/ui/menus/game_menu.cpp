@@ -425,8 +425,11 @@ Result CreateSave(u64 app_id, AccountUid uid) {
     info.owner_id = data->nacp.save_data_owner_id;
     info.save_data_space_id = FsSaveDataSpaceId_User;
 
-    // what is this???
+    // https://switchbrew.org/wiki/Filesystem_services#CreateSaveDataFileSystem
     FsSaveDataMetaInfo meta{};
+    meta.size = 0x40060;
+    meta.type = FsSaveDataMetaType_Thumbnail;
+
     R_TRY(fsCreateSaveDataFileSystem(&attr, &info, &meta));
 
     R_SUCCEED();
